@@ -3,7 +3,14 @@ import { UserService, type IUserService } from "./user.service.js";
 import type { ResultAsync } from "neverthrow";
 import type { AppError } from "@/libs/error.lib.js";
 
-export class AuthService {
+export interface IAuthService {
+  authenticateUserCredentials({
+    institutional_id,
+    password,
+  }: LoginAccount): ResultAsync<{ success: boolean; user: GetUser }, AppError>;
+}
+
+export class AuthService implements IAuthService {
   constructor(private userService: IUserService = new UserService()) {}
 
   authenticateUserCredentials({

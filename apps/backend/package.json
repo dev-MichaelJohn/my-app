@@ -8,7 +8,8 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "node --watch --import tsx ./src/index.ts",
+    "db:push": "pnpm drizzle-kit push"
   },
   "dependencies": {
     "@my-app/shared": "workspace:*",
@@ -37,7 +38,6 @@
     "winston-transport": "^4.9.0",
     "zod": "^4.5.4"
   },
-  "packageManager": "pnpm@10.33.0",
   "devDependencies": {
     "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.10",
@@ -57,5 +57,6 @@
     "oxfmt": "^0.67.0",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
-  }
+  },
+  "packageManager": "pnpm@10.33.0"
 }
