@@ -6,7 +6,7 @@ import compression from "compression";
 import "@/configs/passport.config.js";
 import env from "@/configs/env.config.js";
 
-export const createApp = (): Express => {
+export const CreateApp = (): Express => {
   const app = express();
 
   app.set("trust proxy", 1);
