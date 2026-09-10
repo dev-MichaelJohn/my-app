@@ -21,6 +21,7 @@ export interface IUserService {
   getUserById(id: number): ResultAsync<GetUser, AppError>;
   getUserForLogin({ institutional_id, password }: LoginAccount): ResultAsync<GetUser, AppError>;
   getUsers(rawQuery: unknown): ResultAsync<PaginatedData<GetUser[]>, AppError>;
+  getUserByEmail(email: string): ResultAsync<GetUser, AppError>;
 }
 
 export class UserService implements IUserService {
@@ -62,6 +63,50 @@ export class UserService implements IUserService {
         )
         .leftJoin(Roles, eq(AccountRoles.role_id, Roles.id))
         .where(and(eq(Accounts.id, id), isNull(Accounts.deleted_at)))
+        .groupBy(Accounts.id, PersonalDetails.id),
+    ).andThen(([user]) => {
+      return user ? okAsync(user) : errAsync(new AppError(404, "User account was not found."));
+    });
+  }
+
+  getUserByEmail(email: string): ResultAsync<GetUser, AppError> {
+    return FromDbPromise(
+      db
+        .select({
+          account: {
+            id: Accounts.id,
+            personal_details_id: Accounts.personal_details_id,
+            email: Accounts.email,
+            is_verified: Accounts.is_verified,
+          },
+          details: {
+            id: PersonalDetails.id,
+            institutional_id: PersonalDetails.institutional_id,
+            first_name: PersonalDetails.first_name,
+            last_name: PersonalDetails.last_name,
+            middle_name: PersonalDetails.middle_name,
+            suffix: PersonalDetails.suffix,
+          },
+          roles: sql<GetUser["roles"]>`
+            COALESCE(
+              JSON_AGG(
+                JSON_BUILD_OBJECT(
+                  'id', ${Roles.id},
+                  'name', ${Roles.system_role}
+                )
+              ) FILTER (WHERE ${Roles.id} IS NOT NULL),
+              '[]'
+            )
+          `,
+        })
+        .from(Accounts)
+        .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
+        .leftJoin(
+          AccountRoles,
+          and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
+        )
+        .leftJoin(Roles, eq(AccountRoles.role_id, Roles.id))
+        .where(and(eq(Accounts.email, email), isNull(Accounts.deleted_at)))
         .groupBy(Accounts.id, PersonalDetails.id),
     ).andThen(([user]) => {
       return user ? okAsync(user) : errAsync(new AppError(404, "User account was not found."));

@@ -5,6 +5,7 @@ import z from "zod";
 export const ValidateEnvironmentVariables = (
   rawEnv: NodeJS.ProcessEnv,
 ): Result<EnvType, z.ZodError> => {
+  console.info("Initializing environment variables...");
   const parsed = EnvSchema.safeParse(rawEnv);
   return parsed.success ? ok(parsed.data) : err(parsed.error);
 };

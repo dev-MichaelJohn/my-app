@@ -19,6 +19,7 @@ export interface IOTPService {
   generateOTP(email: string): ResultAsync<IOTPCodeSelect, AppError>;
   verifyOTP(credentials: VerifyOTP): ResultAsync<IOTPCodeSelect, AppError>;
   deactivateOTP(id: number): ResultAsync<void, AppError>;
+  deleteOTP(id: number, email: string): ResultAsync<void, AppError>;
 }
 
 export class OTPService implements IOTPService {
@@ -91,6 +92,7 @@ export class OTPService implements IOTPService {
             and(
               eq(OTPCodes.email, email),
               eq(OTPCodes.code, code),
+              eq(OTPCodes.is_active, true),
               gt(OTPCodes.expires_at, new Date()),
             ),
           )
@@ -116,10 +118,22 @@ export class OTPService implements IOTPService {
             .update(OTPCodes)
             .set({ is_active: false })
             .where(eq(OTPCodes.id, otpData.id))
-            .returning();
+            .returning({ id: OTPCodes.id });
           if (!updatedOTP) throw new AppError(500, "Failed to update OTP record.");
         }),
       );
     });
+  }
+
+  deleteOTP(id: number, email: string): ResultAsync<void, AppError> {
+    return FromDbPromise(
+      db.transaction(async (tx) => {
+        const [deletedOTP] = await tx
+          .delete(OTPCodes)
+          .where(and(eq(OTPCodes.id, id), eq(OTPCodes.email, email)))
+          .returning({ id: OTPCodes.id });
+        if (!deletedOTP) throw new AppError(500, "Failed to delete OTP record.");
+      }),
+    );
   }
 }

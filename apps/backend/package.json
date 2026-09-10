@@ -18,6 +18,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "drizzle-kit": "1.0.0-rc.4",
     "drizzle-orm": "1.0.0-rc.4",
     "eslint-plugin-neverthrow": "^1.1.4",
     "express": "^5.2.1",
@@ -53,7 +54,6 @@
     "@types/pdfkit": "^0.17.6",
     "@types/pg": "^8.23.1",
     "@types/sentiment": "^5.0.4",
-    "drizzle-kit": "^0.31.10",
     "oxfmt": "^0.67.0",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
