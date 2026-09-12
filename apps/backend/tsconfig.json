@@ -40,10 +40,11 @@
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
+    "incremental": true,
     "paths": {
       "@/*": ["./src/*"]
     }
   },
   "include": ["./src/**/*"],
-  "exclude": ["node_modules", "dist", "src/__tests__", "**/*.test.ts", "**/*.spec.ts"]
+  "exclude": ["node_modules", "dist", ".drizzle", "src/__tests__", "**/*.test.ts", "**/*.spec.ts"]
 }

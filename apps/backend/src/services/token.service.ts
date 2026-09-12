@@ -12,7 +12,7 @@ import {
   type IRefreshTokenSelect,
   type RefreshCookieOptions,
 } from "@my-app/shared";
-import { ResultAsync, errAsync, okAsync } from "neverthrow";
+import { Result, ResultAsync, errAsync, okAsync } from "neverthrow";
 import jwt from "jsonwebtoken";
 import env from "@/configs/env.config.js";
 import bcrypt from "bcryptjs";
@@ -33,12 +33,17 @@ export interface ITokenService {
     newRefreshToken: string,
   ): ResultAsync<IRefreshTokenSelect, AppError>;
   verifyRefreshToken(token: string): ResultAsync<IRefreshTokenSelect, AppError>;
+  deleteRefreshToken(token: string): ResultAsync<void, AppError>;
 }
 
-export class TokenService {
+export class TokenService implements ITokenService {
   generateAccessToken(user: GetUser): ResultAsync<string, AppError> {
     return ValidateSchema(GetUserSchema, user).asyncAndThen((parsedUser) => {
-      return okAsync(jwt.sign(parsedUser, env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_LIFETIME }));
+      return okAsync(
+        jwt.sign(parsedUser, env.JWT_SECRET, {
+          expiresIn: ACCESS_TOKEN_LIFETIME,
+        }),
+      );
     });
   }
 
@@ -48,7 +53,9 @@ export class TokenService {
       email,
     }).asyncAndThen((parsedUser) => {
       return okAsync(
-        jwt.sign(parsedUser, env.REFRESH_SECRET, { expiresIn: REFRESH_TOKEN_LIFETIME }),
+        jwt.sign(parsedUser, env.REFRESH_SECRET, {
+          expiresIn: REFRESH_TOKEN_LIFETIME,
+        }),
       );
     });
   }
@@ -72,6 +79,7 @@ export class TokenService {
       (parsedUser) => {
         const expires_at = new Date(Date.now() + REFRESH_TOKEN_LIFETIME);
         const token_hash = bcrypt.hashSync(token, 10);
+
         return FromDbPromise(
           db.transaction(async (tx) => {
             const [newRefreshToken] = await tx
@@ -83,7 +91,10 @@ export class TokenService {
                 expires_at,
               })
               .returning();
-            if (!newRefreshToken) throw new AppError(500, "Failed to save refresh token.");
+
+            if (!newRefreshToken) {
+              throw new AppError(500, "Failed to save refresh token.");
+            }
 
             return newRefreshToken;
           }),
@@ -100,76 +111,135 @@ export class TokenService {
     return ValidateSchema(AccountSelect.pick({ id: true, email: true }), user).asyncAndThen(
       (parsedUser) => {
         return FromDbPromise(
-          db
-            .select()
-            .from(RefreshToken)
-            .where(
-              and(
-                eq(RefreshToken.account_id, parsedUser.id),
-                eq(RefreshToken.email, parsedUser.email),
-                eq(RefreshToken.is_revoked, false),
-                gt(RefreshToken.expires_at, new Date()),
-              ),
-            ),
-        ).andThen((tokens) => {
-          let matchedToken = null;
-          for (const token of tokens) {
-            const isMatch = bcrypt.compareSync(oldRefreshToken, token.token_hash);
-            if (isMatch) {
-              matchedToken = token;
-              break;
-            }
-          }
+          db.transaction(async (tx) => {
+            const tokens = await tx
+              .select()
+              .from(RefreshToken)
+              .where(
+                and(
+                  eq(RefreshToken.account_id, parsedUser.id),
+                  eq(RefreshToken.email, parsedUser.email),
+                  eq(RefreshToken.is_revoked, false),
+                  gt(RefreshToken.expires_at, new Date()),
+                ),
+              );
 
-          if (!matchedToken)
-            return errAsync(
-              new AppError(500, "Refresh token is invalid, expired, or already revoked."),
+            const matchedToken = tokens.find((t) =>
+              bcrypt.compareSync(oldRefreshToken, t.token_hash),
             );
 
-          return FromDbPromise(
-            db.transaction(async (tx) => {
-              const [deletedToken] = await tx
-                .delete(RefreshToken)
-                .where(eq(RefreshToken.id, matchedToken.id))
-                .returning({ id: RefreshToken.id });
-              if (!deletedToken) throw new AppError(500, "Failed to revoke old token.");
+            if (!matchedToken) {
+              throw new AppError(401, "Refresh token is invalid, expired, or already revoked.");
+            }
 
-              return deletedToken;
-            }),
-          ).andThen(() => {
-            return this.storeRefreshToken(parsedUser, newRefreshToken);
-          });
-        });
+            const [deletedToken] = await tx
+              .delete(RefreshToken)
+              .where(eq(RefreshToken.id, matchedToken.id))
+              .returning({ id: RefreshToken.id });
+
+            if (!deletedToken) {
+              throw new AppError(500, "Failed to revoke old token.");
+            }
+
+            const expires_at = new Date(Date.now() + REFRESH_TOKEN_LIFETIME);
+            const token_hash = bcrypt.hashSync(newRefreshToken, 10);
+
+            const [insertedToken] = await tx
+              .insert(RefreshToken)
+              .values({
+                account_id: parsedUser.id,
+                email: parsedUser.email,
+                token_hash,
+                expires_at,
+              })
+              .returning();
+
+            if (!insertedToken) {
+              throw new AppError(500, "Failed to store rotated token.");
+            }
+
+            return insertedToken;
+          }),
+        );
       },
     );
   }
 
   verifyRefreshToken(token: string): ResultAsync<IRefreshTokenSelect, AppError> {
-    const decodedToken = jwt.verify(token, env.REFRESH_SECRET) as Pick<
-      IAccountSelect,
-      "id" | "email"
-    >;
-    return FromDbPromise(
-      db
-        .select()
-        .from(RefreshToken)
-        .where(
-          and(
-            eq(RefreshToken.account_id, decodedToken.id),
-            eq(RefreshToken.email, decodedToken.email),
-            eq(RefreshToken.is_revoked, false),
-            gt(RefreshToken.expires_at, new Date()),
+    if (!token) {
+      return errAsync(new AppError(401, "No refresh token provided."));
+    }
+
+    const verifyResult = Result.fromThrowable(
+      () => jwt.verify(token, env.REFRESH_SECRET) as Pick<IAccountSelect, "id" | "email">,
+      () => new AppError(401, "Invalid or expired refresh token."),
+    )();
+
+    return verifyResult.asyncAndThen((decodedToken) => {
+      return FromDbPromise(
+        db
+          .select()
+          .from(RefreshToken)
+          .where(
+            and(
+              eq(RefreshToken.account_id, decodedToken.id),
+              eq(RefreshToken.email, decodedToken.email),
+              eq(RefreshToken.is_revoked, false),
+              gt(RefreshToken.expires_at, new Date()),
+            ),
           ),
-        ),
-    ).andThen(([refreshToken]) => {
-      if (!refreshToken)
-        return errAsync(new AppError(400, "Refresh token has been revoked or expired."));
+      ).andThen((tokens) => {
+        const matchedToken = tokens.find((rt) => bcrypt.compareSync(token, rt.token_hash));
 
-      const isMatch = bcrypt.compareSync(token, refreshToken.token_hash);
-      if (!isMatch)
-        return errAsync(new AppError(400, "Refresh token has been revoked or expired."));
+        if (!matchedToken) {
+          return errAsync(new AppError(401, "Refresh token has been revoked or expired."));
+        }
 
-      return okAsync(refreshToken);
+        return okAsync(matchedToken);
+      });
+    });
+  }
+
+  deleteRefreshToken(token: string): ResultAsync<void, AppError> {
+    if (!token) {
+      return okAsync(undefined);
+    }
+
+    const verifyResult = Result.fromThrowable(
+      () => jwt.verify(token, env.REFRESH_SECRET) as Pick<IAccountSelect, "id" | "email">,
+      () => new AppError(401, "Invalid or expired refresh token."),
+    )();
+
+    return verifyResult.asyncAndThen((decodedToken) => {
+      return FromDbPromise(
+        db.transaction(async (tx) => {
+          const tokens = await tx
+            .select()
+            .from(RefreshToken)
+            .where(
+              and(
+                eq(RefreshToken.account_id, decodedToken.id),
+                eq(RefreshToken.email, decodedToken.email),
+                eq(RefreshToken.is_revoked, false),
+              ),
+            );
+
+          const matchedToken = tokens.find((rt) => bcrypt.compareSync(token, rt.token_hash));
+
+          if (matchedToken) {
+            const [deletedToken] = await tx
+              .delete(RefreshToken)
+              .where(eq(RefreshToken.id, matchedToken.id))
+              .returning({ id: RefreshToken.id });
+
+            if (!deletedToken) {
+              throw new AppError(500, "Failed to revoke token.");
+            }
+          }
+
+          return undefined;
+        }),
+      );
     });
   }
 }

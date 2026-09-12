@@ -87,6 +87,29 @@ export class AuthController {
     });
   });
 
+  verifyJWT = runMiddleware((req, res) => {
+    return AuthenticateJWT(req, res).andThen((user) => {
+      if (!user) {
+        const refreshToken = req.cookies?.refresh;
+        if (!refreshToken) {
+          return errAsync(new AppError(401, "Authentication required. Please log in."));
+        }
+
+        return this.refreshJWT(refreshToken).map((newData) => {
+          const cookieOptions = this.tokenService.generateCookieOptions();
+          res.cookie("refresh", newData.refreshToken, cookieOptions);
+          res.setHeader("x-access-token", newData.token);
+
+          req.user = newData.user;
+          return;
+        });
+      }
+
+      req.user = user;
+      return okAsync(undefined);
+    });
+  });
+
   refreshJWT = (refreshToken: string) => {
     return this.tokenService.verifyRefreshToken(refreshToken).andThen((tokenData) => {
       return this.userService.getUserById(tokenData.account_id).andThen((user) => {
@@ -113,28 +136,26 @@ export class AuthController {
     });
   };
 
-  verifyJWT = runMiddleware((req, res) => {
-    return AuthenticateJWT(req, res).andThen((user) => {
-      if (!user) {
-        const refreshToken = req.cookies?.refresh;
-        if (!refreshToken) {
-          return errAsync(new AppError(401, "Authentication required. Please log in."));
-        }
+  me = runAsync(
+    (req, _res) => {
+      if (!req.user)
+        return errAsync(new AppError(401, "Token expired or missing. Please log in again."));
+      return okAsync(req.user);
+    },
+    { message: "Session valid." },
+  );
 
-        return this.refreshJWT(refreshToken).map((newData) => {
-          const cookieOptions = this.tokenService.generateCookieOptions();
-          res.cookie("refresh", newData.refreshToken, cookieOptions);
-          res.setHeader("x-access-token", newData.token);
+  logout = runAsync(
+    (req, res) => {
+      const refreshToken = req.cookies?.refresh;
+      const cookieOptions = this.tokenService.generateCookieOptions();
 
-          req.user = newData.user;
-          return;
-        });
-      }
+      res.clearCookie("refresh", cookieOptions);
 
-      req.user = user;
-      return okAsync(undefined);
-    });
-  });
+      return this.tokenService.deleteRefreshToken(refreshToken).map(() => undefined);
+    },
+    { message: "Logged out successfully." },
+  );
 
   private generateResendTime(expires_at: Date) {
     const OTP_LIFESPAN_MS = 5 * 60 * 1000; // 5 minutes
