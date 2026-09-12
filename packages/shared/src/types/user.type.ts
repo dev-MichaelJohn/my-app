@@ -154,6 +154,24 @@ export const UserQuerySchema = z.object({
   order: z.enum(["asc", "desc"]).default("desc"),
 });
 
+export const CreateUserSchema = z.object({
+  account: AccountInsert.omit({
+    personal_details_id: true,
+    created_at: true,
+    deleted_at: true,
+    updated_at: true,
+  }).extend({
+    password: AccountInsert.shape.password.optional(),
+  }),
+  details: PersonalDetailsSelect.omit({
+    created_at: true,
+    deleted_at: true,
+    updated_at: true,
+  }),
+  role: z.enum(SystemRoles.enumValues),
+});
+
 export type LoginAccount = z.infer<typeof LoginAccountSchema>;
 export type GetUser = z.infer<typeof GetUserSchema>;
 export type UserQuery = z.infer<typeof UserQuerySchema>;
+export type CreateUser = z.infer<typeof CreateUserSchema>;
