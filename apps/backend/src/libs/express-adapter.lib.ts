@@ -54,3 +54,18 @@ export const runAsync = <T>(action: ControllerAction<T>, defaultOptions: RunAsyn
     );
   };
 };
+
+export const runMiddleware = <T>(
+  action: (req: Request, res: Response) => ResultAsync<T, AppError>,
+) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    action(req, res).match(
+      () => {
+        next();
+      },
+      (error) => {
+        next(error);
+      },
+    );
+  };
+};

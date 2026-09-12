@@ -43,4 +43,12 @@ export class AuthService implements IAuthService {
       });
     });
   }
+
+  authenticateAccessToken(
+    user: GetUser,
+  ): ResultAsync<{ success: boolean; user: GetUser }, AppError> {
+    return this.userService.getUserById(user.account.id).map((user) => {
+      return { success: true, user };
+    });
+  }
 }
