@@ -20,7 +20,7 @@ export const StartApp = () => {
     .andThen(() => SeederFunction())
     .andThen(() => ListenHTTPServer(appServer, env.PORT))
     .map((server) => {
-      console.info(`🚀 Server online in [${env.NODE_ENV}] mode @ http://localhost:${env.PORT}`);
+      console.info(`Server online in [${env.NODE_ENV}] mode @ http://localhost:${env.PORT}`);
       SetupGracefulShutdown(appServer);
       return server;
     });

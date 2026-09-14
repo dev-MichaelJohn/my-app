@@ -59,13 +59,13 @@ export const SetupGracefulShutdown = (server: http.Server) => {
     console.warn(`🛑 Received ${signal}. Starting graceful shutdown...`);
 
     server.close(() => {
-      console.info("🔒 HTTP server closed.");
-      console.info("👋 Process terminated cleanly.");
+      console.info("HTTP server closed.");
+      console.info("Process terminated cleanly.");
       process.exit(0);
     });
 
     setTimeout(() => {
-      console.error("⚠️ Forced shutdown: Active connections could not close in time.");
+      console.error("Forced shutdown: Active connections could not close in time.");
       process.exit(1);
     }, 10_000).unref();
   };
