@@ -1,9 +1,17 @@
-import { AccountSelect, type GetUser, type LoginAccount, type VerifyOTP } from "@my-app/shared";
+import {
+  Accounts,
+  AccountSelect,
+  type GetUser,
+  type LoginAccount,
+  type VerifyOTP,
+} from "@my-app/shared";
 import { UserService, type IUserService } from "./user.service.js";
-import type { ResultAsync } from "neverthrow";
-import type { AppError } from "@/libs/error.lib.js";
+import { errAsync, okAsync, type ResultAsync } from "neverthrow";
+import { AppError } from "@/libs/error.lib.js";
 import { OTPService, type IOTPService } from "./otp.service.js";
-import { ValidateSchema } from "@/libs/result.lib.js";
+import { FromDbPromise, ValidateSchema } from "@/libs/result.lib.js";
+import db from "@/configs/db.config.js";
+import { and, eq, isNull } from "drizzle-orm";
 
 export interface IAuthService {
   authenticateUserCredentials({
@@ -14,6 +22,7 @@ export interface IAuthService {
     email,
     code,
   }: VerifyOTP): ResultAsync<{ success: boolean; user: GetUser }, AppError>;
+  checkVerificationStatus(user: GetUser): ResultAsync<boolean, AppError>;
 }
 
 export class AuthService implements IAuthService {
@@ -49,6 +58,24 @@ export class AuthService implements IAuthService {
   ): ResultAsync<{ success: boolean; user: GetUser }, AppError> {
     return this.userService.getUserById(user.account.id).map((user) => {
       return { success: true, user };
+    });
+  }
+
+  checkVerificationStatus(user: GetUser): ResultAsync<boolean, AppError> {
+    return FromDbPromise(
+      db
+        .select()
+        .from(Accounts)
+        .where(
+          and(
+            eq(Accounts.id, user.account.id),
+            eq(Accounts.email, user.account.email),
+            isNull(Accounts.deleted_at),
+          ),
+        ),
+    ).andThen(([account]) => {
+      if (!account) return errAsync(new AppError(404, "Account not found."));
+      return okAsync(account.is_verified);
     });
   }
 }

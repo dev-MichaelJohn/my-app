@@ -2,6 +2,7 @@ import { OTPEmailTemplate, OTPTextTemplate } from "@/libs/email.lib.js";
 import { AppError } from "@/libs/error.lib.js";
 import { runAsync, runMiddleware } from "@/libs/express-adapter.lib.js";
 import { AuthenticateLocal, AuthenticateOTP, AuthenticateJWT } from "@/libs/passport.lib.js";
+import { AuthService, type IAuthService } from "@/services/auth.service.js";
 import { EmailService, type IEmailService } from "@/services/email.service.js";
 import { OTPService, type IOTPService } from "@/services/otp.service.js";
 import { TokenService, type ITokenService } from "@/services/token.service.js";
@@ -14,6 +15,7 @@ export class AuthController {
     private otpService: IOTPService = new OTPService(),
     private tokenService: ITokenService = new TokenService(),
     private userService: IUserService = new UserService(),
+    private authService: IAuthService = new AuthService(),
   ) {}
 
   login = runAsync((req, res) => {
@@ -156,6 +158,17 @@ export class AuthController {
     },
     { message: "Logged out successfully." },
   );
+
+  getVerificationStatus = runAsync((req, _res) => {
+    if (!req.user) return errAsync(new AppError(401, "Authentication required."));
+    return this.authService.checkVerificationStatus(req.user).map((isVerified) => {
+      return {
+        status: 200,
+        message: "Verification status retrieved.",
+        isVerified,
+      };
+    });
+  });
 
   private generateResendTime(expires_at: Date) {
     const OTP_LIFESPAN_MS = 5 * 60 * 1000; // 5 minutes
