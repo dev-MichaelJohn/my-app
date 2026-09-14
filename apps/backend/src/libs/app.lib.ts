@@ -5,6 +5,12 @@ import cookieParser from "cookie-parser";
 import compression from "compression";
 import "@/configs/passport.config.js";
 import env from "@/configs/env.config.js";
+import { FromDbPromise } from "./result.lib.js";
+import db from "@/configs/db.config.js";
+import { sql } from "drizzle-orm";
+import { ResultAsync } from "neverthrow";
+import http from "node:http";
+import { AppError } from "./error.lib.js";
 
 export const CreateApp = (): Express => {
   const app = express();
@@ -25,4 +31,45 @@ export const CreateApp = (): Express => {
   );
 
   return app;
+};
+
+export const VerifyDatabaseConnection = () => {
+  return FromDbPromise(db.execute(sql`SELECT 1`)).map(() => {
+    console.info("Database connection established successfully.");
+  });
+};
+
+export const ListenHTTPServer = (server: http.Server, port: number) => {
+  return ResultAsync.fromPromise(
+    new Promise<http.Server>((resolve, reject) => {
+      server.listen(port, () => {
+        resolve(server);
+      });
+
+      server.once("error", (err) => {
+        reject(new AppError(500, `Failed to bind HTTP server on port ${port}: ${err.message}`));
+      });
+    }),
+    (err) => (err instanceof AppError ? err : new AppError(500, "Server startup error.")),
+  );
+};
+
+export const SetupGracefulShutdown = (server: http.Server) => {
+  const shutdown = (signal: string) => {
+    console.warn(`🛑 Received ${signal}. Starting graceful shutdown...`);
+
+    server.close(() => {
+      console.info("🔒 HTTP server closed.");
+      console.info("👋 Process terminated cleanly.");
+      process.exit(0);
+    });
+
+    setTimeout(() => {
+      console.error("⚠️ Forced shutdown: Active connections could not close in time.");
+      process.exit(1);
+    }, 10_000).unref();
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 };

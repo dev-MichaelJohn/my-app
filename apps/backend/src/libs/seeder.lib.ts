@@ -1,15 +1,24 @@
 import env from "@/configs/env.config.js";
 import { SeederService, type ISeederService } from "@/services/seeder.service.js";
+import { errAsync, okAsync } from "neverthrow";
 
 export const SeederFunction = () => {
   const seederService: ISeederService = new SeederService();
 
-  return seederService.seedRolesAndPermission().match(
-    () => {
+  return seederService
+    .seedRolesAndPermission()
+    .orElse((err) => {
+      if (err.status === 409) {
+        console.info("ℹ️ System roles already present. Continuing...");
+        return okAsync(undefined);
+      }
+      return errAsync(err);
+    })
+    .andThen(() => {
       return seederService
         .seedSystemAdmin({
           account: {
-            email: env.EMAIL_FROM,
+            email: env.EMAIL_FROM || "admin@pit.edu.ph",
             password: "!SuperAdmin123",
           },
           details: {
@@ -21,31 +30,15 @@ export const SeederFunction = () => {
           },
           role: "SYS_ADMIN",
         })
-        .match(
-          () => {
-            console.info("Superadmin created successfully. Continuing application setup...");
-          },
-          (err) => {
-            if (err.status === 409) {
-              console.info(
-                "An active Superadmin already exists. Safe to continue application startup.",
-              );
-              return;
-            }
-
-            return handleFatalError("Super Admin verification failed", err);
-          },
-        );
-    },
-    (err) => {
-      if (err.status !== 409) return handleFatalError("Roles validation failed", err);
-      console.info("System roles already present.");
-    },
-  );
+        .orElse((err) => {
+          if (err.status === 409) {
+            console.info("ℹ️ Active Superadmin already exists. Safe to continue.");
+            return okAsync(undefined);
+          }
+          return errAsync(err);
+        });
+    })
+    .map(() => {
+      console.info("🌱 Database seeding verification completed.");
+    });
 };
-
-function handleFatalError(context: string, error: any) {
-  console.error(`FATAL SYSTEM ERROR: ${context}. ${error.message || error}`);
-  console.error("Shutting down application process because no Super Admin is guaranteed.");
-  process.exit(1);
-}
