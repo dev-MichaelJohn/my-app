@@ -9,6 +9,7 @@ import env from "@/configs/env.config.js";
 import { GlobalErrorHandler } from "./middlewares/error.middleware.js";
 import { SeederFunction } from "./libs/seeder.lib.js";
 import V1Router from "./routers/index.router.js";
+import { logger } from "./libs/logger.lib.js";
 
 const app = CreateApp();
 
@@ -22,7 +23,7 @@ export const StartApp = () => {
     .andThen(() => SeederFunction())
     .andThen(() => ListenHTTPServer(appServer, env.PORT))
     .map((server) => {
-      console.info(`Server online in [${env.NODE_ENV}] mode @ http://localhost:${env.PORT}`);
+      logger.info(`Server online in [${env.NODE_ENV}] mode @ http://localhost:${env.PORT}`);
       SetupGracefulShutdown(appServer);
       return server;
     });

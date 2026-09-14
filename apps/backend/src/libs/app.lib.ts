@@ -11,6 +11,7 @@ import { sql } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 import http from "node:http";
 import { AppError } from "./error.lib.js";
+import { logger } from "./logger.lib.js";
 
 export const CreateApp = (): Express => {
   const app = express();
@@ -35,7 +36,7 @@ export const CreateApp = (): Express => {
 
 export const VerifyDatabaseConnection = () => {
   return FromDbPromise(db.execute(sql`SELECT 1`)).map(() => {
-    console.info("Database connection established successfully.");
+    logger.info("Database connection established successfully.");
   });
 };
 
@@ -56,16 +57,16 @@ export const ListenHTTPServer = (server: http.Server, port: number) => {
 
 export const SetupGracefulShutdown = (server: http.Server) => {
   const shutdown = (signal: string) => {
-    console.warn(`🛑 Received ${signal}. Starting graceful shutdown...`);
+    logger.warn(`🛑 Received ${signal}. Starting graceful shutdown...`);
 
     server.close(() => {
-      console.info("HTTP server closed.");
-      console.info("Process terminated cleanly.");
+      logger.info("HTTP server closed.");
+      logger.info("Process terminated cleanly.");
       process.exit(0);
     });
 
     setTimeout(() => {
-      console.error("Forced shutdown: Active connections could not close in time.");
+      logger.error("Forced shutdown: Active connections could not close in time.");
       process.exit(1);
     }, 10_000).unref();
   };

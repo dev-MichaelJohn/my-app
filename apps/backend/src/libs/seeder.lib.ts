@@ -1,6 +1,7 @@
 import env from "@/configs/env.config.js";
 import { SeederService, type ISeederService } from "@/services/seeder.service.js";
 import { errAsync, okAsync } from "neverthrow";
+import { logger } from "./logger.lib.js";
 
 export const SeederFunction = () => {
   const seederService: ISeederService = new SeederService();
@@ -9,7 +10,7 @@ export const SeederFunction = () => {
     .seedRolesAndPermission()
     .orElse((err) => {
       if (err.status === 409 || err.message.includes("already present")) {
-        console.info("System roles already present. Continuing...");
+        logger.info("System roles already present. Continuing...");
         return okAsync(undefined);
       }
       return errAsync(err);
@@ -36,7 +37,7 @@ export const SeederFunction = () => {
             err.message.includes("already exists") ||
             err.message.includes("already present")
           ) {
-            console.info("Active Superadmin already exists. Safe to continue.");
+            logger.info("Active Superadmin already exists. Safe to continue.");
             return okAsync(undefined);
           }
 
@@ -44,6 +45,6 @@ export const SeederFunction = () => {
         });
     })
     .map(() => {
-      console.info("Database seeding verification completed.");
+      logger.info("Database seeding verification completed.");
     });
 };

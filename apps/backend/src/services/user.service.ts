@@ -26,6 +26,7 @@ import { EmailService, type IEmailService } from "./email.service.js";
 import { WelcomeEmailTemplate, WelcomeTextTemplate } from "@/libs/email.lib.js";
 import env from "@/configs/env.config.js";
 import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
+import { logger } from "@/libs/logger.lib.js";
 
 export interface IUserService {
   getUserById(id: number): ResultAsync<GetUser, AppError>;
@@ -369,7 +370,7 @@ export class UserService implements IUserService {
           })
           .map(() => newUser)
           .orElse((err) => {
-            console.warn("⚠️ Welcome email failed to send:", err.message);
+            logger.warn("⚠️ Welcome email failed to send:", err.message);
             return okAsync(newUser);
           });
       });

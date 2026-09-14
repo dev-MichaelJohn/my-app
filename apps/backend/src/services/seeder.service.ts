@@ -14,6 +14,7 @@ import { errAsync, type ResultAsync } from "neverthrow";
 import { UserService, type IUserService } from "./user.service.js";
 import db from "@/configs/db.config.js";
 import { WithTransaction } from "@/libs/transaction.lib.js";
+import { logger } from "@/libs/logger.lib.js";
 
 export interface ISeederService {
   seedRolesAndPermission(): ResultAsync<void, AppError>;
@@ -92,7 +93,7 @@ export class SeederService implements ISeederService {
         }
       }
 
-      console.log("Roles, permissions, and matrix synced successfully!");
+      logger.info("Roles, permissions, and matrix synced successfully!");
     });
   }
 
