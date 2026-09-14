@@ -98,7 +98,7 @@ export class SeederService implements ISeederService {
 
   seedSystemAdmin(info: CreateUser): ResultAsync<void, AppError> {
     return this.isSeedingSysAdminAllowed().andThen((isAllowed) => {
-      if (!isAllowed) return errAsync(new AppError(403, "A System Administrator already exists."));
+      if (!isAllowed) return errAsync(new AppError(409, "A System Administrator already exists."));
       return this.userService.createUser(info, db).map(() => undefined);
     });
   }
@@ -107,7 +107,7 @@ export class SeederService implements ISeederService {
     return this.userService
       .getUsers({ page: 1, limit: 1, role: "SYS_ADMIN", sort_by: "created_at", order: "asc" })
       .map((users) => {
-        return users.pagination.totalItems > 0;
+        return users.pagination.totalItems === 0;
       });
   }
 }
