@@ -13,5 +13,5 @@
     "dev": "pnpm --filter \"*\" dev",
     "build": "pnpm --filter \"*\" build"
   },
-  "packageManager": "pnpm@10.33.0"
+  "packageManager": "pnpm@12.4.1"
 }
