@@ -164,6 +164,7 @@ export const CreateUserSchema = z.object({
     password: AccountInsert.shape.password.optional(),
   }),
   details: PersonalDetailsSelect.omit({
+    id: true,
     created_at: true,
     deleted_at: true,
     updated_at: true,

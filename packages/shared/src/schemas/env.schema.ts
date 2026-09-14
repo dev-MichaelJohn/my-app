@@ -28,7 +28,7 @@ export const EnvSchema = z.object({
     .min(32, "REFRESH_SECRET should be at least 32 characters long.")
     .nonempty("REFRESH_SECRET must not be an empty string.")
     .nonoptional("REFRESH_SECRET is required."),
-  EMAIL_FROM: z.string().trim().optional(),
+  EMAIL_FROM: z.string().trim(),
   RESEND_API_KEY: z.string().trim().optional(),
   BREVO_API_KEY: z.string().trim().optional(),
 });
