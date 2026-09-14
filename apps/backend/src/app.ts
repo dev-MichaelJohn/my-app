@@ -8,9 +8,11 @@ import {
 import env from "@/configs/env.config.js";
 import { GlobalErrorHandler } from "./middlewares/error.middleware.js";
 import { SeederFunction } from "./libs/seeder.lib.js";
+import V1Router from "./routers/index.router.js";
 
 const app = CreateApp();
 
+app.use("/api/v1", V1Router);
 app.use(GlobalErrorHandler);
 
 const appServer = createServer(app);
