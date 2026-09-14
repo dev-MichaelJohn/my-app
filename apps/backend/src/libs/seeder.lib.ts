@@ -8,8 +8,8 @@ export const SeederFunction = () => {
   return seederService
     .seedRolesAndPermission()
     .orElse((err) => {
-      if (err.status === 409) {
-        console.info("ℹ️ System roles already present. Continuing...");
+      if (err.status === 409 || err.message.includes("already present")) {
+        console.info("System roles already present. Continuing...");
         return okAsync(undefined);
       }
       return errAsync(err);
@@ -31,14 +31,19 @@ export const SeederFunction = () => {
           role: "SYS_ADMIN",
         })
         .orElse((err) => {
-          if (err.status === 409) {
-            console.info("ℹ️ Active Superadmin already exists. Safe to continue.");
+          if (
+            err.status === 409 ||
+            err.message.includes("already exists") ||
+            err.message.includes("already present")
+          ) {
+            console.info("Active Superadmin already exists. Safe to continue.");
             return okAsync(undefined);
           }
+
           return errAsync(err);
         });
     })
     .map(() => {
-      console.info("🌱 Database seeding verification completed.");
+      console.info("Database seeding verification completed.");
     });
 };
