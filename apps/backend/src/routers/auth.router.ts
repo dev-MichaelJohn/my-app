@@ -9,11 +9,10 @@ const authController = new AuthController();
 
 AuthRouter.post("/logout", authController.logout);
 
-AuthRouter.use(authController.verifyJWT);
-
-AuthRouter.get("/me", authController.me);
+AuthRouter.get("/me", authController.verifyJWT, authController.me);
 AuthRouter.get(
   "/verification-status",
+  authController.verifyJWT,
   RequirePermission(PERMISSIONS.ACCOUNT_UPDATE_OWN),
   authController.getVerificationStatus,
 );

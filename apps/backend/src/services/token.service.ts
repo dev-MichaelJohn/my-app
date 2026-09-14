@@ -77,7 +77,7 @@ export class TokenService implements ITokenService {
   ): ResultAsync<IRefreshTokenSelect, AppError> {
     return ValidateSchema(AccountSelect.pick({ id: true, email: true }), user).asyncAndThen(
       (parsedUser) => {
-        const expires_at = new Date(Date.now() + REFRESH_TOKEN_LIFETIME);
+        const expires_at = new Date(Date.now() + REFRESH_COOKIE_LIFETIME);
         const token_hash = bcrypt.hashSync(token, 10);
 
         return FromDbPromise(

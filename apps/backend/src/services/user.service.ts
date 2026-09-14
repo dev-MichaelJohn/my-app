@@ -58,12 +58,7 @@ export class UserService implements IUserService {
           },
           roles: sql<GetUser["roles"]>`
             COALESCE(
-              JSON_AGG(
-                JSON_BUILD_OBJECT(
-                  'id', ${Roles.id},
-                  'name', ${Roles.system_role}
-                )
-              ) FILTER (WHERE ${Roles.id} IS NOT NULL),
+              JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL),
               '[]'
             )
           `,
@@ -102,12 +97,7 @@ export class UserService implements IUserService {
           },
           roles: sql<GetUser["roles"]>`
             COALESCE(
-              JSON_AGG(
-                JSON_BUILD_OBJECT(
-                  'id', ${Roles.id},
-                  'name', ${Roles.system_role}
-                )
-              ) FILTER (WHERE ${Roles.id} IS NOT NULL),
+              JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL),
               '[]'
             )
           `,
@@ -149,12 +139,7 @@ export class UserService implements IUserService {
               },
               roles: sql<GetUser["roles"]>`
                 COALESCE(
-                  JSON_AGG(
-                    JSON_BUILD_OBJECT(
-                      'id', ${Roles.id},
-                      'name', ${Roles.system_role}
-                    )
-                  ) FILTER (WHERE ${Roles.id} IS NOT NULL),
+                  JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL),
                   '[]'
                 )
               `,
@@ -258,12 +243,7 @@ export class UserService implements IUserService {
               },
               roles: sql<GetUser["roles"]>`
                 COALESCE(
-                  JSON_AGG(
-                    JSON_BUILD_OBJECT(
-                      'id', ${Roles.id},
-                      'name', ${Roles.system_role}
-                    )
-                  ) FILTER (WHERE ${Roles.id} IS NOT NULL),
+                  JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL),
                   '[]'
                 )
               `,
