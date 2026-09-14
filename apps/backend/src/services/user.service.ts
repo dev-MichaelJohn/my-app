@@ -1,6 +1,8 @@
 import db from "@/configs/db.config.js";
 import { AppError } from "@/libs/error.lib.js";
-import { FromDbPromise, ValidateSchema } from "@/libs/result.lib.js";
+import { ValidateSchema } from "@/libs/result.lib.js";
+import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
+import { createPaginatedData } from "@/libs/response.lib.js";
 import {
   AccountRoles,
   Accounts,
@@ -14,34 +16,34 @@ import {
   type IAccountInsert,
   type LoginAccount,
   type PaginatedData,
+  type SystemRole,
   type UserQuery,
   type WelcomeEmailOpts,
 } from "@my-app/shared";
 import { and, asc, countDistinct, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 import bcrypt from "bcryptjs";
-import { createPaginatedData } from "@/libs/response.lib.js";
 import crypto from "node:crypto";
 import { EmailService, type IEmailService } from "./email.service.js";
 import { WelcomeEmailTemplate, WelcomeTextTemplate } from "@/libs/email.lib.js";
 import env from "@/configs/env.config.js";
-import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
-import { logger } from "@/libs/logger.lib.js";
 
 export interface IUserService {
-  getUserById(id: number): ResultAsync<GetUser, AppError>;
-  getUserForLogin({ institutional_id, password }: LoginAccount): ResultAsync<GetUser, AppError>;
-  getUsers(rawQuery: UserQuery): ResultAsync<PaginatedData<GetUser[]>, AppError>;
-  getUserByEmail(email: string): ResultAsync<GetUser, AppError>;
-  createUser(info: CreateUser, client: DbClient): ResultAsync<GetUser, AppError>;
+  getUserById(id: number, client?: DbClient): ResultAsync<GetUser, AppError>;
+  getUserByEmail(email: string, client?: DbClient): ResultAsync<GetUser, AppError>;
+  getUserForLogin(credentials: LoginAccount, client?: DbClient): ResultAsync<GetUser, AppError>;
+  getUsers(rawQuery: UserQuery, client?: DbClient): ResultAsync<PaginatedData<GetUser[]>, AppError>;
+  createUser(info: CreateUser, client?: DbClient): ResultAsync<GetUser, AppError>;
+  grantRole(accountId: number, role: SystemRole, client: DbClient): ResultAsync<void, AppError>;
+  revokeRole(accountId: number, role: SystemRole, client: DbClient): ResultAsync<void, AppError>;
 }
 
 export class UserService implements IUserService {
   constructor(private emailService: IEmailService = new EmailService()) {}
 
-  getUserById(id: number): ResultAsync<GetUser, AppError> {
-    return FromDbPromise(
-      db
+  getUserById(id: number, client: DbClient = db): ResultAsync<GetUser, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const [user] = await tx
         .select({
           account: {
             id: Accounts.id,
@@ -70,17 +72,19 @@ export class UserService implements IUserService {
           AccountRoles,
           and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
         )
-        .leftJoin(Roles, eq(AccountRoles.role_id, Roles.id))
+        .leftJoin(Roles, and(eq(AccountRoles.role_id, Roles.id), isNull(Roles.deleted_at)))
         .where(and(eq(Accounts.id, id), isNull(Accounts.deleted_at)))
-        .groupBy(Accounts.id, PersonalDetails.id),
-    ).andThen(([user]) => {
+        .groupBy(Accounts.id, PersonalDetails.id);
+
+      return user ?? null;
+    }).andThen((user) => {
       return user ? okAsync(user) : errAsync(new AppError(404, "User account was not found."));
     });
   }
 
-  getUserByEmail(email: string): ResultAsync<GetUser, AppError> {
-    return FromDbPromise(
-      db
+  getUserByEmail(email: string, client: DbClient = db): ResultAsync<GetUser, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const [user] = await tx
         .select({
           account: {
             id: Accounts.id,
@@ -109,19 +113,24 @@ export class UserService implements IUserService {
           AccountRoles,
           and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
         )
-        .leftJoin(Roles, eq(AccountRoles.role_id, Roles.id))
+        .leftJoin(Roles, and(eq(AccountRoles.role_id, Roles.id), isNull(Roles.deleted_at)))
         .where(and(eq(Accounts.email, email), isNull(Accounts.deleted_at)))
-        .groupBy(Accounts.id, PersonalDetails.id),
-    ).andThen(([user]) => {
+        .groupBy(Accounts.id, PersonalDetails.id);
+
+      return user ?? null;
+    }).andThen((user) => {
       return user ? okAsync(user) : errAsync(new AppError(404, "User account was not found."));
     });
   }
 
-  getUserForLogin({ institutional_id, password }: LoginAccount): ResultAsync<GetUser, AppError> {
+  getUserForLogin(
+    { institutional_id, password }: LoginAccount,
+    client: DbClient = db,
+  ): ResultAsync<GetUser, AppError> {
     return ValidateSchema(LoginAccountSchema, { institutional_id, password }).asyncAndThen(
       (parsed) => {
-        return FromDbPromise(
-          db
+        return WithTransaction(client, async (tx) => {
+          const [user] = await tx
             .select({
               account: {
                 id: Accounts.id,
@@ -157,22 +166,28 @@ export class UserService implements IUserService {
               AccountRoles,
               and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
             )
-            .leftJoin(Roles, eq(AccountRoles.role_id, Roles.id))
+            .leftJoin(Roles, and(eq(AccountRoles.role_id, Roles.id), isNull(Roles.deleted_at)))
             .where(
               and(
                 eq(PersonalDetails.institutional_id, parsed.institutional_id),
                 isNull(PersonalDetails.deleted_at),
               ),
             )
-            .groupBy(Accounts.id, PersonalDetails.id),
-        ).andThen(([user]) => {
-          if (!user) return errAsync(new AppError(401, "Invalid institutional ID or password."));
+            .groupBy(Accounts.id, PersonalDetails.id);
+
+          return user ?? null;
+        }).andThen((user) => {
+          if (!user) {
+            return errAsync(new AppError(401, "Invalid institutional ID or password."));
+          }
+
           return ResultAsync.fromPromise(
             bcrypt.compare(parsed.password, user.account.password),
             () => new AppError(500, "Failed to verify credentials."),
           ).andThen((isPasswordValid) => {
-            if (!isPasswordValid)
+            if (!isPasswordValid) {
               return errAsync(new AppError(401, "Invalid institutional ID or password."));
+            }
 
             const { password: _, ...accountWithoutPassword } = user.account;
 
@@ -189,10 +204,12 @@ export class UserService implements IUserService {
     );
   }
 
-  getUsers(rawQuery: UserQuery): ResultAsync<PaginatedData<GetUser[]>, AppError> {
+  getUsers(
+    rawQuery: UserQuery,
+    client: DbClient = db,
+  ): ResultAsync<PaginatedData<GetUser[]>, AppError> {
     return ValidateSchema(UserQuerySchema, rawQuery).asyncAndThen((parsed) => {
-      const { page, limit, search, role, is_verified, sort_by, order } = parsed;
-      const offset = (page - 1) * limit;
+      const { paginate, page, limit, search, role, is_verified, sort_by, order } = parsed;
 
       const filters: SQL[] = [isNull(Accounts.deleted_at), isNull(PersonalDetails.deleted_at)];
 
@@ -224,57 +241,69 @@ export class UserService implements IUserService {
       const sortColumn = sortColumnMap[sort_by] ?? Accounts.created_at;
       const orderByClause = order === "asc" ? asc(sortColumn) : desc(sortColumn);
 
-      return FromDbPromise(
-        Promise.all([
-          db
-            .select({
-              account: {
-                id: Accounts.id,
-                personal_details_id: Accounts.personal_details_id,
-                email: Accounts.email,
-                is_verified: Accounts.is_verified,
-              },
-              details: {
-                id: PersonalDetails.id,
-                institutional_id: PersonalDetails.institutional_id,
-                first_name: PersonalDetails.first_name,
-                last_name: PersonalDetails.last_name,
-                middle_name: PersonalDetails.middle_name,
-                suffix: PersonalDetails.suffix,
-              },
-              roles: sql<GetUser["roles"]>`
-                COALESCE(
-                  JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL),
-                  '[]'
-                )
-              `,
-            })
-            .from(Accounts)
-            .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
-            .leftJoin(
-              AccountRoles,
-              and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
-            )
-            .leftJoin(Roles, and(eq(AccountRoles.role_id, Roles.id), isNull(Roles.deleted_at)))
-            .where(whereCondition)
-            .groupBy(Accounts.id, PersonalDetails.id)
-            .orderBy(orderByClause)
-            .limit(limit)
-            .offset(offset),
-          db
-            .select({
-              total: countDistinct(Accounts.id),
-            })
-            .from(Accounts)
-            .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
-            .leftJoin(
-              AccountRoles,
-              and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
-            )
-            .leftJoin(Roles, and(eq(AccountRoles.role_id, Roles.id), isNull(Roles.deleted_at)))
-            .where(whereCondition),
-        ]),
-      ).map(([users, countResult]) => {
+      return WithTransaction(client, async (tx) => {
+        const baseQuery = tx
+          .select({
+            account: {
+              id: Accounts.id,
+              personal_details_id: Accounts.personal_details_id,
+              email: Accounts.email,
+              is_verified: Accounts.is_verified,
+            },
+            details: {
+              id: PersonalDetails.id,
+              institutional_id: PersonalDetails.institutional_id,
+              first_name: PersonalDetails.first_name,
+              last_name: PersonalDetails.last_name,
+              middle_name: PersonalDetails.middle_name,
+              suffix: PersonalDetails.suffix,
+            },
+            roles: sql<GetUser["roles"]>`
+              COALESCE(
+                JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL),
+                '[]'
+              )
+            `,
+          })
+          .from(Accounts)
+          .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
+          .leftJoin(
+            AccountRoles,
+            and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
+          )
+          .leftJoin(Roles, and(eq(AccountRoles.role_id, Roles.id), isNull(Roles.deleted_at)))
+          .where(whereCondition)
+          .groupBy(Accounts.id, PersonalDetails.id)
+          .orderBy(orderByClause)
+          .$dynamic();
+
+        // Path A: Non-Paginated (Dropdowns)
+        if (!paginate) {
+          const users = await baseQuery;
+          return createPaginatedData({
+            data: users,
+            currentPage: 1,
+            pageSize: users.length,
+            totalItems: users.length,
+          });
+        }
+
+        // Path B: Paginated (Data Table)
+        const offset = (page - 1) * limit;
+        const paginatedQuery = baseQuery.limit(limit).offset(offset);
+
+        const countQuery = tx
+          .select({ total: countDistinct(Accounts.id) })
+          .from(Accounts)
+          .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
+          .leftJoin(
+            AccountRoles,
+            and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
+          )
+          .leftJoin(Roles, and(eq(AccountRoles.role_id, Roles.id), isNull(Roles.deleted_at)))
+          .where(whereCondition);
+
+        const [users, countResult] = await Promise.all([paginatedQuery, countQuery]);
         const totalItems = countResult[0]?.total ?? 0;
 
         return createPaginatedData({
@@ -290,19 +319,22 @@ export class UserService implements IUserService {
   createUser(info: CreateUser, client: DbClient = db): ResultAsync<GetUser, AppError> {
     return ValidateSchema(CreateUserSchema, info).asyncAndThen((parsedInfo) => {
       let plainPassword = info.account.password;
-      if (!plainPassword || plainPassword.trim().length === 0)
+      if (!plainPassword || plainPassword.trim().length === 0) {
         plainPassword = this.generatePassword();
+      }
 
       return WithTransaction(client, async (tx) => {
         const [userDetails] = await tx
           .insert(PersonalDetails)
           .values(parsedInfo.details)
           .returning();
-        if (!userDetails)
+
+        if (!userDetails) {
           throw new AppError(
             500,
             "Failed to create personal details record while registering user. User account was not created.",
           );
+        }
 
         const hash = bcrypt.hashSync(plainPassword, 10);
         const accountDetails: IAccountInsert = {
@@ -310,32 +342,38 @@ export class UserService implements IUserService {
           password: hash,
           personal_details_id: userDetails.id,
         };
+
         const [userAccount] = await tx.insert(Accounts).values(accountDetails).returning();
-        if (!userAccount)
+        if (!userAccount) {
           throw new AppError(
             500,
             "Failed to create account record while registering user. Personal details record was rolled back.",
           );
+        }
 
         const [systemRole] = await tx
           .select()
           .from(Roles)
           .where(eq(Roles.system_role, parsedInfo.role));
-        if (!systemRole)
+
+        if (!systemRole) {
           throw new AppError(
             400,
             "Given role has not been found. Changes during account creation were rolled back.",
           );
+        }
 
         const [userRole] = await tx
           .insert(AccountRoles)
           .values({ account_id: userAccount.id, role_id: systemRole.id })
           .returning();
-        if (!userRole)
+
+        if (!userRole) {
           throw new AppError(
             400,
             "Failed to map account record to a role. Changes during account creation were rolled back.",
           );
+        }
 
         const { password: _password, ...filteredAccount } = userAccount;
 
@@ -370,10 +408,86 @@ export class UserService implements IUserService {
           })
           .map(() => newUser)
           .orElse((err) => {
-            logger.warn("⚠️ Welcome email failed to send:", err.message);
+            console.warn("⚠️ Welcome email failed to send:", err.message);
             return okAsync(newUser);
           });
       });
+    });
+  }
+
+  grantRole(
+    accountId: number,
+    role: SystemRole,
+    client: DbClient = db,
+  ): ResultAsync<void, AppError> {
+    return this.hasRole(accountId, role, client).andThen((alreadyHasRole) => {
+      if (alreadyHasRole) {
+        return okAsync(undefined);
+      }
+
+      return WithTransaction(client, async (tx) => {
+        const [systemRole] = await tx
+          .select()
+          .from(Roles)
+          .where(and(eq(Roles.system_role, role), isNull(Roles.deleted_at)));
+
+        if (!systemRole) {
+          throw new AppError(404, `Role "${role}" was not found in the system.`);
+        }
+
+        const [existingMapping] = await tx
+          .select()
+          .from(AccountRoles)
+          .where(
+            and(eq(AccountRoles.account_id, accountId), eq(AccountRoles.role_id, systemRole.id)),
+          );
+
+        if (existingMapping) {
+          await tx
+            .update(AccountRoles)
+            .set({ deleted_at: null })
+            .where(eq(AccountRoles.id, existingMapping.id));
+        } else {
+          const [created] = await tx
+            .insert(AccountRoles)
+            .values({
+              account_id: accountId,
+              role_id: systemRole.id,
+            })
+            .returning();
+
+          if (!created) {
+            throw new AppError(500, `Failed to grant role "${role}".`);
+          }
+        }
+
+        return undefined;
+      });
+    });
+  }
+
+  revokeRole(
+    accountId: number,
+    role: SystemRole,
+    client: DbClient = db,
+  ): ResultAsync<void, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const [systemRole] = await tx.select().from(Roles).where(eq(Roles.system_role, role));
+
+      if (!systemRole) return undefined;
+
+      await tx
+        .update(AccountRoles)
+        .set({ deleted_at: new Date() })
+        .where(
+          and(
+            eq(AccountRoles.account_id, accountId),
+            eq(AccountRoles.role_id, systemRole.id),
+            isNull(AccountRoles.deleted_at),
+          ),
+        );
+
+      return undefined;
     });
   }
 
@@ -433,9 +547,17 @@ export class UserService implements IUserService {
         : validLastName || validFirstName;
 
     const extraParts = [middle_name, suffix].filter(isValid).map((str) => str.trim());
-
     const extraFormatted = extraParts.length > 0 ? ` ${extraParts.join(" ")}` : "";
 
     return `${baseName}${extraFormatted}`;
   };
+
+  private hasRole(accountId: number, role: SystemRole, client: DbClient = db) {
+    return WithTransaction(client, async (tx) => {
+      const userRecord = await this.getUserById(accountId, tx);
+      if (userRecord.isErr()) throw userRecord.error;
+
+      return userRecord.value.roles.includes(role);
+    });
+  }
 }

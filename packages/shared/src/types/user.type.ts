@@ -71,7 +71,21 @@ export const AccountUpdate = createUpdateSchema(Accounts, {
     schema.int("Personal details ID must be an integer.").positive("Invalid personal details ID."),
 });
 
-export const PersonalDetailsSelect = createSelectSchema(PersonalDetails);
+export const PersonalDetailsSelect = createSelectSchema(PersonalDetails, {
+  institutional_id: (schema) =>
+    schema
+      .trim()
+      .min(5, "Institutional ID must be at least 5 characters.")
+      .max(32, "Institutional ID cannot exceed 32 characters.")
+      .regex(
+        /^[A-Za-z0-9-]+$/,
+        "Institutional ID can only contain letters, numbers, and hyphens (e.g. 26-1042-001).",
+      ),
+  first_name: (schema) => schema.trim().min(2, "First name is required."),
+  last_name: (schema) => schema.trim().min(2, "Last name is required."),
+  middle_name: () => z.string().trim().optional().nullable(),
+  suffix: () => z.string().trim().optional().nullable(),
+});
 
 export const PersonalDetailsInsert = createInsertSchema(PersonalDetails, {
   institutional_id: (schema) =>
@@ -82,10 +96,7 @@ export const PersonalDetailsInsert = createInsertSchema(PersonalDetails, {
       .regex(
         /^[A-Za-z0-9-]+$/,
         "Institutional ID can only contain letters, numbers, and hyphens (e.g. 26-1042-001).",
-      )
-      .optional()
-      .nullable()
-      .or(z.literal("")),
+      ),
   first_name: (schema) => schema.trim().min(2, "First name is required."),
   last_name: (schema) => schema.trim().min(2, "Last name is required."),
   middle_name: () => z.string().trim().optional().nullable(),
@@ -101,10 +112,7 @@ export const PersonalDetailsUpdate = createUpdateSchema(PersonalDetails, {
       .regex(
         /^[A-Za-z0-9-]+$/,
         "Institutional ID can only contain letters, numbers, and hyphens (e.g. STU-26-1042-001).",
-      )
-      .optional()
-      .nullable()
-      .or(z.literal("")),
+      ),
   first_name: (schema) => schema.trim().min(2, "First name is required."),
   last_name: (schema) => schema.trim().min(2, "Last name is required."),
   middle_name: () => z.string().trim().optional().nullable(),
@@ -140,14 +148,21 @@ export const GetUserSchema = z.object({
 });
 
 export const UserQuerySchema = z.object({
+  paginate: z
+    .preprocess((val) => {
+      if (val === "false" || val === false || val === "0" || val === 0) return false;
+      return true;
+    }, z.boolean())
+    .default(true),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(10),
   search: z.string().trim().optional(),
   role: z.enum(SystemRoles.enumValues).optional(),
-  is_verified: z
-    .enum(["true", "false"])
-    .transform((val) => val === "true")
-    .optional(),
+  is_verified: z.preprocess((val) => {
+    if (val === "true" || val === true) return true;
+    if (val === "false" || val === false) return false;
+    return undefined;
+  }, z.boolean().optional()),
   sort_by: z
     .enum(["created_at", "email", "first_name", "last_name", "institutional_id"])
     .default("created_at"),
@@ -163,7 +178,7 @@ export const CreateUserSchema = z.object({
   }).extend({
     password: AccountInsert.shape.password.optional(),
   }),
-  details: PersonalDetailsSelect.omit({
+  details: PersonalDetailsInsert.omit({
     id: true,
     created_at: true,
     deleted_at: true,
@@ -172,7 +187,27 @@ export const CreateUserSchema = z.object({
   role: z.enum(SystemRoles.enumValues),
 });
 
+export const UpdateUserSchema = z.object({
+  account: AccountUpdate.omit({
+    personal_details_id: true,
+    created_at: true,
+    deleted_at: true,
+    updated_at: true,
+  }),
+  details: PersonalDetailsUpdate.omit({
+    id: true,
+    created_at: true,
+    deleted_at: true,
+    updated_at: true,
+  }),
+  role: z.enum(SystemRoles.enumValues).optional(),
+});
+
+export const SystemRoleSchema = z.enum(SystemRoles.enumValues);
+
 export type LoginAccount = z.infer<typeof LoginAccountSchema>;
 export type GetUser = z.infer<typeof GetUserSchema>;
 export type UserQuery = z.infer<typeof UserQuerySchema>;
 export type CreateUser = z.infer<typeof CreateUserSchema>;
+export type UpdateUser = z.infer<typeof UpdateUserSchema>;
+export type SystemRole = z.infer<typeof SystemRoleSchema>;
