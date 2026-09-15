@@ -118,7 +118,17 @@ export const CreateCollegeSchema = z.object({
   dean: CreateCollegeDeanSchema,
 });
 
+export const UpdateCollegeSchema = z.object({
+  college: CollegeUpdate.omit({
+    created_at: true,
+    deleted_at: true,
+    updated_at: true,
+  }),
+  dean: CreateCollegeDeanSchema,
+});
+
 export type GetCollege = z.infer<typeof GetCollegeSchema>;
 export type CollegeQuery = z.infer<typeof CollegeQuerySchema>;
 export type CreateCollegeDean = z.infer<typeof CreateCollegeDeanSchema>;
 export type CreateCollege = z.infer<typeof CreateCollegeSchema>;
+export type UpdateCollege = z.infer<typeof UpdateCollegeSchema>;

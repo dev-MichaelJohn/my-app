@@ -1,6 +1,6 @@
 import db, { type PgTransaction } from "@/configs/db.config.js";
 import { AppError } from "@/libs/error.lib.js";
-import { FromDbPromise, ValidateSchema } from "@/libs/result.lib.js";
+import { ValidateSchema } from "@/libs/result.lib.js";
 import {
   AccountRoles,
   Accounts,
@@ -9,13 +9,18 @@ import {
   Colleges,
   CreateCollegeSchema,
   PersonalDetails,
+  ProgramChairs,
   Roles,
+  UpdateCollegeSchema,
   type CollegeQuery,
   type CreateCollege,
+  type CreateCollegeDean,
   type CreateUser,
   type GetCollege,
   type GetUser,
+  type ICollegeSelect,
   type PaginatedData,
+  type UpdateCollege,
 } from "@my-app/shared";
 import { and, asc, countDistinct, desc, eq, ilike, isNull, or, SQL, sql } from "drizzle-orm";
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
@@ -32,9 +37,9 @@ export interface ICollegeService {
 export class CollegeService implements ICollegeService {
   constructor(private userService: IUserService = new UserService()) {}
 
-  getCollegeById(id: number): ResultAsync<GetCollege, AppError> {
-    return FromDbPromise(
-      db
+  getCollegeById(id: number, client: DbClient = db): ResultAsync<GetCollege, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const [college] = await tx
         .select({
           college: {
             id: Colleges.id,
@@ -82,8 +87,10 @@ export class CollegeService implements ICollegeService {
         .leftJoin(Accounts, and(eq(CollegeDeans.dean_id, Accounts.id), isNull(Accounts.deleted_at)))
         .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
         .where(and(eq(Colleges.id, id), isNull(Colleges.deleted_at)))
-        .groupBy(Colleges.id, Accounts.id, PersonalDetails.id),
-    ).andThen(([college]) => {
+        .groupBy(Colleges.id, Accounts.id, PersonalDetails.id);
+
+      return college;
+    }).andThen((college) => {
       if (!college) {
         return errAsync(new AppError(404, "No college record found."));
       }
@@ -92,7 +99,10 @@ export class CollegeService implements ICollegeService {
     });
   }
 
-  getColleges(rawQuery: CollegeQuery): ResultAsync<PaginatedData<GetCollege[]>, AppError> {
+  getColleges(
+    rawQuery: CollegeQuery,
+    client: DbClient = db,
+  ): ResultAsync<PaginatedData<GetCollege[]>, AppError> {
     return ValidateSchema(CollegeQuerySchema, rawQuery).asyncAndThen((parsed) => {
       const { paginate, page, limit, search, sort_by, order } = parsed;
 
@@ -114,14 +124,15 @@ export class CollegeService implements ICollegeService {
       const sortColumn = sortColumnMap[sort_by] ?? Colleges.name;
       const orderByClause = order === "asc" ? asc(sortColumn) : desc(sortColumn);
 
-      const baseDataQuery = db
-        .select({
-          college: {
-            id: Colleges.id,
-            name: Colleges.name,
-            initialism: Colleges.initialism,
-          },
-          dean: sql<GetUser | null>`
+      return WithTransaction(client, async (tx) => {
+        const baseDataQuery = tx
+          .select({
+            college: {
+              id: Colleges.id,
+              name: Colleges.name,
+              initialism: Colleges.initialism,
+            },
+            dean: sql<GetUser | null>`
             CASE
               WHEN ${Accounts.id} IS NULL THEN NULL
               ELSE JSON_BUILD_OBJECT(
@@ -153,50 +164,49 @@ export class CollegeService implements ICollegeService {
               )
             END
           `,
-        })
-        .from(Colleges)
-        .leftJoin(
-          CollegeDeans,
-          and(eq(Colleges.id, CollegeDeans.college_id), isNull(CollegeDeans.deleted_at)),
-        )
-        .leftJoin(Accounts, and(eq(CollegeDeans.dean_id, Accounts.id), isNull(Accounts.deleted_at)))
-        .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
-        .where(whereCondition)
-        .groupBy(Colleges.id, Accounts.id, PersonalDetails.id)
-        .orderBy(orderByClause)
-        .$dynamic();
+          })
+          .from(Colleges)
+          .leftJoin(
+            CollegeDeans,
+            and(eq(Colleges.id, CollegeDeans.college_id), isNull(CollegeDeans.deleted_at)),
+          )
+          .leftJoin(
+            Accounts,
+            and(eq(CollegeDeans.dean_id, Accounts.id), isNull(Accounts.deleted_at)),
+          )
+          .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
+          .where(whereCondition)
+          .groupBy(Colleges.id, Accounts.id, PersonalDetails.id)
+          .orderBy(orderByClause)
+          .$dynamic();
 
-      if (!paginate) {
-        return FromDbPromise(baseDataQuery).map((colleges) => {
+        if (!paginate) {
+          const colleges = await baseDataQuery;
           return createPaginatedData({
             data: colleges,
             currentPage: 1,
             pageSize: colleges.length,
             totalItems: colleges.length,
           });
+        }
+
+        const offset = (page - 1) * limit;
+        const paginatedDataQuery = baseDataQuery.limit(limit).offset(offset);
+
+        const countQuery = db
+          .select({ total: countDistinct(Colleges.id) })
+          .from(Colleges)
+          .where(whereCondition);
+
+        const [colleges, countResult] = await Promise.all([paginatedDataQuery, countQuery]);
+        const totalItems = countResult[0]?.total ?? 0;
+        return createPaginatedData({
+          data: colleges,
+          currentPage: page,
+          pageSize: limit,
+          totalItems,
         });
-      }
-
-      const offset = (page - 1) * limit;
-      const paginatedDataQuery = baseDataQuery.limit(limit).offset(offset);
-
-      const countQuery = db
-        .select({ total: countDistinct(Colleges.id) })
-        .from(Colleges)
-        .where(whereCondition);
-
-      return FromDbPromise(Promise.all([paginatedDataQuery, countQuery])).map(
-        ([colleges, countResult]) => {
-          const totalItems = countResult[0]?.total ?? 0;
-
-          return createPaginatedData({
-            data: colleges,
-            currentPage: page,
-            pageSize: limit,
-            totalItems,
-          });
-        },
-      );
+      });
     });
   }
 
@@ -253,6 +263,120 @@ export class CollegeService implements ICollegeService {
     });
   }
 
+  updateCollege(
+    id: number,
+    collegeInfo: UpdateCollege,
+    client: DbClient = db,
+  ): ResultAsync<GetCollege, AppError> {
+    return ValidateSchema(UpdateCollegeSchema, collegeInfo).asyncAndThen(({ college, dean }) => {
+      const hasCollegeInfo = Boolean(college && Object.keys(college).length > 0);
+      const hasDeanInfo = Boolean(dean && Object.keys(dean).length > 0);
+
+      if (!hasCollegeInfo && !hasDeanInfo) {
+        return errAsync(new AppError(400, "No update parameters were provided."));
+      }
+
+      return WithTransaction(client, async (tx) => {
+        const getCollege = await this.getCollegeById(id, tx);
+        if (getCollege.isErr()) throw getCollege.error;
+        const existingCollege = getCollege.value;
+
+        let updatedCollegeRecord: Pick<ICollegeSelect, "id" | "name" | "initialism"> =
+          existingCollege.college;
+        let finalDeanUser: GetUser | null = existingCollege.dean;
+
+        if (hasCollegeInfo && college) {
+          const [updated] = await tx
+            .update(Colleges)
+            .set(college)
+            .where(and(eq(Colleges.id, existingCollege.college.id), isNull(Colleges.deleted_at)))
+            .returning();
+
+          if (!updated) {
+            throw new AppError(500, "Failed to update college record.");
+          }
+          updatedCollegeRecord = updated;
+        }
+
+        if (hasDeanInfo && dean) {
+          const isSameDean = this.sameDeanInfo(dean, existingCollege);
+
+          if (!isSameDean) {
+            let account_id: number;
+
+            if (dean.type === "existing") {
+              await this.validDeanCandidate(dean.account_id, tx);
+              account_id = dean.account_id;
+
+              const userRecord = await this.userService.getUserById(account_id, tx);
+              if (userRecord.isErr()) throw userRecord.error;
+              finalDeanUser = userRecord.value;
+            } else {
+              const newDeanInfo: CreateUser = { ...dean.info, role: "FACULTY" };
+              const userRecord = await this.userService.createUser(newDeanInfo, tx);
+              if (userRecord.isErr()) throw userRecord.error;
+
+              finalDeanUser = userRecord.value;
+              account_id = finalDeanUser.account.id;
+            }
+
+            if (existingCollege.dean) {
+              const oldDeanId = existingCollege.dean.account.id;
+
+              const hasOtherDeanships = await this.hasDeanships(
+                oldDeanId,
+                tx,
+                existingCollege.college.id,
+              );
+              const hasProgramChair = await this.hasProgramChairRecords(oldDeanId, tx);
+
+              if (!hasOtherDeanships && !hasProgramChair) {
+                const revokeRes = await this.userService.revokeRole(oldDeanId, "SUPERVISOR", tx);
+                if (revokeRes.isErr()) throw revokeRes.error;
+              }
+
+              const [deleteDeanRecord] = await tx
+                .update(CollegeDeans)
+                .set({ deleted_at: new Date() })
+                .where(
+                  and(
+                    eq(CollegeDeans.dean_id, oldDeanId),
+                    eq(CollegeDeans.college_id, existingCollege.college.id),
+                    isNull(CollegeDeans.deleted_at),
+                  ),
+                )
+                .returning();
+
+              if (!deleteDeanRecord) {
+                throw new AppError(500, "Failed to remove previous dean assignment.");
+              }
+            }
+
+            const grantRes = await this.userService.grantRole(account_id, "SUPERVISOR", tx);
+            if (grantRes.isErr()) throw grantRes.error;
+
+            const [newDeanRecord] = await tx
+              .insert(CollegeDeans)
+              .values({
+                dean_id: account_id,
+                college_id: existingCollege.college.id,
+              })
+              .returning();
+
+            if (!newDeanRecord) {
+              throw new AppError(500, "Failed to assign new dean to college.");
+            }
+          }
+        }
+
+        return {
+          college: updatedCollegeRecord,
+          dean: finalDeanUser,
+        };
+      });
+    });
+  }
+
   private async validDeanCandidate(
     accountId: number,
     tx: PgTransaction,
@@ -291,5 +415,23 @@ export class CollegeService implements ICollegeService {
       );
 
     return deanships.length > 0;
+  }
+
+  private async hasProgramChairRecords(accountId: number, tx: PgTransaction) {
+    const chairs = await tx
+      .select()
+      .from(ProgramChairs)
+      .where(and(eq(ProgramChairs.chair_id, accountId), isNull(ProgramChairs.deleted_at)));
+
+    return chairs.length > 0;
+  }
+
+  private sameDeanInfo(info: CreateCollegeDean, existingCollege: GetCollege) {
+    if (!info) throw new AppError(400, "Dean information must not be empty.");
+
+    if (!existingCollege.dean) return true;
+
+    if (info.type === "existing") return info.account_id === existingCollege.dean.account.id;
+    return info.info.details.institutional_id === existingCollege.dean.details.institutional_id;
   }
 }
