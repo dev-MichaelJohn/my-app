@@ -10,6 +10,7 @@ import {
   CreateCollegeSchema,
   PersonalDetails,
   ProgramChairs,
+  Programs,
   Roles,
   UpdateCollegeSchema,
   type CollegeQuery,
@@ -32,6 +33,12 @@ export interface ICollegeService {
   getCollegeById(id: number): ResultAsync<GetCollege, AppError>;
   getColleges(rawQuery: CollegeQuery): ResultAsync<PaginatedData<GetCollege[]>, AppError>;
   createCollege(collegeInfo: CreateCollege, client: DbClient): ResultAsync<GetCollege, AppError>;
+  updateCollege(
+    id: number,
+    collegeInfo: UpdateCollege,
+    client: DbClient,
+  ): ResultAsync<GetCollege, AppError>;
+  deleteCollege(id: number, client: DbClient): ResultAsync<void, AppError>;
 }
 
 export class CollegeService implements ICollegeService {
@@ -193,7 +200,7 @@ export class CollegeService implements ICollegeService {
         const offset = (page - 1) * limit;
         const paginatedDataQuery = baseDataQuery.limit(limit).offset(offset);
 
-        const countQuery = db
+        const countQuery = tx
           .select({ total: countDistinct(Colleges.id) })
           .from(Colleges)
           .where(whereCondition);
@@ -292,9 +299,7 @@ export class CollegeService implements ICollegeService {
             .where(and(eq(Colleges.id, existingCollege.college.id), isNull(Colleges.deleted_at)))
             .returning();
 
-          if (!updated) {
-            throw new AppError(500, "Failed to update college record.");
-          }
+          if (!updated) throw new AppError(500, "Failed to update college record.");
           updatedCollegeRecord = updated;
         }
 
@@ -335,7 +340,7 @@ export class CollegeService implements ICollegeService {
                 if (revokeRes.isErr()) throw revokeRes.error;
               }
 
-              const [deleteDeanRecord] = await tx
+              const [deletedDeanRecord] = await tx
                 .update(CollegeDeans)
                 .set({ deleted_at: new Date() })
                 .where(
@@ -347,9 +352,8 @@ export class CollegeService implements ICollegeService {
                 )
                 .returning();
 
-              if (!deleteDeanRecord) {
+              if (!deletedDeanRecord)
                 throw new AppError(500, "Failed to remove previous dean assignment.");
-              }
             }
 
             const grantRes = await this.userService.grantRole(account_id, "SUPERVISOR", tx);
@@ -363,9 +367,7 @@ export class CollegeService implements ICollegeService {
               })
               .returning();
 
-            if (!newDeanRecord) {
-              throw new AppError(500, "Failed to assign new dean to college.");
-            }
+            if (!newDeanRecord) throw new AppError(500, "Failed to assign new dean to college.");
           }
         }
 
@@ -374,6 +376,68 @@ export class CollegeService implements ICollegeService {
           dean: finalDeanUser,
         };
       });
+    });
+  }
+
+  deleteCollege(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const result = await this.getCollegeById(id, tx);
+      if (result.isErr()) throw result.error;
+      const existingCollege = result.value;
+
+      const programs = await tx
+        .select()
+        .from(Programs)
+        .where(
+          and(eq(Programs.college_id, existingCollege.college.id), isNull(Programs.deleted_at)),
+        );
+      if (programs.length > 0)
+        throw new AppError(
+          400,
+          `This college record cannot be deleted. ${programs.length} program/s are under this college.`,
+        );
+
+      if (existingCollege.dean) {
+        const hasOtherDeanships = await this.hasDeanships(
+          existingCollege.dean.account.id,
+          tx,
+          existingCollege.college.id,
+        );
+        const hasProgramChair = await this.hasProgramChairRecords(
+          existingCollege.dean.account.id,
+          tx,
+        );
+
+        if (!hasOtherDeanships && !hasProgramChair) {
+          const revokeRes = await this.userService.revokeRole(
+            existingCollege.dean.account.id,
+            "SUPERVISOR",
+            tx,
+          );
+          if (revokeRes.isErr()) throw revokeRes.error;
+        }
+
+        const [deletedDeanRecord] = await tx
+          .update(CollegeDeans)
+          .set({ deleted_at: new Date() })
+          .where(
+            and(
+              eq(CollegeDeans.dean_id, existingCollege.dean.account.id),
+              eq(CollegeDeans.college_id, existingCollege.college.id),
+              isNull(CollegeDeans.deleted_at),
+            ),
+          )
+          .returning();
+
+        if (!deletedDeanRecord)
+          throw new AppError(500, "Failed to remove previous dean assignment.");
+      }
+
+      const [deletedCollege] = await tx
+        .update(Colleges)
+        .set({ deleted_at: new Date() })
+        .returning();
+      if (!deletedCollege) throw new AppError(500, "Failed to remove college record.");
     });
   }
 
@@ -429,7 +493,7 @@ export class CollegeService implements ICollegeService {
   private sameDeanInfo(info: CreateCollegeDean, existingCollege: GetCollege) {
     if (!info) throw new AppError(400, "Dean information must not be empty.");
 
-    if (!existingCollege.dean) return true;
+    if (!existingCollege.dean) return false;
 
     if (info.type === "existing") return info.account_id === existingCollege.dean.account.id;
     return info.info.details.institutional_id === existingCollege.dean.details.institutional_id;

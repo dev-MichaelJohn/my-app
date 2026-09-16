@@ -277,7 +277,6 @@ export class UserService implements IUserService {
           .orderBy(orderByClause)
           .$dynamic();
 
-        // Path A: Non-Paginated (Dropdowns)
         if (!paginate) {
           const users = await baseQuery;
           return createPaginatedData({
@@ -288,7 +287,6 @@ export class UserService implements IUserService {
           });
         }
 
-        // Path B: Paginated (Data Table)
         const offset = (page - 1) * limit;
         const paginatedQuery = baseQuery.limit(limit).offset(offset);
 
