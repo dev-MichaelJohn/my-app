@@ -245,3 +245,15 @@
 [2026-09-16 09:59:27:5927] [INFO]: Active Superadmin already exists. Safe to continue.
 [2026-09-16 09:59:27:5927] [INFO]: Database seeding verification completed.
 [2026-09-16 09:59:27:5927] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 12:08:49:849] [INFO]: Initializing environment variables...
+[2026-09-16 12:08:49:849] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:08:50:850] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:08:50:850] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:08:50:850] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:08:50:850] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:08:50:850] [INFO]: Database connection established successfully.
+[2026-09-16 12:08:50:850] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:08:50:850] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 12:08:50:850] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 12:08:50:850] [INFO]: Database seeding verification completed.
+[2026-09-16 12:08:50:850] [INFO]: Server online in [development] mode @ http://localhost:5000

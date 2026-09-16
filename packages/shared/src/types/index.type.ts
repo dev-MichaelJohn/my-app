@@ -5,3 +5,4 @@ export * from "./email.type.js";
 export * from "./token.type.js";
 export * from "./rbac.type.js";
 export * from "./college.type.js";
+export * from "./program.type.js";

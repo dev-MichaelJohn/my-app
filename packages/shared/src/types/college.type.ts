@@ -90,6 +90,11 @@ export const CollegeQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(10),
   search: z.string().trim().optional(),
+  has_dean: z.preprocess((val) => {
+    if (val === "true" || val === true || val === "1" || val === 1) return true;
+    if (val === "false" || val === false || val === "0" || val === 0) return false;
+    return undefined;
+  }, z.boolean().optional()),
   sort_by: z.enum(["created_at", "name", "initialism"]).default("created_at"),
   order: z.enum(["asc", "desc"]).default("desc"),
 });

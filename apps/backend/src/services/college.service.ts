@@ -22,7 +22,19 @@ import {
   type PaginatedData,
   type UpdateCollege,
 } from "@my-app/shared";
-import { and, asc, countDistinct, desc, eq, ilike, isNull, or, SQL, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  countDistinct,
+  desc,
+  eq,
+  ilike,
+  isNotNull,
+  isNull,
+  or,
+  SQL,
+  sql,
+} from "drizzle-orm";
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import { createPaginatedData } from "@/libs/response.lib.js";
 import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
@@ -41,6 +53,12 @@ export interface ICollegeService {
     client?: DbClient,
   ): ResultAsync<GetCollege, AppError>;
   deleteCollege(id: number, client?: DbClient): ResultAsync<void, AppError>;
+  hasDeanships(accountId: number, tx: PgTransaction, excludeCollegeId?: number): Promise<boolean>;
+  hasProgramChairRecords(
+    accountId: number,
+    tx: PgTransaction,
+    excludeProgramId?: number,
+  ): Promise<boolean>;
 }
 
 export class CollegeService implements ICollegeService {
@@ -113,13 +131,21 @@ export class CollegeService implements ICollegeService {
     client: DbClient = db,
   ): ResultAsync<PaginatedData<GetCollege[]>, AppError> {
     return ValidateSchema(CollegeQuerySchema, rawQuery).asyncAndThen((parsed) => {
-      const { paginate, page, limit, search, sort_by, order } = parsed;
+      const { paginate, page, limit, search, has_dean, sort_by, order } = parsed;
 
       const filters: SQL[] = [isNull(Colleges.deleted_at)];
 
       if (search) {
         const term = `%${search}%`;
         filters.push(or(ilike(Colleges.name, term), ilike(Colleges.initialism, term))!);
+      }
+
+      if (has_dean !== undefined) {
+        if (has_dean) {
+          filters.push(and(isNotNull(CollegeDeans.id), isNull(CollegeDeans.deleted_at))!);
+        } else {
+          filters.push(isNull(CollegeDeans.id));
+        }
       }
 
       const whereCondition = and(...filters);
@@ -236,6 +262,7 @@ export class CollegeService implements ICollegeService {
 
         let deanUser: GetUser | null = null;
         let account_id: number;
+
         if (dean.type === "existing") {
           await this.validDeanCandidate(dean.account_id, tx);
           account_id = dean.account_id;
@@ -395,8 +422,8 @@ export class CollegeService implements ICollegeService {
         );
       if (programs.length > 0)
         throw new AppError(
-          400,
-          `This college record cannot be deleted. ${programs.length} program/s are under this college.`,
+          409,
+          `Cannot delete program because it still has active dependencies: ${programs.length} active program(s). Please delete or reassign them first.`,
         );
 
       if (existingCollege.dean) {
@@ -438,6 +465,7 @@ export class CollegeService implements ICollegeService {
       const [deletedCollege] = await tx
         .update(Colleges)
         .set({ deleted_at: new Date() })
+        .where(and(eq(Colleges.id, existingCollege.college.id), isNull(Colleges.deleted_at)))
         .returning();
       if (!deletedCollege) throw new AppError(500, "Failed to remove college record.");
     });
@@ -468,7 +496,7 @@ export class CollegeService implements ICollegeService {
       throw new AppError(409, "This account is already assigned as the dean of a college.");
   }
 
-  private async hasDeanships(accountId: number, tx: PgTransaction, excludeCollegeId?: number) {
+  async hasDeanships(accountId: number, tx: PgTransaction, excludeCollegeId?: number) {
     const deanships = await tx
       .select()
       .from(CollegeDeans)
@@ -483,11 +511,17 @@ export class CollegeService implements ICollegeService {
     return deanships.length > 0;
   }
 
-  private async hasProgramChairRecords(accountId: number, tx: PgTransaction) {
+  async hasProgramChairRecords(accountId: number, tx: PgTransaction, excludeProgramId?: number) {
     const chairs = await tx
       .select()
       .from(ProgramChairs)
-      .where(and(eq(ProgramChairs.chair_id, accountId), isNull(ProgramChairs.deleted_at)));
+      .where(
+        and(
+          eq(ProgramChairs.chair_id, accountId),
+          excludeProgramId ? sql`${ProgramChairs.program_id} != ${excludeProgramId}` : undefined,
+          isNull(ProgramChairs.deleted_at),
+        ),
+      );
 
     return chairs.length > 0;
   }
