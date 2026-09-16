@@ -1,0 +1,1 @@
+[2026-09-16 09:32:37:3237] [ERROR]: Unhandled Postgres Error [42P01]: relation "colleges" does not exist relation "colleges" does not exist

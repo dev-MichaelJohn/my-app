@@ -1,6 +1,7 @@
 import { createAPIResponse } from "@/libs/response.lib.js";
 import { Router, type IRouter } from "express";
 import AuthRouter from "./auth.router.js";
+import CollegeRouter from "./college.router.js";
 
 const V1Router: IRouter = Router();
 
@@ -10,5 +11,6 @@ V1Router.get("/health", (_req, res, _next) => {
 });
 
 V1Router.use("/auth", AuthRouter);
+V1Router.use("/college", CollegeRouter);
 
 export default V1Router;
