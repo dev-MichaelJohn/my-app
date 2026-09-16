@@ -8,8 +8,28 @@ const collegeController = new CollegeController();
 
 CollegeRouter.get(
   "/:id",
-  //RequirePermission(PERMISSIONS.COLLEGE_READ),
+  RequirePermission(PERMISSIONS.COLLEGE_READ),
   collegeController.getCollegeById,
+);
+
+CollegeRouter.get("/", RequirePermission(PERMISSIONS.COLLEGE_READ), collegeController.getColleges);
+
+CollegeRouter.post(
+  "/",
+  RequirePermission(PERMISSIONS.COLLEGE_CREATE),
+  collegeController.createCollege,
+);
+
+CollegeRouter.put(
+  "/:id",
+  RequirePermission(PERMISSIONS.COLLEGE_UPDATE),
+  collegeController.updateCollege,
+);
+
+CollegeRouter.delete(
+  "/:id",
+  RequirePermission(PERMISSIONS.COLLEGE_DELETE),
+  collegeController.deleteCollege,
 );
 
 export default CollegeRouter;

@@ -90,3 +90,158 @@
 [2026-09-16 09:33:08:338] [INFO]: Active Superadmin already exists. Safe to continue.
 [2026-09-16 09:33:08:338] [INFO]: Database seeding verification completed.
 [2026-09-16 09:33:08:338] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 09:34:52:3452] [WARN]: 🛑 Received SIGTERM. Starting graceful shutdown...
+[2026-09-16 09:34:55:3455] [INFO]: Initializing environment variables...
+[2026-09-16 09:34:55:3455] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:34:55:3455] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:34:55:3455] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:34:55:3455] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:34:55:3455] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:34:55:3455] [INFO]: Database connection established successfully.
+[2026-09-16 09:34:55:3455] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:34:55:3455] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 09:34:55:3455] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 09:34:55:3455] [INFO]: Database seeding verification completed.
+[2026-09-16 09:34:55:3455] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 09:34:59:3459] [WARN]: Validation failed: {"":"Invalid input: expected object, received undefined"}
+[2026-09-16 09:36:22:3622] [WARN]: 🛑 Received SIGTERM. Starting graceful shutdown...
+[2026-09-16 09:36:26:3626] [INFO]: Initializing environment variables...
+[2026-09-16 09:36:26:3626] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:36:26:3626] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:36:26:3626] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:36:26:3626] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:36:26:3626] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:36:26:3626] [INFO]: Database connection established successfully.
+[2026-09-16 09:36:26:3626] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:36:26:3626] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 09:36:26:3626] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 09:36:26:3626] [INFO]: Database seeding verification completed.
+[2026-09-16 09:36:26:3626] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 09:37:34:3734] [WARN]: Validation failed: {"":"Invalid input: expected object, received undefined"}
+[2026-09-16 09:37:35:3735] [WARN]: Validation failed: {"":"Invalid input: expected object, received undefined"}
+[2026-09-16 09:37:56:3756] [WARN]: Validation failed: {"":"Invalid input: expected object, received undefined"}
+[2026-09-16 09:38:34:3834] [WARN]: Validation failed: {"":"Invalid input: expected object, received undefined"}
+[2026-09-16 09:38:58:3858] [WARN]: Validation failed: {"":"Invalid input: expected object, received undefined"}
+[2026-09-16 09:38:58:3858] [WARN]: Validation failed: {"":"Invalid input: expected object, received undefined"}
+[2026-09-16 09:39:26:3926] [WARN]: 🛑 Received SIGTERM. Starting graceful shutdown...
+[2026-09-16 09:39:28:3928] [INFO]: Initializing environment variables...
+[2026-09-16 09:39:28:3928] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:39:28:3928] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:39:28:3928] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:39:28:3928] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:39:28:3928] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:39:28:3928] [INFO]: Database connection established successfully.
+[2026-09-16 09:39:28:3928] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:39:28:3928] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 09:39:28:3928] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 09:39:28:3928] [INFO]: Database seeding verification completed.
+[2026-09-16 09:39:28:3928] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 09:40:06:406] [WARN]: Validation failed: {"":"Invalid input: expected object, received undefined"}
+[2026-09-16 09:40:09:409] [WARN]: 🛑 Received SIGINT. Starting graceful shutdown...
+[2026-09-16 09:40:13:4013] [INFO]: Initializing environment variables...
+[2026-09-16 09:40:13:4013] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:40:13:4013] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:40:13:4013] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:40:13:4013] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:40:13:4013] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:40:13:4013] [INFO]: Database connection established successfully.
+[2026-09-16 09:40:13:4013] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:40:13:4013] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 09:40:13:4013] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 09:40:13:4013] [INFO]: Database seeding verification completed.
+[2026-09-16 09:40:13:4013] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 09:40:17:4017] [WARN]: Validation failed: {"":"Invalid input: expected object, received undefined"}
+[2026-09-16 09:41:03:413] [WARN]: Validation failed: {"":"Invalid input: expected object, received undefined"}
+[2026-09-16 09:41:49:4149] [WARN]: 🛑 Received SIGTERM. Starting graceful shutdown...
+[2026-09-16 09:41:52:4152] [INFO]: Initializing environment variables...
+[2026-09-16 09:41:52:4152] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:41:52:4152] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:41:52:4152] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:41:52:4152] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:41:52:4152] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:41:52:4152] [INFO]: Database connection established successfully.
+[2026-09-16 09:41:52:4152] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:41:52:4152] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 09:41:52:4152] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 09:41:52:4152] [INFO]: Database seeding verification completed.
+[2026-09-16 09:41:52:4152] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 09:42:50:4250] [WARN]: 🛑 Received SIGTERM. Starting graceful shutdown...
+[2026-09-16 09:42:53:4253] [INFO]: Initializing environment variables...
+[2026-09-16 09:42:53:4253] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:42:53:4253] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:42:53:4253] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:42:53:4253] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:42:53:4253] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:42:53:4253] [INFO]: Database connection established successfully.
+[2026-09-16 09:42:53:4253] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:42:53:4253] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 09:42:53:4253] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 09:42:53:4253] [INFO]: Database seeding verification completed.
+[2026-09-16 09:42:53:4253] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 09:50:43:5043] [WARN]: 🛑 Received SIGINT. Starting graceful shutdown...
+[2026-09-16 09:50:47:5047] [INFO]: Initializing environment variables...
+[2026-09-16 09:50:47:5047] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:50:47:5047] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:50:47:5047] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:50:47:5047] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:50:47:5047] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:50:47:5047] [INFO]: Database connection established successfully.
+[2026-09-16 09:50:47:5047] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:50:47:5047] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 09:50:47:5047] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 09:50:47:5047] [INFO]: Database seeding verification completed.
+[2026-09-16 09:50:47:5047] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 09:53:39:5339] [WARN]: 🛑 Received SIGTERM. Starting graceful shutdown...
+[2026-09-16 09:53:44:5344] [INFO]: Initializing environment variables...
+[2026-09-16 09:53:44:5344] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:53:44:5344] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:53:44:5344] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:53:44:5344] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:53:44:5344] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:53:44:5344] [INFO]: Database connection established successfully.
+[2026-09-16 09:53:44:5344] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:53:44:5344] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 09:53:44:5344] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 09:53:44:5344] [INFO]: Database seeding verification completed.
+[2026-09-16 09:53:44:5344] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 09:55:34:5534] [WARN]: 🛑 Received SIGINT. Starting graceful shutdown...
+[2026-09-16 09:55:38:5538] [INFO]: Initializing environment variables...
+[2026-09-16 09:55:38:5538] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:55:38:5538] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:55:38:5538] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:55:38:5538] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:55:38:5538] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:55:38:5538] [INFO]: Database connection established successfully.
+[2026-09-16 09:55:38:5538] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:55:38:5538] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 09:55:38:5538] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 09:55:38:5538] [INFO]: Database seeding verification completed.
+[2026-09-16 09:55:38:5538] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 09:56:44:5644] [WARN]: Validation failed: {"":"Invalid input: expected number, received NaN"}
+[2026-09-16 09:57:20:5720] [WARN]: Postgres Unique Violation (23505): Key (name)=(College of Technology and Engineering) already exists.
+[2026-09-16 09:58:25:5825] [WARN]: 🛑 Received SIGTERM. Starting graceful shutdown...
+[2026-09-16 09:58:28:5828] [INFO]: Initializing environment variables...
+[2026-09-16 09:58:28:5828] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:58:29:5829] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:58:29:5829] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:58:29:5829] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:58:29:5829] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:58:29:5829] [INFO]: Database connection established successfully.
+[2026-09-16 09:58:29:5829] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:58:29:5829] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 09:58:29:5829] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 09:58:29:5829] [INFO]: Database seeding verification completed.
+[2026-09-16 09:58:29:5829] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 09:59:24:5924] [WARN]: 🛑 Received SIGTERM. Starting graceful shutdown...
+[2026-09-16 09:59:27:5927] [INFO]: Initializing environment variables...
+[2026-09-16 09:59:27:5927] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:59:27:5927] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:59:27:5927] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:59:27:5927] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:59:27:5927] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:59:27:5927] [INFO]: Database connection established successfully.
+[2026-09-16 09:59:27:5927] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 09:59:27:5927] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 09:59:27:5927] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 09:59:27:5927] [INFO]: Database seeding verification completed.
+[2026-09-16 09:59:27:5927] [INFO]: Server online in [development] mode @ http://localhost:5000

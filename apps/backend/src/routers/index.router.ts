@@ -11,6 +11,6 @@ V1Router.get("/health", (_req, res, _next) => {
 });
 
 V1Router.use("/auth", AuthRouter);
-V1Router.use("/college", CollegeRouter);
+V1Router.use("/colleges", CollegeRouter);
 
 export default V1Router;

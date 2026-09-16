@@ -13,7 +13,6 @@ import {
   Programs,
   Roles,
   UpdateCollegeSchema,
-  type CollegeQuery,
   type CreateCollege,
   type CreateCollegeDean,
   type CreateUser,
@@ -30,15 +29,18 @@ import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
 import { UserService, type IUserService } from "./user.service.js";
 
 export interface ICollegeService {
-  getCollegeById(id: number): ResultAsync<GetCollege, AppError>;
-  getColleges(rawQuery: CollegeQuery): ResultAsync<PaginatedData<GetCollege[]>, AppError>;
-  createCollege(collegeInfo: CreateCollege, client: DbClient): ResultAsync<GetCollege, AppError>;
+  getCollegeById(id: number, client?: DbClient): ResultAsync<GetCollege, AppError>;
+  getColleges(
+    rawQuery: unknown,
+    client?: DbClient,
+  ): ResultAsync<PaginatedData<GetCollege[]>, AppError>;
+  createCollege(collegeInfo: CreateCollege, client?: DbClient): ResultAsync<GetCollege, AppError>;
   updateCollege(
     id: number,
     collegeInfo: UpdateCollege,
-    client: DbClient,
+    client?: DbClient,
   ): ResultAsync<GetCollege, AppError>;
-  deleteCollege(id: number, client: DbClient): ResultAsync<void, AppError>;
+  deleteCollege(id: number, client?: DbClient): ResultAsync<void, AppError>;
 }
 
 export class CollegeService implements ICollegeService {
@@ -107,7 +109,7 @@ export class CollegeService implements ICollegeService {
   }
 
   getColleges(
-    rawQuery: CollegeQuery,
+    rawQuery: unknown,
     client: DbClient = db,
   ): ResultAsync<PaginatedData<GetCollege[]>, AppError> {
     return ValidateSchema(CollegeQuerySchema, rawQuery).asyncAndThen((parsed) => {
