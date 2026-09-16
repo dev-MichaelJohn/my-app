@@ -6,13 +6,13 @@ import z from "zod";
 export class CollegeController {
   constructor(private collegeService: ICollegeService = new CollegeService()) {}
 
-  private idSchema = z.coerce.number().int().positive();
+  private idSchema = z.coerce.number().int().positive("Invalid College ID provided.");
 
   getCollegeById = runAsync((req, _res) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((collegeId) => {
       return this.collegeService.getCollegeById(collegeId).map((data) => ({
         status: 200,
-        message: "College record found!",
+        message: "College details retrieved successfully.",
         data,
       }));
     });
@@ -21,15 +21,15 @@ export class CollegeController {
   getColleges = runAsync((req, _res) => {
     return this.collegeService.getColleges(req.query).map((data) => ({
       status: 200,
-      message: "College records found!",
+      message: "Colleges retrieved successfully.",
       data,
     }));
   });
 
   createCollege = runAsync((req, _res) => {
     return this.collegeService.createCollege(req.body).map((data) => ({
-      status: 200,
-      message: "College record created successfully!",
+      status: 201,
+      message: "College created successfully.",
       data,
     }));
   });
@@ -38,7 +38,7 @@ export class CollegeController {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((collegeId) => {
       return this.collegeService.updateCollege(collegeId, req.body).map((data) => ({
         status: 200,
-        message: "College record updated successfully!",
+        message: "College updated successfully.",
         data,
       }));
     });
@@ -48,7 +48,7 @@ export class CollegeController {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((collegeId) => {
       return this.collegeService.deleteCollege(collegeId).map(() => ({
         status: 200,
-        message: "College record deleted successfully!",
+        message: "College deleted successfully!",
         data: null,
       }));
     });
