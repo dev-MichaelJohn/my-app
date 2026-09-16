@@ -270,3 +270,34 @@
 [2026-09-16 12:18:26:1826] [INFO]: Active Superadmin already exists. Safe to continue.
 [2026-09-16 12:18:26:1826] [INFO]: Database seeding verification completed.
 [2026-09-16 12:18:26:1826] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 12:33:12:3312] [WARN]: 🛑 Received SIGTERM. Starting graceful shutdown...
+[2026-09-16 12:33:16:3316] [INFO]: Initializing environment variables...
+[2026-09-16 12:33:16:3316] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:16:3316] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:16:3316] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:16:3316] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:16:3316] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:16:3316] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:16:3316] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:16:3316] [INFO]: Database connection established successfully.
+[2026-09-16 12:33:16:3316] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:16:3316] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 12:33:16:3316] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 12:33:16:3316] [INFO]: Database seeding verification completed.
+[2026-09-16 12:33:16:3316] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 12:33:45:3345] [WARN]: 🛑 Received SIGTERM. Starting graceful shutdown...
+[2026-09-16 12:33:49:3349] [INFO]: Initializing environment variables...
+[2026-09-16 12:33:49:3349] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:49:3349] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:49:3349] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:49:3349] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:49:3349] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:49:3349] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:49:3349] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:49:3349] [INFO]: Database connection established successfully.
+[2026-09-16 12:33:49:3349] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-16 12:33:49:3349] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-16 12:33:49:3349] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-16 12:33:49:3349] [INFO]: Database seeding verification completed.
+[2026-09-16 12:33:49:3349] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-16 12:35:07:357] [WARN]: 🛑 Received SIGTERM. Starting graceful shutdown...

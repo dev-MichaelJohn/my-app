@@ -1,10 +1,13 @@
 import { ProgramController } from "@/controllers/program.controller.js";
+import { standardApiLimiter } from "@/libs/limiter.lib.js";
 import { RequirePermission } from "@/middlewares/rbac.middleware.js";
 import { PERMISSIONS } from "@my-app/shared";
 import { Router, type IRouter } from "express";
 
 const ProgramRouter: IRouter = Router();
 const programController = new ProgramController();
+
+ProgramRouter.use(standardApiLimiter);
 
 ProgramRouter.get(
   "/:id",
