@@ -3,6 +3,7 @@ import { Router, type IRouter } from "express";
 import AuthRouter from "./auth.router.js";
 import CollegeRouter from "./college.router.js";
 import ProgramRouter from "./program.router.js";
+import CourseRouter from "./course.router.js";
 
 const V1Router: IRouter = Router();
 
@@ -14,5 +15,6 @@ V1Router.get("/health", (_req, res, _next) => {
 V1Router.use("/auth", AuthRouter);
 V1Router.use("/colleges", CollegeRouter);
 V1Router.use("/programs", ProgramRouter);
+V1Router.use("/courses", CourseRouter);
 
 export default V1Router;
