@@ -35,7 +35,7 @@ import {
   SQL,
   sql,
 } from "drizzle-orm";
-import { errAsync, okAsync, type ResultAsync } from "neverthrow";
+import { errAsync, type ResultAsync } from "neverthrow";
 import { createPaginatedData } from "@/libs/response.lib.js";
 import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
 import { UserService, type IUserService } from "./user.service.js";
@@ -116,13 +116,9 @@ export class CollegeService implements ICollegeService {
         .where(and(eq(Colleges.id, id), isNull(Colleges.deleted_at)))
         .groupBy(Colleges.id, Accounts.id, PersonalDetails.id);
 
-      return college;
-    }).andThen((college) => {
-      if (!college) {
-        return errAsync(new AppError(404, "No college record found."));
-      }
+      if (!college) throw new AppError(404, "No college record found.");
 
-      return okAsync(college);
+      return college;
     });
   }
 
