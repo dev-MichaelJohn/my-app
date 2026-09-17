@@ -43,7 +43,11 @@ import { ValidateSchema } from "@/libs/result.lib.js";
 import { createPaginatedData } from "@/libs/response.lib.js";
 
 export interface IProgramService {
-  getProgramById(id: number, client?: DbClient): ResultAsync<GetProgram, AppError>;
+  getProgramById(
+    id: number,
+    client?: DbClient,
+    includeArchived?: boolean,
+  ): ResultAsync<GetProgram, AppError>;
   getPrograms(
     rawQuery: unknown,
     client?: DbClient,
@@ -55,6 +59,7 @@ export interface IProgramService {
     client?: DbClient,
   ): ResultAsync<GetProgram, AppError>;
   deleteProgram(id: number, client?: DbClient): ResultAsync<void, AppError>;
+  restoreProgram(id: number, client?: DbClient): ResultAsync<GetProgram, AppError>;
 }
 
 export class ProgramService implements IProgramService {
@@ -63,7 +68,11 @@ export class ProgramService implements IProgramService {
     private collegeService: ICollegeService = new CollegeService(),
   ) {}
 
-  getProgramById(id: number, client: DbClient = db): ResultAsync<GetProgram, AppError> {
+  getProgramById(
+    id: number,
+    client: DbClient = db,
+    includeArchived: boolean = false,
+  ): ResultAsync<GetProgram, AppError> {
     return WithTransaction(client, async (tx) => {
       const [program] = await tx
         .select({
@@ -72,6 +81,9 @@ export class ProgramService implements IProgramService {
             college_id: Programs.college_id,
             name: Programs.name,
             initialism: Programs.initialism,
+            created_at: Programs.created_at,
+            updated_at: Programs.updated_at,
+            deleted_at: Programs.deleted_at,
           },
           chair: sql<GetUser | null>`
             CASE
@@ -116,7 +128,7 @@ export class ProgramService implements IProgramService {
           and(eq(ProgramChairs.chair_id, Accounts.id), isNull(Accounts.deleted_at)),
         )
         .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
-        .where(and(eq(Programs.id, id), isNull(Programs.deleted_at)))
+        .where(and(eq(Programs.id, id), includeArchived ? undefined : isNull(Programs.deleted_at)))
         .groupBy(Programs.id, Accounts.id, PersonalDetails.id);
 
       if (!program) throw new AppError(404, "No program record found.");
@@ -129,9 +141,12 @@ export class ProgramService implements IProgramService {
     client: DbClient = db,
   ): ResultAsync<PaginatedData<GetProgram[]>, AppError> {
     return ValidateSchema(ProgramQuerySchema, rawQuery).asyncAndThen((parsed) => {
-      const { paginate, page, limit, search, college_id, has_chair, sort_by, order } = parsed;
+      const { paginate, page, limit, search, college_id, has_chair, is_archived, sort_by, order } =
+        parsed;
 
-      const filters: SQL[] = [isNull(Programs.deleted_at)];
+      const filters: SQL[] = [
+        is_archived ? isNotNull(Programs.deleted_at) : isNull(Programs.deleted_at),
+      ];
 
       if (search) {
         const term = `%${search}%`;
@@ -170,6 +185,9 @@ export class ProgramService implements IProgramService {
               college_id: Programs.college_id,
               name: Programs.name,
               initialism: Programs.initialism,
+              created_at: Programs.created_at,
+              updated_at: Programs.updated_at,
+              deleted_at: Programs.deleted_at,
             },
             chair: sql<GetUser | null>`
             CASE
@@ -460,6 +478,41 @@ export class ProgramService implements IProgramService {
 
       if (!deletedProgram)
         throw new AppError(404, "Program record was not found or has already been deleted.");
+    });
+  }
+
+  restoreProgram(id: number, client: DbClient = db): ResultAsync<GetProgram, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const existing = await this.getProgramById(id, tx, true);
+      if (existing.isErr()) throw existing.error;
+      const current = existing.value;
+
+      if (!current.program.deleted_at) {
+        throw new AppError(400, "This program is already active and not archived.");
+      }
+
+      const collegeResult = await this.collegeService.getCollegeById(
+        current.program.college_id,
+        tx,
+      );
+      if (collegeResult.isErr()) {
+        throw new AppError(400, "Cannot restore program: Parent college is archived or deleted.");
+      }
+
+      const [restored] = await tx
+        .update(Programs)
+        .set({ deleted_at: null })
+        .where(eq(Programs.id, id))
+        .returning();
+
+      if (!restored) {
+        throw new AppError(500, "Failed to restore program.");
+      }
+
+      return {
+        program: restored,
+        chair: current.chair,
+      };
     });
   }
 

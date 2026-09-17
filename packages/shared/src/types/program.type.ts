@@ -78,11 +78,7 @@ export type IProgramChairInsert = z.infer<typeof ProgramChairInsert>;
 export type IProgramChairUpdate = z.infer<typeof ProgramChairUpdate>;
 
 export const GetProgramSchema = z.object({
-  program: ProgramSelect.omit({
-    created_at: true,
-    deleted_at: true,
-    updated_at: true,
-  }),
+  program: ProgramSelect,
   chair: GetUserSchema.nullable(),
 });
 
@@ -102,6 +98,13 @@ export const ProgramQuerySchema = z.object({
     if (val === "false" || val === false || val === "0" || val === 0) return false;
     return undefined;
   }, z.boolean().optional()),
+  is_archived: z
+    .preprocess((val) => {
+      if (val === "true" || val === true || val === "1" || val === 1) return true;
+      if (val === "false" || val === false || val === "0" || val === 0) return false;
+      return false;
+    }, z.boolean())
+    .default(false),
   sort_by: z.enum(["created_at", "name", "initialism", "college_id"]).default("created_at"),
   order: z.enum(["asc", "desc"]).default("desc"),
 });
