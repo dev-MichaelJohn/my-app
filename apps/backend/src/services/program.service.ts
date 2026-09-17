@@ -314,7 +314,8 @@ export class ProgramService implements IProgramService {
             chair_id: account_id,
           })
           .returning();
-        if (!chairAssignment) throw new AppError(500, "Failed to assign dean to the college.");
+        if (!chairAssignment)
+          throw new AppError(500, "Failed to assign program chair to the program.");
 
         return {
           program: programRecord,

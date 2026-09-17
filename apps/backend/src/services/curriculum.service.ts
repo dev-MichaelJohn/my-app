@@ -377,10 +377,7 @@ export class CurriculumService implements ICurriculumService {
 
       const courseResult = await this.courseService.getCourseById(current.course.id, tx);
       if (courseResult.isErr())
-        throw new AppError(
-          400,
-          "Cannot restore curriculum: Parent program is archived or deleted.",
-        );
+        throw new AppError(400, "Cannot restore curriculum: Parent course is archived or deleted.");
 
       const [restored] = await tx
         .update(CourseCurriculums)

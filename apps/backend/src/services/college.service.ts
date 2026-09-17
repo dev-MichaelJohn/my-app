@@ -31,6 +31,7 @@ import {
   ilike,
   isNotNull,
   isNull,
+  ne,
   or,
   SQL,
   sql,
@@ -142,7 +143,7 @@ export class CollegeService implements ICollegeService {
       const { paginate, page, limit, search, has_dean, is_archived, sort_by, order } = parsed;
 
       const filters: SQL[] = [
-        is_archived ? isNotNull(Programs.deleted_at) : isNull(Programs.deleted_at),
+        is_archived ? isNotNull(Colleges.deleted_at) : isNull(Colleges.deleted_at),
       ];
 
       if (search) {
@@ -435,7 +436,7 @@ export class CollegeService implements ICollegeService {
       if (programs.length > 0)
         throw new AppError(
           409,
-          `Cannot delete program because it still has active dependencies: ${programs.length} active program(s). Please delete or reassign them first.`,
+          `Cannot delete college because it still has active dependencies: ${programs.length} active program(s). Please delete or reassign them first.`,
         );
 
       if (existingCollege.dean) {
@@ -498,7 +499,7 @@ export class CollegeService implements ICollegeService {
         .from(Colleges)
         .where(
           and(
-            eq(Colleges.id, current.college.id),
+            ne(Colleges.id, current.college.id),
             or(
               eq(Colleges.name, current.college.name),
               eq(Colleges.initialism, current.college.initialism),
@@ -521,7 +522,7 @@ export class CollegeService implements ICollegeService {
         .returning();
 
       if (!restored) {
-        throw new AppError(500, "Failed to restore program.");
+        throw new AppError(500, "Failed to restore college.");
       }
 
       return {
