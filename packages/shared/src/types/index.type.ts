@@ -9,3 +9,4 @@ export * from "./program.type.js";
 export * from "./course.type.js";
 export * from "./curriculum.type.js";
 export * from "./class.type.js";
+export * from "./class-student.type.js";
