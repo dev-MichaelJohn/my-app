@@ -35,4 +35,10 @@ ProgramRouter.delete(
   programController.deleteProgram,
 );
 
+ProgramRouter.put(
+  "/:id/restore",
+  RequirePermission(PERMISSIONS.PROGRAM_UPDATE),
+  programController.restoreProgram,
+);
+
 export default ProgramRouter;

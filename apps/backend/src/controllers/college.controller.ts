@@ -53,4 +53,14 @@ export class CollegeController {
       }));
     });
   });
+
+  restoreCollege = runAsync((req, _res) => {
+    return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((collegeId) => {
+      return this.collegeService.restoreCollege(collegeId).map((data) => ({
+        status: 200,
+        message: "College restored successfully!",
+        data,
+      }));
+    });
+  });
 }

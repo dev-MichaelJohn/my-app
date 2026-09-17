@@ -53,4 +53,14 @@ export class CourseController {
       }));
     });
   });
+
+  restoreCourse = runAsync((req, _res) => {
+    return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((courseId) => {
+      return this.courseService.restoreCourse(courseId).map((data) => ({
+        status: 200,
+        message: "Course restored successfully.",
+        data,
+      }));
+    });
+  });
 }

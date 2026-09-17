@@ -53,4 +53,14 @@ export class ProgramController {
       }));
     });
   });
+
+  restoreProgram = runAsync((req, _res) => {
+    return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((programId) => {
+      return this.programService.restoreProgram(programId).map((data) => ({
+        status: 200,
+        message: "College restored successfully.",
+        data,
+      }));
+    });
+  });
 }

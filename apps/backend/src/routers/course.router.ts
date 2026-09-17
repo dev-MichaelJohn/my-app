@@ -31,4 +31,10 @@ CourseRouter.delete(
   courseController.deleteCourse,
 );
 
+CourseRouter.put(
+  "/:id/restore",
+  RequirePermission(PERMISSIONS.COURSE_UPDATE),
+  courseController.restoreCourse,
+);
+
 export default CourseRouter;

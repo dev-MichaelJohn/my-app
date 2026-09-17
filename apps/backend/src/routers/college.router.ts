@@ -35,4 +35,10 @@ CollegeRouter.delete(
   collegeController.deleteCollege,
 );
 
+CollegeRouter.put(
+  "/:id/restore",
+  RequirePermission(PERMISSIONS.COLLEGE_UPDATE),
+  collegeController.restoreCollege,
+);
+
 export default CollegeRouter;

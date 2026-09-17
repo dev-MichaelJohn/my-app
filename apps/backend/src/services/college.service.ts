@@ -57,7 +57,7 @@ export interface ICollegeService {
     client?: DbClient,
   ): ResultAsync<GetCollege, AppError>;
   deleteCollege(id: number, client?: DbClient): ResultAsync<void, AppError>;
-  restoreCollege(id: number, client: DbClient): ResultAsync<GetCollege, AppError>;
+  restoreCollege(id: number, client?: DbClient): ResultAsync<GetCollege, AppError>;
   hasDeanships(accountId: number, tx: PgTransaction, excludeCollegeId?: number): Promise<boolean>;
   hasProgramChairRecords(
     accountId: number,
