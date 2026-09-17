@@ -74,6 +74,7 @@ export const ClassQuerySchema = z.object({
 
 export const GetClassSchema = ClassSelect.extend({
   program: ProgramSelect.pick({
+    id: true,
     name: true,
     initialism: true,
   }),

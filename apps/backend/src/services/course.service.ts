@@ -201,8 +201,6 @@ export class CourseService implements ICourseService {
       if (!deletedCourse) {
         throw new AppError(404, "Course was not found or has already been deleted.");
       }
-
-      return undefined;
     });
   }
 

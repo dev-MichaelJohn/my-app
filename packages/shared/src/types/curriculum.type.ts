@@ -86,10 +86,12 @@ export const CurriculumQuerySchema = z.object({
 
 export const GetCurriculumSchema = CurriculumSelect.extend({
   course: CourseSelect.pick({
+    id: true,
     name: true,
     initialism: true,
   }),
   program: ProgramSelect.pick({
+    id: true,
     name: true,
     initialism: true,
   }),

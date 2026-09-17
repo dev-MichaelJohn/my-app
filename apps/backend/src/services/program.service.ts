@@ -499,6 +499,27 @@ export class ProgramService implements IProgramService {
         throw new AppError(400, "Cannot restore program: Parent college is archived or deleted.");
       }
 
+      const [conflict] = await tx
+        .select()
+        .from(Programs)
+        .where(
+          and(
+            eq(Programs.college_id, current.program.college_id),
+            or(
+              eq(Programs.name, current.program.name),
+              eq(Programs.initialism, current.program.initialism),
+            ),
+            isNull(Programs.deleted_at),
+          ),
+        );
+
+      if (conflict) {
+        throw new AppError(
+          409,
+          `Cannot restore program: An active program with name "${current.program.name}" or initialism "${current.program.initialism}" already exists in this college.`,
+        );
+      }
+
       const [restored] = await tx
         .update(Programs)
         .set({ deleted_at: null })

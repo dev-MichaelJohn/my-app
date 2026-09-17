@@ -493,6 +493,27 @@ export class CollegeService implements ICollegeService {
         throw new AppError(400, "This program is already active and not archived.");
       }
 
+      const [conflict] = await tx
+        .select()
+        .from(Colleges)
+        .where(
+          and(
+            eq(Colleges.id, current.college.id),
+            or(
+              eq(Colleges.name, current.college.name),
+              eq(Colleges.initialism, current.college.initialism),
+            ),
+            isNull(Colleges.deleted_at),
+          ),
+        );
+
+      if (conflict) {
+        throw new AppError(
+          409,
+          `Cannot restore college: An active college with name "${current.college.name}" or initialism "${current.college.initialism}" already exists.`,
+        );
+      }
+
       const [restored] = await tx
         .update(Colleges)
         .set({ deleted_at: null })

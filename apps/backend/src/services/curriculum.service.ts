@@ -77,10 +77,12 @@ export class CurriculumService implements ICurriculumService {
           updated_at: CourseCurriculums.updated_at,
           deleted_at: CourseCurriculums.deleted_at,
           course: {
+            id: Courses.id,
             name: Courses.name,
             initialism: Courses.initialism,
           },
           program: {
+            id: Programs.id,
             name: Programs.name,
             initialism: Programs.initialism,
           },
@@ -170,10 +172,12 @@ export class CurriculumService implements ICurriculumService {
             updated_at: CourseCurriculums.updated_at,
             deleted_at: CourseCurriculums.deleted_at,
             course: {
+              id: Courses.id,
               name: Courses.name,
               initialism: Courses.initialism,
             },
             program: {
+              id: Programs.id,
               name: Programs.name,
               initialism: Programs.initialism,
             },
@@ -359,10 +363,24 @@ export class CurriculumService implements ICurriculumService {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getCurriculumById(id, tx, true);
       if (existing.isErr()) throw existing.error;
+      const current = existing.value;
 
-      if (!existing.value.deleted_at) {
+      if (!current.deleted_at)
         throw new AppError(400, "This curriculum mapping is already active.");
-      }
+
+      const programResult = await this.programService.getProgramById(current.program.id, tx);
+      if (programResult.isErr())
+        throw new AppError(
+          400,
+          "Cannot restore curriculum: Parent program is archived or deleted.",
+        );
+
+      const courseResult = await this.courseService.getCourseById(current.course.id, tx);
+      if (courseResult.isErr())
+        throw new AppError(
+          400,
+          "Cannot restore curriculum: Parent program is archived or deleted.",
+        );
 
       const [restored] = await tx
         .update(CourseCurriculums)
