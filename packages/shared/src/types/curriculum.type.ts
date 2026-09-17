@@ -71,6 +71,13 @@ export const CurriculumQuerySchema = z.object({
   course_id: z.coerce.number().int().positive().optional(),
   year_level: z.enum(YearLevelEnum.enumValues).optional(),
   semester_term: z.enum(SemeterTermEnum.enumValues).optional(),
+  is_archived: z
+    .preprocess((val) => {
+      if (val === "true" || val === true || val === "1" || val === 1) return true;
+      if (val === "false" || val === false || val === "0" || val === 0) return false;
+      return false;
+    }, z.boolean())
+    .default(false),
   sort_by: z
     .enum(["created_at", "year_level", "semester_term", "program_id", "course_id"])
     .default("year_level"),
@@ -89,9 +96,6 @@ export const GetCurriculumSchema = CurriculumSelect.extend({
 }).omit({
   course_id: true,
   program_id: true,
-  created_at: true,
-  deleted_at: true,
-  updated_at: true,
 });
 
 export type CurriculumQuery = z.infer<typeof CurriculumQuerySchema>;
