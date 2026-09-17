@@ -48,7 +48,7 @@ export class ProgramController {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((programId) => {
       return this.programService.deleteProgram(programId).map(() => ({
         status: 200,
-        message: "College deleted successfully.",
+        message: "College archived successfully.",
         data: null,
       }));
     });

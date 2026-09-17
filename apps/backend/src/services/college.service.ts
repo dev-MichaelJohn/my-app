@@ -436,7 +436,7 @@ export class CollegeService implements ICollegeService {
       if (programs.length > 0)
         throw new AppError(
           409,
-          `Cannot delete college because it still has active dependencies: ${programs.length} active program(s). Please delete or reassign them first.`,
+          `Cannot archive college because it still has active dependencies: ${programs.length} active program(s). Please archive or reassign them first.`,
         );
 
       if (existingCollege.dean) {
@@ -480,7 +480,8 @@ export class CollegeService implements ICollegeService {
         .set({ deleted_at: new Date() })
         .where(and(eq(Colleges.id, existingCollege.college.id), isNull(Colleges.deleted_at)))
         .returning();
-      if (!deletedCollege) throw new AppError(500, "Failed to remove college record.");
+      if (!deletedCollege)
+        throw new AppError(404, "College was not found or has already been archived.");
     });
   }
 

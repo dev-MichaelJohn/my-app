@@ -250,7 +250,7 @@ export class ClassService implements IClassService {
         .set({ deleted_at: new Date() })
         .where(and(eq(Classes.id, id), isNull(Classes.deleted_at)))
         .returning({ id: Classes.id });
-      if (!deleted) throw new AppError(404, "Class was not found or has already been deleted.");
+      if (!deleted) throw new AppError(404, "Class was not found or has already been archived.");
     });
   }
 
@@ -266,7 +266,7 @@ export class ClassService implements IClassService {
 
       const programResult = await this.programService.getProgramById(current.program.id, tx);
       if (programResult.isErr()) {
-        throw new AppError(400, "Cannot restore class: Parent program is archived or deleted.");
+        throw new AppError(400, "Cannot restore class: Parent program is archived.");
       }
 
       const [conflict] = await tx
@@ -330,9 +330,9 @@ export class ClassService implements IClassService {
 
       throw new AppError(
         409,
-        `Cannot delete class because it still has active dependencies: ${reasons.join(
+        `Cannot archive class because it still has active dependencies: ${reasons.join(
           ", ",
-        )}. Please remove or reassign them first.`,
+        )}. Please archive or reassign them first.`,
       );
     }
   }

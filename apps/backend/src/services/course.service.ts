@@ -199,7 +199,7 @@ export class CourseService implements ICourseService {
         .returning({ id: Courses.id });
 
       if (!deletedCourse) {
-        throw new AppError(404, "Course was not found or has already been deleted.");
+        throw new AppError(404, "Course was not found or has already been archived.");
       }
     });
   }
@@ -216,10 +216,7 @@ export class CourseService implements ICourseService {
 
       const programResult = await this.programService.getProgramById(current.program_id, tx);
       if (programResult.isErr()) {
-        throw new AppError(
-          400,
-          "Cannot restore course: The parent academic program is archived or deleted.",
-        );
+        throw new AppError(400, "Cannot restore course: The parent academic program is archived.");
       }
 
       const [conflict] = await tx
@@ -289,9 +286,9 @@ export class CourseService implements ICourseService {
 
       throw new AppError(
         409,
-        `Cannot delete course because it is actively used in: ${activeDependencies.join(
+        `Cannot archive course because it is actively used in: ${activeDependencies.join(
           ", ",
-        )}. Please remove or reassign them first.`,
+        )}. Please archive or reassign them first.`,
       );
     }
   }

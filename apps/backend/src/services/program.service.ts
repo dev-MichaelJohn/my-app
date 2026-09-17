@@ -478,7 +478,7 @@ export class ProgramService implements IProgramService {
         .returning();
 
       if (!deletedProgram)
-        throw new AppError(404, "Program record was not found or has already been deleted.");
+        throw new AppError(404, "Program record was not found or has already been archived.");
     });
   }
 
@@ -497,7 +497,7 @@ export class ProgramService implements IProgramService {
         tx,
       );
       if (collegeResult.isErr()) {
-        throw new AppError(400, "Cannot restore program: Parent college is archived or deleted.");
+        throw new AppError(400, "Cannot restore program: Parent college is archived.");
       }
 
       const [conflict] = await tx
@@ -598,9 +598,9 @@ export class ProgramService implements IProgramService {
 
       throw new AppError(
         409,
-        `Cannot delete program because it still has active dependencies: ${activeDependencies.join(
+        `Cannot archive program because it still has active dependencies: ${activeDependencies.join(
           ", ",
-        )}. Please delete or reassign them first.`,
+        )}. Please archive or reassign them first.`,
       );
     }
   }

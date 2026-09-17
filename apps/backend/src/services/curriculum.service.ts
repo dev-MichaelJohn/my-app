@@ -341,7 +341,7 @@ export class CurriculumService implements ICurriculumService {
       if (offeringCount > 0) {
         throw new AppError(
           409,
-          `Cannot delete curriculum mapping because it is actively used in ${offeringCount} scheduled course offering(s). Please remove or reassign them first.`,
+          `Cannot archive curriculum mapping because it is actively used in ${offeringCount} scheduled course offering(s). Please archive or reassign them first.`,
         );
       }
 
@@ -352,7 +352,7 @@ export class CurriculumService implements ICurriculumService {
         .returning({ id: CourseCurriculums.id });
 
       if (!deleted) {
-        throw new AppError(404, "Curriculum mapping record was not found or already deleted.");
+        throw new AppError(404, "Curriculum mapping record was not found or already archived.");
       }
 
       return undefined;
@@ -370,14 +370,11 @@ export class CurriculumService implements ICurriculumService {
 
       const programResult = await this.programService.getProgramById(current.program.id, tx);
       if (programResult.isErr())
-        throw new AppError(
-          400,
-          "Cannot restore curriculum: Parent program is archived or deleted.",
-        );
+        throw new AppError(400, "Cannot restore curriculum: Parent program is archived.");
 
       const courseResult = await this.courseService.getCourseById(current.course.id, tx);
       if (courseResult.isErr())
-        throw new AppError(400, "Cannot restore curriculum: Parent course is archived or deleted.");
+        throw new AppError(400, "Cannot restore curriculum: Parent course is archived.");
 
       const [restored] = await tx
         .update(CourseCurriculums)

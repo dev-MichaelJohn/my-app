@@ -48,7 +48,7 @@ export class CurriculumController {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((curriculumId) => {
       return this.curriculumService.deleteCurriculum(curriculumId).map(() => ({
         status: 200,
-        message: "Curriculum deleted successfully.",
+        message: "Curriculum archived successfully.",
         data: null,
       }));
     });

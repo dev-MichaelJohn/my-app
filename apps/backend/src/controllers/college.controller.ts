@@ -48,7 +48,7 @@ export class CollegeController {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((collegeId) => {
       return this.collegeService.deleteCollege(collegeId).map(() => ({
         status: 200,
-        message: "College deleted successfully!",
+        message: "College archived successfully!",
         data: null,
       }));
     });

@@ -48,7 +48,7 @@ export class ClassController {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((classId) => {
       return this.classService.deleteClass(classId).map(() => ({
         status: 200,
-        message: "Class deleted successfully.",
+        message: "Class archived successfully.",
         data: null,
       }));
     });
