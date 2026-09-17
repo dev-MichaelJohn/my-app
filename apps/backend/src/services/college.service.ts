@@ -41,7 +41,11 @@ import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
 import { UserService, type IUserService } from "./user.service.js";
 
 export interface ICollegeService {
-  getCollegeById(id: number, client?: DbClient): ResultAsync<GetCollege, AppError>;
+  getCollegeById(
+    id: number,
+    client?: DbClient,
+    includeArchived?: boolean,
+  ): ResultAsync<GetCollege, AppError>;
   getColleges(
     rawQuery: unknown,
     client?: DbClient,
@@ -53,6 +57,7 @@ export interface ICollegeService {
     client?: DbClient,
   ): ResultAsync<GetCollege, AppError>;
   deleteCollege(id: number, client?: DbClient): ResultAsync<void, AppError>;
+  restoreCollege(id: number, client: DbClient): ResultAsync<GetCollege, AppError>;
   hasDeanships(accountId: number, tx: PgTransaction, excludeCollegeId?: number): Promise<boolean>;
   hasProgramChairRecords(
     accountId: number,
@@ -64,7 +69,11 @@ export interface ICollegeService {
 export class CollegeService implements ICollegeService {
   constructor(private userService: IUserService = new UserService()) {}
 
-  getCollegeById(id: number, client: DbClient = db): ResultAsync<GetCollege, AppError> {
+  getCollegeById(
+    id: number,
+    client: DbClient = db,
+    includeArchived: boolean = false,
+  ): ResultAsync<GetCollege, AppError> {
     return WithTransaction(client, async (tx) => {
       const [college] = await tx
         .select({
@@ -72,6 +81,9 @@ export class CollegeService implements ICollegeService {
             id: Colleges.id,
             name: Colleges.name,
             initialism: Colleges.initialism,
+            created_at: Colleges.created_at,
+            updated_at: Colleges.updated_at,
+            deleted_at: Colleges.deleted_at,
           },
           dean: sql<GetUser | null>`
             CASE
@@ -113,7 +125,7 @@ export class CollegeService implements ICollegeService {
         )
         .leftJoin(Accounts, and(eq(CollegeDeans.dean_id, Accounts.id), isNull(Accounts.deleted_at)))
         .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
-        .where(and(eq(Colleges.id, id), isNull(Colleges.deleted_at)))
+        .where(and(eq(Colleges.id, id), includeArchived ? undefined : isNull(Colleges.deleted_at)))
         .groupBy(Colleges.id, Accounts.id, PersonalDetails.id);
 
       if (!college) throw new AppError(404, "No college record found.");
@@ -127,9 +139,11 @@ export class CollegeService implements ICollegeService {
     client: DbClient = db,
   ): ResultAsync<PaginatedData<GetCollege[]>, AppError> {
     return ValidateSchema(CollegeQuerySchema, rawQuery).asyncAndThen((parsed) => {
-      const { paginate, page, limit, search, has_dean, sort_by, order } = parsed;
+      const { paginate, page, limit, search, has_dean, is_archived, sort_by, order } = parsed;
 
-      const filters: SQL[] = [isNull(Colleges.deleted_at)];
+      const filters: SQL[] = [
+        is_archived ? isNotNull(Programs.deleted_at) : isNull(Programs.deleted_at),
+      ];
 
       if (search) {
         const term = `%${search}%`;
@@ -162,6 +176,9 @@ export class CollegeService implements ICollegeService {
               id: Colleges.id,
               name: Colleges.name,
               initialism: Colleges.initialism,
+              created_at: Colleges.created_at,
+              updated_at: Colleges.updated_at,
+              deleted_at: Colleges.deleted_at,
             },
             dean: sql<GetUser | null>`
             CASE
@@ -313,8 +330,7 @@ export class CollegeService implements ICollegeService {
         if (getCollege.isErr()) throw getCollege.error;
         const existingCollege = getCollege.value;
 
-        let updatedCollegeRecord: Pick<ICollegeSelect, "id" | "name" | "initialism"> =
-          existingCollege.college;
+        let updatedCollegeRecord: ICollegeSelect = existingCollege.college;
         let finalDeanUser: GetUser | null = existingCollege.dean;
 
         if (hasCollegeInfo && college) {
@@ -464,6 +480,33 @@ export class CollegeService implements ICollegeService {
         .where(and(eq(Colleges.id, existingCollege.college.id), isNull(Colleges.deleted_at)))
         .returning();
       if (!deletedCollege) throw new AppError(500, "Failed to remove college record.");
+    });
+  }
+
+  restoreCollege(id: number, client: DbClient = db): ResultAsync<GetCollege, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const existing = await this.getCollegeById(id, tx, true);
+      if (existing.isErr()) throw existing.error;
+      const current = existing.value;
+
+      if (!current.college.deleted_at) {
+        throw new AppError(400, "This program is already active and not archived.");
+      }
+
+      const [restored] = await tx
+        .update(Colleges)
+        .set({ deleted_at: null })
+        .where(eq(Colleges.id, id))
+        .returning();
+
+      if (!restored) {
+        throw new AppError(500, "Failed to restore program.");
+      }
+
+      return {
+        college: restored,
+        dean: current.dean,
+      };
     });
   }
 

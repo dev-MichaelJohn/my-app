@@ -255,7 +255,7 @@ export class ProgramService implements IProgramService {
   ): ResultAsync<GetProgram, AppError> {
     return ValidateSchema(CreateProgramSchema, programInfo).asyncAndThen(({ program, chair }) => {
       return WithTransaction(client, async (tx) => {
-        const collegeResult = await this.collegeService.getCollegeById(program.college_id);
+        const collegeResult = await this.collegeService.getCollegeById(program.college_id, tx);
         if (collegeResult.isErr()) throw collegeResult.error;
 
         const [programRecord] = await tx.insert(Programs).values(program).returning();
@@ -349,7 +349,7 @@ export class ProgramService implements IProgramService {
             let account_id: number;
 
             if (chair.type === "existing") {
-              await this.validChairCandidate(chair.account_id, tx, existingProgram.program.id);
+              await this.validChairCandidate(chair.account_id, tx);
               account_id = chair.account_id;
 
               const userRecord = await this.userService.getUserById(account_id, tx);
@@ -463,22 +463,12 @@ export class ProgramService implements IProgramService {
     });
   }
 
-  private async validChairCandidate(
-    accountId: number,
-    tx: PgTransaction,
-    excludeProgramId?: number,
-  ) {
+  private async validChairCandidate(accountId: number, tx: PgTransaction) {
     const [account] = await tx
       .select()
       .from(Accounts)
-      .where(
-        and(
-          eq(Accounts.id, accountId),
-          excludeProgramId ? sql`${ProgramChairs.program_id} != ${excludeProgramId}` : undefined,
-          isNull(Accounts.deleted_at),
-        ),
-      );
-    if (!account) throw new AppError(404, "Dean account not found.");
+      .where(and(eq(Accounts.id, accountId), isNull(Accounts.deleted_at)));
+    if (!account) throw new AppError(404, "Chair account not found.");
 
     const roles = await tx
       .select({ system_role: Roles.system_role })
@@ -487,7 +477,7 @@ export class ProgramService implements IProgramService {
       .where(and(eq(AccountRoles.account_id, accountId), isNull(AccountRoles.deleted_at)));
     const nonAssignableRoles = ["SYS_ADMIN", "ADMIN", "STUDENT"];
     if (roles.some((r) => nonAssignableRoles.includes(r.system_role)))
-      throw new AppError(400, "This account's role is not eligible to be assigned as a dean.");
+      throw new AppError(400, "This account's role is not eligible to be assigned as a chair.");
   }
 
   private sameChairInfo(info: CreateProgramChair, existingProgram: GetProgram): boolean {

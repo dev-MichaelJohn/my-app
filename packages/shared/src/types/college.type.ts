@@ -72,11 +72,7 @@ export type ICollegeDeanInsert = z.infer<typeof CollegeDeanInsert>;
 export type ICollegeDeanUpdate = z.infer<typeof CollegeDeanUpdate>;
 
 export const GetCollegeSchema = z.object({
-  college: CollegeSelect.omit({
-    created_at: true,
-    deleted_at: true,
-    updated_at: true,
-  }),
+  college: CollegeSelect,
   dean: GetUserSchema.nullable(),
 });
 
@@ -95,6 +91,13 @@ export const CollegeQuerySchema = z.object({
     if (val === "false" || val === false || val === "0" || val === 0) return false;
     return undefined;
   }, z.boolean().optional()),
+  is_archived: z
+    .preprocess((val) => {
+      if (val === "true" || val === true || val === "1" || val === 1) return true;
+      if (val === "false" || val === false || val === "0" || val === 0) return false;
+      return false;
+    }, z.boolean())
+    .default(false),
   sort_by: z.enum(["created_at", "name", "initialism"]).default("created_at"),
   order: z.enum(["asc", "desc"]).default("desc"),
 });
