@@ -15,12 +15,28 @@ import {
 import type { ResultAsync } from "neverthrow";
 import { ProgramService, type IProgramService } from "./program.service.js";
 import db, { type PgTransaction } from "@/configs/db.config.js";
-import { and, asc, count, countDistinct, desc, eq, ilike, isNull, or, SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  countDistinct,
+  desc,
+  eq,
+  ilike,
+  isNotNull,
+  isNull,
+  or,
+  SQL,
+} from "drizzle-orm";
 import { ValidateSchema } from "@/libs/result.lib.js";
 import { createPaginatedData } from "@/libs/response.lib.js";
 
 export interface ICourseService {
-  getCourseById(id: number, client?: DbClient): ResultAsync<ICourseSelect, AppError>;
+  getCourseById(
+    id: number,
+    client?: DbClient,
+    includeArchived?: boolean,
+  ): ResultAsync<ICourseSelect, AppError>;
   getCourses(
     rawQuery: unknown,
     client?: DbClient,
@@ -32,17 +48,22 @@ export interface ICourseService {
     client?: DbClient,
   ): ResultAsync<ICourseSelect, AppError>;
   deleteCourse(id: number, client?: DbClient): ResultAsync<void, AppError>;
+  restoreCourse(id: number, client?: DbClient): ResultAsync<ICourseSelect, AppError>;
 }
 
 export class CourseService implements ICourseService {
   constructor(private programService: IProgramService = new ProgramService()) {}
 
-  getCourseById(id: number, client: DbClient = db): ResultAsync<ICourseSelect, AppError> {
+  getCourseById(
+    id: number,
+    client: DbClient = db,
+    includeArchived: boolean = false,
+  ): ResultAsync<ICourseSelect, AppError> {
     return WithTransaction(client, async (tx) => {
       const [course] = await tx
         .select()
         .from(Courses)
-        .where(and(eq(Courses.id, id), isNull(Courses.deleted_at)));
+        .where(and(eq(Courses.id, id), includeArchived ? undefined : isNull(Courses.deleted_at)));
       if (!course) throw new AppError(404, "No course record found.");
 
       return course;
@@ -54,9 +75,11 @@ export class CourseService implements ICourseService {
     client: DbClient = db,
   ): ResultAsync<PaginatedData<ICourseSelect[]>, AppError> {
     return ValidateSchema(CourseQuerySchema, rawQuery).asyncAndThen((parsed) => {
-      const { paginate, page, limit, search, program_id, sort_by, order } = parsed;
+      const { paginate, page, limit, search, program_id, is_archived, sort_by, order } = parsed;
 
-      const filters: SQL[] = [isNull(Courses.deleted_at)];
+      const filters: SQL[] = [
+        is_archived ? isNotNull(Courses.deleted_at) : isNull(Courses.deleted_at),
+      ];
 
       if (search) {
         const term = `%${search}%`;
@@ -180,6 +203,56 @@ export class CourseService implements ICourseService {
       }
 
       return undefined;
+    });
+  }
+
+  restoreCourse(id: number, client: DbClient = db): ResultAsync<ICourseSelect, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const existingCourse = await this.getCourseById(id, tx, true);
+      if (existingCourse.isErr()) throw existingCourse.error;
+      const current = existingCourse.value;
+
+      if (!current.deleted_at) {
+        throw new AppError(400, "This course is already active and not archived.");
+      }
+
+      const programResult = await this.programService.getProgramById(current.program_id, tx);
+      if (programResult.isErr()) {
+        throw new AppError(
+          400,
+          "Cannot restore course: The parent academic program is archived or deleted.",
+        );
+      }
+
+      const [conflict] = await tx
+        .select()
+        .from(Courses)
+        .where(
+          and(
+            eq(Courses.program_id, current.program_id),
+            or(eq(Courses.name, current.name), eq(Courses.initialism, current.initialism)),
+            isNull(Courses.deleted_at),
+          ),
+        );
+
+      if (conflict) {
+        throw new AppError(
+          409,
+          `Cannot restore course: An active course with name "${current.name}" or initialism "${current.initialism}" already exists in this program.`,
+        );
+      }
+
+      const [restoredCourse] = await tx
+        .update(Courses)
+        .set({ deleted_at: null })
+        .where(eq(Courses.id, id))
+        .returning();
+
+      if (!restoredCourse) {
+        throw new AppError(500, "Failed to restore course.");
+      }
+
+      return restoredCourse;
     });
   }
 

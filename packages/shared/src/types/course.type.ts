@@ -59,6 +59,13 @@ export const CourseQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(10),
   search: z.string().trim().optional(),
   program_id: z.coerce.number().int().positive().optional(),
+  is_archived: z
+    .preprocess((val) => {
+      if (val === "true" || val === true || val === "1" || val === 1) return true;
+      if (val === "false" || val === false || val === "0" || val === 0) return false;
+      return false;
+    }, z.boolean())
+    .default(false),
   sort_by: z.enum(["created_at", "name", "initialism", "program_id"]).default("created_at"),
   order: z.enum(["asc", "desc"]).default("desc"),
 });
