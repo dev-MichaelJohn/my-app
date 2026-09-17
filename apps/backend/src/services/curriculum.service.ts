@@ -26,6 +26,7 @@ import {
   ilike,
   isNotNull,
   isNull,
+  ne,
   or,
   type SQL,
 } from "drizzle-orm";
@@ -375,6 +376,27 @@ export class CurriculumService implements ICurriculumService {
       const courseResult = await this.courseService.getCourseById(current.course.id, tx);
       if (courseResult.isErr())
         throw new AppError(400, "Cannot restore curriculum: Parent course is archived.");
+
+      const [conflict] = await tx
+        .select()
+        .from(CourseCurriculums)
+        .where(
+          and(
+            ne(CourseCurriculums.id, id),
+            eq(CourseCurriculums.course_id, current.course.id),
+            eq(CourseCurriculums.program_id, current.program.id),
+            eq(CourseCurriculums.year_level, current.year_level),
+            eq(CourseCurriculums.semester_term, current.semester_term),
+            isNull(CourseCurriculums.deleted_at),
+          ),
+        );
+
+      if (conflict) {
+        throw new AppError(
+          409,
+          `Cannot restore curriculum: Course "${current.course.initialism}" is already actively mapped to ${current.program.initialism} for Year ${current.year_level}, ${current.semester_term} term.`,
+        );
+      }
 
       const [restored] = await tx
         .update(CourseCurriculums)
