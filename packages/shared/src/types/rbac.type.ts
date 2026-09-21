@@ -56,10 +56,12 @@ export const PERMISSIONS = {
 
   CLASS_STUDENT_CREATE: "class-student:create",
   CLASS_STUDENT_READ: "class-student:read",
+  CLASS_STUDENT_UPDATE: "class-student:update",
   CLASS_STUDENT_DELETE: "class-student:delete",
 
   STUDENT_CLASS_CREATE: "student-class:create",
   STUDENT_CLASS_READ: "student-class:read",
+  STUDENT_CLASS_UPDATE: "student-class:update",
   STUDENT_CLASS_DELETE: "student-class:delete",
 
   BULK_IMPORT_EXECUTE: "bulk-import:execute",
@@ -139,10 +141,12 @@ export const ROLE_PERMISSION_MATRIX: Record<RoleName, readonly Permission[]> = {
 
     PERMISSIONS.CLASS_STUDENT_CREATE,
     PERMISSIONS.CLASS_STUDENT_READ,
+    PERMISSIONS.CLASS_STUDENT_UPDATE,
     PERMISSIONS.CLASS_STUDENT_DELETE,
 
     PERMISSIONS.STUDENT_CLASS_CREATE,
     PERMISSIONS.STUDENT_CLASS_READ,
+    PERMISSIONS.STUDENT_CLASS_UPDATE,
     PERMISSIONS.STUDENT_CLASS_DELETE,
 
     PERMISSIONS.BULK_IMPORT_EXECUTE,

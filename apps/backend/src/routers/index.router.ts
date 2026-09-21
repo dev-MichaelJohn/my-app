@@ -5,6 +5,7 @@ import CollegeRouter from "./college.router.js";
 import ProgramRouter from "./program.router.js";
 import CourseRouter from "./course.router.js";
 import CurriculumRouter from "./curriculum.router.js";
+import ClassStudentRouter from "./class-student.router.js";
 
 const V1Router: IRouter = Router();
 
@@ -18,5 +19,6 @@ V1Router.use("/colleges", CollegeRouter);
 V1Router.use("/programs", ProgramRouter);
 V1Router.use("/courses", CourseRouter);
 V1Router.use("/curriculums", CurriculumRouter);
+V1Router.use("/class-students", ClassStudentRouter);
 
 export default V1Router;
