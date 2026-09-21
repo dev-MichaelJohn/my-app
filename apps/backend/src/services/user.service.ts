@@ -36,6 +36,7 @@ export interface IUserService {
   createUser(info: CreateUser, client?: DbClient): ResultAsync<GetUser, AppError>;
   grantRole(accountId: number, role: SystemRole, client: DbClient): ResultAsync<void, AppError>;
   revokeRole(accountId: number, role: SystemRole, client: DbClient): ResultAsync<void, AppError>;
+  hasRole(accountId: number, role: SystemRole, client: DbClient): ResultAsync<boolean, AppError>;
 }
 
 export class UserService implements IUserService {
@@ -489,6 +490,15 @@ export class UserService implements IUserService {
     });
   }
 
+  hasRole(accountId: number, role: SystemRole, client: DbClient = db) {
+    return WithTransaction(client, async (tx) => {
+      const userRecord = await this.getUserById(accountId, tx);
+      if (userRecord.isErr()) throw userRecord.error;
+
+      return userRecord.value.roles.includes(role);
+    });
+  }
+
   private generatePassword(length: number = 12) {
     const minLength = Math.max(8, length);
 
@@ -549,13 +559,4 @@ export class UserService implements IUserService {
 
     return `${baseName}${extraFormatted}`;
   };
-
-  private hasRole(accountId: number, role: SystemRole, client: DbClient = db) {
-    return WithTransaction(client, async (tx) => {
-      const userRecord = await this.getUserById(accountId, tx);
-      if (userRecord.isErr()) throw userRecord.error;
-
-      return userRecord.value.roles.includes(role);
-    });
-  }
 }
