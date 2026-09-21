@@ -1,0 +1,94 @@
+import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-orm/zod";
+import { CourseOfferings } from "../schemas/institution.schema.js";
+import z from "zod";
+import { GetCurriculumSchema } from "./curriculum.type.js";
+import { GetClassSchema } from "./class.type.js";
+import { SemesterSelect } from "./semester.type.js";
+import { GetUserSchema } from "./user.type.js";
+
+export const OfferingSelect = createSelectSchema(CourseOfferings, {
+  course_curriculum_id: (schema) =>
+    schema.int("Curriculum ID must be an integer").positive("Please select a valid course."),
+  class_id: (schema) =>
+    schema.int("Class ID must be an integer").positive("Please select a valid class."),
+  semester_id: (schema) =>
+    schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
+  faculty_id: (schema) =>
+    schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
+});
+
+export const OfferingInsert = createInsertSchema(CourseOfferings, {
+  course_curriculum_id: (schema) =>
+    schema.int("Curriculum ID must be an integer").positive("Please select a valid course."),
+  class_id: (schema) =>
+    schema.int("Class ID must be an integer").positive("Please select a valid class."),
+  semester_id: (schema) =>
+    schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
+  faculty_id: (schema) =>
+    schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
+});
+
+export const OfferingUpdate = createUpdateSchema(CourseOfferings, {
+  course_curriculum_id: (schema) =>
+    schema.int("Curriculum ID must be an integer").positive("Please select a valid course."),
+  class_id: (schema) =>
+    schema.int("Class ID must be an integer").positive("Please select a valid class."),
+  semester_id: (schema) =>
+    schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
+  faculty_id: (schema) =>
+    schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
+});
+
+export type IOfferingSelect = z.infer<typeof OfferingSelect>;
+export type IOfferingInsert = z.infer<typeof OfferingInsert>;
+export type IOfferingUpdate = z.infer<typeof OfferingUpdate>;
+
+export const OfferingQuerySchema = z.object({
+  paginate: z
+    .preprocess((val) => {
+      if (val === "false" || val === false || val === "0" || val === 0) return false;
+      return true;
+    }, z.boolean())
+    .default(true),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(10),
+  search: z.string().trim().optional(),
+  course_curriculum_id: z.coerce.number().int().positive().optional(),
+  class_id: z.coerce.number().int().positive().optional(),
+  semester_id: z.coerce.number().int().positive().optional(),
+  faculty_id: z.coerce.number().int().positive().optional(),
+  is_archived: z
+    .preprocess((val) => {
+      if (val === "true" || val === true || val === "1" || val === 1) return true;
+      if (val === "false" || val === false || val === "0" || val === 0) return false;
+      return false;
+    }, z.boolean())
+    .default(false),
+  sort_by: z.enum(["created_at", "class_id", "semester_id", "student_id"]).default("created_at"),
+  order: z.enum(["asc", "desc"]).default("asc"),
+});
+
+export const GetOfferingSchema = OfferingSelect.extend({
+  course_curriculum: GetCurriculumSchema.pick({
+    id: true,
+    course: true,
+  }),
+  class: GetClassSchema.pick({
+    id: true,
+    year_level: true,
+    section: true,
+    program: true,
+  }),
+  semester: SemesterSelect,
+  faculty: GetUserSchema.omit({
+    roles: true,
+  }),
+}).omit({
+  course_curriculum_id: true,
+  class_id: true,
+  semester_id: true,
+  faculty_id: true,
+});
+
+export type OfferingQuery = z.infer<typeof OfferingQuerySchema>;
+export type GetOffering = z.infer<typeof GetOfferingSchema>;

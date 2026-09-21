@@ -11,3 +11,4 @@ export * from "./curriculum.type.js";
 export * from "./class.type.js";
 export * from "./class-student.type.js";
 export * from "./semester.type.js";
+export * from "./offering.type.js";
