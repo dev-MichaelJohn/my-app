@@ -1,4 +1,19 @@
 import { createBrowserRouter } from "react-router";
-import { AuthRoute } from "./routes/AuthRoute";
+import { AuthGuard, GuestGuard } from "@/components/route-guards";
+import LoginPage from "@/features/auth/page/LoginPage";
 
-export const AppRoutes = createBrowserRouter([AuthRoute]);
+export const AppRoutes = createBrowserRouter([
+  {
+    element: <GuestGuard />,
+    children: [
+      {
+        path: "/login",
+        element: <LoginPage />,
+      },
+    ],
+  },
+  {
+    element: <AuthGuard />,
+    children: [],
+  },
+]);

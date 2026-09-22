@@ -37,7 +37,7 @@ apiClient.interceptors.response.use(
 
     if (error.response?.status === 401 && !isAuthRequest && !isAuthPage) {
       setAccessToken(null);
-      window.location.href = "/auth/login";
+      window.location.href = "/login";
     }
 
     return Promise.reject(error);
