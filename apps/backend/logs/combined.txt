@@ -356,3 +356,206 @@
 [2026-09-22 13:38:24:3824] [INFO]: Database seeding verification completed.
 [2026-09-22 13:38:24:3824] [INFO]: Server online in [development] mode @ http://localhost:5000
 [2026-09-22 13:38:29:3829] [WARN]: 🛑 Received SIGINT. Starting graceful shutdown...
+[2026-09-22 18:01:42:142] [INFO]: Initializing environment variables...
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Database connection established successfully.
+[2026-09-22 18:01:43:143] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:01:43:143] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-22 18:01:43:143] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-22 18:01:43:143] [INFO]: Database seeding verification completed.
+[2026-09-22 18:01:43:143] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-22 18:09:59:959] [INFO]: Transactional email sent to dev.michael.john@gmail.com via Brevo HTTP API
+[2026-09-22 18:14:08:148] [WARN]: 🛑 Received SIGTERM. Starting graceful shutdown...
+[2026-09-22 18:14:12:1412] [INFO]: Initializing environment variables...
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:12:1412] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:13:1413] [INFO]: Database connection established successfully.
+[2026-09-22 18:14:13:1413] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:14:13:1413] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-22 18:14:13:1413] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-22 18:14:13:1413] [INFO]: Database seeding verification completed.
+[2026-09-22 18:14:13:1413] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-22 18:15:47:1547] [WARN]: 🛑 Received SIGINT. Starting graceful shutdown...
+[2026-09-22 18:15:53:1553] [INFO]: Initializing environment variables...
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:53:1553] [INFO]: Database connection established successfully.
+[2026-09-22 18:15:53:1553] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:15:54:1554] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-22 18:15:54:1554] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-22 18:15:54:1554] [INFO]: Database seeding verification completed.
+[2026-09-22 18:15:54:1554] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-22 18:16:26:1626] [INFO]: Transactional email sent to dev.michael.john@gmail.com via Brevo HTTP API
+[2026-09-22 18:21:14:2114] [WARN]: 🛑 Received SIGINT. Starting graceful shutdown...
+[2026-09-22 18:21:20:2120] [INFO]: Initializing environment variables...
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Database connection established successfully.
+[2026-09-22 18:21:20:2120] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:21:20:2120] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-22 18:21:20:2120] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-22 18:21:20:2120] [INFO]: Database seeding verification completed.
+[2026-09-22 18:21:20:2120] [INFO]: Server online in [development] mode @ http://localhost:5000
+[2026-09-22 18:22:45:2245] [INFO]: Transactional email sent to dev.michael.john@gmail.com via Brevo HTTP API
+[2026-09-22 18:41:24:4124] [INFO]: Transactional email sent to dev.michael.john@gmail.com via Brevo HTTP API
+[2026-09-22 18:46:58:4658] [WARN]: 🛑 Received SIGINT. Starting graceful shutdown...
+[2026-09-22 18:47:02:472] [INFO]: Initializing environment variables...
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Database connection established successfully.
+[2026-09-22 18:47:02:472] [INFO]: Transactional Email Engine: Brevo HTTP API active.
+[2026-09-22 18:47:02:472] [INFO]: Roles, permissions, and matrix synced successfully!
+[2026-09-22 18:47:02:472] [INFO]: Active Superadmin already exists. Safe to continue.
+[2026-09-22 18:47:02:472] [INFO]: Database seeding verification completed.
+[2026-09-22 18:47:02:472] [INFO]: Server online in [development] mode @ http://localhost:5000

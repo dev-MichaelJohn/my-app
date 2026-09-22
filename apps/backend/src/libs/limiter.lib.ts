@@ -1,5 +1,6 @@
 import type { Request } from "express";
 import rateLimit from "express-rate-limit";
+import { createAPIResponse } from "./response.lib.js";
 
 const UserKeyGenerator = (req: Request) => {
   if (req.user?.account.id) return `user:${req.user.account.id}`;
@@ -11,7 +12,14 @@ export const authLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many authentication requests. Please try again in 15 minutes." },
+  handler: (_req, res) => {
+    const errorResponse = createAPIResponse(
+      429,
+      "Too many authentication requests. Please try again in 15 minutes.",
+    );
+
+    res.status(errorResponse.status).json(errorResponse);
+  },
 });
 
 export const standardApiLimiter = rateLimit({
@@ -21,7 +29,14 @@ export const standardApiLimiter = rateLimit({
   validate: { keyGeneratorIpFallback: false },
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "API rate limit exceeded. Please slow down your requests." },
+  handler: (_req, res) => {
+    const errorResponse = createAPIResponse(
+      429,
+      "API rate limit exceeded. Please slow down your requests.",
+    );
+
+    res.status(errorResponse.status).json(errorResponse);
+  },
 });
 
 export const evaluationExecutionLimiter = rateLimit({
@@ -31,5 +46,12 @@ export const evaluationExecutionLimiter = rateLimit({
   validate: { keyGeneratorIpFallback: false },
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Evaluation submission burst limit reached. Please wait a moment." },
+  handler: (_req, res) => {
+    const errorResponse = createAPIResponse(
+      429,
+      "Evaluation submission burst limit reached. Please wait a moment.",
+    );
+
+    res.status(errorResponse.status).json(errorResponse);
+  },
 });
