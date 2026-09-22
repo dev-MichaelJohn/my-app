@@ -12,3 +12,4 @@ export * from "./class.type.js";
 export * from "./class-student.type.js";
 export * from "./semester.type.js";
 export * from "./offering.type.js";
+export * from "./student-class.type.js";
