@@ -153,7 +153,7 @@ export const WelcomeEmailTemplate = ({
   `);
 };
 
-export const UpdatedEmailTemplate = ({
+export const UpdateEmailTemplate = ({
   recipientName,
   updatedAt,
   updatedFields,

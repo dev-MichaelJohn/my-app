@@ -136,12 +136,10 @@ export const GetUserSchema = z.object({
   account: AccountSelect.omit({
     password: true,
     created_at: true,
-    deleted_at: true,
     updated_at: true,
   }),
   details: PersonalDetailsSelect.omit({
     created_at: true,
-    deleted_at: true,
     updated_at: true,
   }),
   roles: z.array(z.enum(SystemRoles.enumValues)),
