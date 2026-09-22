@@ -40,7 +40,7 @@ OfferingRouter.delete(
 );
 
 OfferingRouter.put(
-  "/:id",
+  "/:id/restore",
   RequirePermission(PERMISSIONS.COURSE_OFFERING_UPDATE),
   offeringController.restoreOffering,
 );

@@ -40,7 +40,7 @@ ClassStudentRouter.delete(
 );
 
 ClassStudentRouter.put(
-  "/:id",
+  "/:id/restore",
   RequirePermission(PERMISSIONS.CLASS_STUDENT_UPDATE),
   classStudentController.updateClassStudent,
 );
