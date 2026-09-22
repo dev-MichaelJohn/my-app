@@ -18,7 +18,6 @@ import {
   type LoginAccount,
   type PaginatedData,
   type SystemRole,
-  type UserQuery,
   type WelcomeEmailOpts,
   UpdateUserSchema,
   type UpdateEmailOpts,
@@ -58,7 +57,7 @@ export interface IUserService {
   getUserById(id: number, client?: DbClient): ResultAsync<GetUser, AppError>;
   getUserByEmail(email: string, client?: DbClient): ResultAsync<GetUser, AppError>;
   getUserForLogin(credentials: LoginAccount, client?: DbClient): ResultAsync<GetUser, AppError>;
-  getUsers(rawQuery: UserQuery, client?: DbClient): ResultAsync<PaginatedData<GetUser[]>, AppError>;
+  getUsers(rawQuery: unknown, client?: DbClient): ResultAsync<PaginatedData<GetUser[]>, AppError>;
   createUser(info: CreateUser, client?: DbClient): ResultAsync<GetUser, AppError>;
   grantRole(accountId: number, role: SystemRole, client: DbClient): ResultAsync<void, AppError>;
   updateUser(id: number, info: UpdateUser, client?: DbClient): ResultAsync<GetUser, AppError>;
@@ -241,7 +240,7 @@ export class UserService implements IUserService {
   }
 
   getUsers(
-    rawQuery: UserQuery,
+    rawQuery: unknown,
     client: DbClient = db,
   ): ResultAsync<PaginatedData<GetUser[]>, AppError> {
     return ValidateSchema(UserQuerySchema, rawQuery).asyncAndThen((parsed) => {
