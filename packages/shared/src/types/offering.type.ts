@@ -64,7 +64,9 @@ export const OfferingQuerySchema = z.object({
       return false;
     }, z.boolean())
     .default(false),
-  sort_by: z.enum(["created_at", "class_id", "semester_id", "student_id"]).default("created_at"),
+  sort_by: z
+    .enum(["created_at", "course_curriculum_id", "class_id", "semester_id", "faculty_id"])
+    .default("created_at"),
   order: z.enum(["asc", "desc"]).default("asc"),
 });
 
@@ -82,7 +84,7 @@ export const GetOfferingSchema = OfferingSelect.extend({
   semester: SemesterSelect,
   faculty: GetUserSchema.omit({
     roles: true,
-  }),
+  }).nullable(),
 }).omit({
   course_curriculum_id: true,
   class_id: true,

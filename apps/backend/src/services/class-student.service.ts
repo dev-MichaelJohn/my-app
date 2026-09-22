@@ -57,6 +57,7 @@ export interface IClassStudentService {
   ): ResultAsync<GetClassStudent, AppError>;
   deleteClassStudent(id: number, client?: DbClient): ResultAsync<void, AppError>;
   restoreClassStudent(id: number, client?: DbClient): ResultAsync<GetClassStudent, AppError>;
+  validateSemesterOpen(semesterId: number, tx: PgTransaction): Promise<void>;
 }
 
 export class ClassStudentService implements IClassStudentService {
@@ -432,7 +433,7 @@ export class ClassStudentService implements IClassStudentService {
     });
   }
 
-  private async validateSemesterOpen(semesterId: number, tx: PgTransaction): Promise<void> {
+  async validateSemesterOpen(semesterId: number, tx: PgTransaction): Promise<void> {
     const [semester] = await tx
       .select({
         id: Semesters.id,
