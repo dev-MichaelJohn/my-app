@@ -141,7 +141,7 @@ export class TokenService implements ITokenService {
               throw new AppError(500, "Failed to revoke old token.");
             }
 
-            const expires_at = new Date(Date.now() + REFRESH_TOKEN_LIFETIME);
+            const expires_at = new Date(Date.now() + REFRESH_COOKIE_LIFETIME);
             const token_hash = bcrypt.hashSync(newRefreshToken, 10);
 
             const [insertedToken] = await tx
