@@ -83,8 +83,8 @@ export const PersonalDetailsSelect = createSelectSchema(PersonalDetails, {
       ),
   first_name: (schema) => schema.trim().min(2, "First name is required."),
   last_name: (schema) => schema.trim().min(2, "Last name is required."),
-  middle_name: () => z.string().trim().optional().nullable(),
-  suffix: () => z.string().trim().optional().nullable(),
+  middle_name: (schema) => schema.trim().optional().nullable(),
+  suffix: (schema) => schema.trim().optional().nullable(),
 });
 
 export const PersonalDetailsInsert = createInsertSchema(PersonalDetails, {
@@ -99,8 +99,8 @@ export const PersonalDetailsInsert = createInsertSchema(PersonalDetails, {
       ),
   first_name: (schema) => schema.trim().min(2, "First name is required."),
   last_name: (schema) => schema.trim().min(2, "Last name is required."),
-  middle_name: () => z.string().trim().optional().nullable(),
-  suffix: () => z.string().trim().optional().nullable(),
+  middle_name: (schema) => schema.trim().optional().nullable(),
+  suffix: (schema) => schema.trim().optional().nullable(),
 });
 
 export const PersonalDetailsUpdate = createUpdateSchema(PersonalDetails, {
@@ -111,12 +111,12 @@ export const PersonalDetailsUpdate = createUpdateSchema(PersonalDetails, {
       .max(32, "Institutional ID cannot exceed 32 characters.")
       .regex(
         /^[A-Za-z0-9-]+$/,
-        "Institutional ID can only contain letters, numbers, and hyphens (e.g. STU-26-1042-001).",
+        "Institutional ID can only contain letters, numbers, and hyphens (e.g. 26-1042-001).",
       ),
   first_name: (schema) => schema.trim().min(2, "First name is required."),
   last_name: (schema) => schema.trim().min(2, "Last name is required."),
-  middle_name: () => z.string().trim().optional().nullable(),
-  suffix: () => z.string().trim().optional().nullable(),
+  middle_name: (schema) => schema.trim().optional().nullable(),
+  suffix: (schema) => schema.trim().optional().nullable(),
 });
 
 export type IAccountSelect = z.infer<typeof AccountSelect>;
@@ -135,13 +135,8 @@ export const LoginAccountSchema = z.object({
 export const GetUserSchema = z.object({
   account: AccountSelect.omit({
     password: true,
-    created_at: true,
-    updated_at: true,
   }),
-  details: PersonalDetailsSelect.omit({
-    created_at: true,
-    updated_at: true,
-  }),
+  details: PersonalDetailsSelect,
   roles: z.array(z.enum(SystemRoles.enumValues)),
 });
 
@@ -161,6 +156,13 @@ export const UserQuerySchema = z.object({
     if (val === "false" || val === false) return false;
     return undefined;
   }, z.boolean().optional()),
+  is_archived: z
+    .preprocess((val) => {
+      if (val === "true" || val === true || val === "1" || val === 1) return true;
+      if (val === "false" || val === false || val === "0" || val === 0) return false;
+      return false;
+    }, z.boolean())
+    .default(false),
   sort_by: z
     .enum(["created_at", "email", "first_name", "last_name", "institutional_id"])
     .default("created_at"),
@@ -168,33 +170,14 @@ export const UserQuerySchema = z.object({
 });
 
 export const CreateUserSchema = z.object({
-  account: AccountInsert.pick({
-    email: true,
-  }).extend({
-    password: AccountInsert.shape.password.optional(),
-  }),
-  details: PersonalDetailsInsert.pick({
-    institutional_id: true,
-    first_name: true,
-    last_name: true,
-    middle_name: true,
-    suffix: true,
-  }),
+  account: AccountInsert,
+  details: PersonalDetailsInsert,
   role: z.enum(SystemRoles.enumValues),
 });
 
 export const UpdateUserSchema = z.object({
-  account: AccountUpdate.pick({
-    email: true,
-    password: true,
-  }).optional(),
-  details: PersonalDetailsUpdate.pick({
-    institutional_id: true,
-    first_name: true,
-    last_name: true,
-    middle_name: true,
-    suffix: true,
-  }),
+  account: AccountUpdate.optional(),
+  details: PersonalDetailsUpdate.optional(),
   role: z.enum(SystemRoles.enumValues).optional(),
 });
 

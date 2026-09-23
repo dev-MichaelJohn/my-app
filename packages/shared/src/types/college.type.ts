@@ -14,7 +14,7 @@ export const CollegeSelect = createSelectSchema(Colleges, {
       .trim()
       .min(1, "Initialism is required.")
       .max(16, "Initialism cannot exceed 16 characters.")
-      .transform((val) => val.toUpperCase()), // 👈 Fixed
+      .transform((val) => val.toUpperCase()),
 });
 
 export const CollegeInsert = createInsertSchema(Colleges, {
@@ -108,27 +108,22 @@ export const CreateCollegeDeanSchema = z
     }),
     z.object({
       type: z.literal("new"),
-      info: CreateUserSchema.omit({
-        role: true,
+      info: CreateUserSchema.pick({
+        account: true,
+        details: true,
       }),
     }),
   ])
-  .nullable() // 👈 Added nullable
+  .nullable()
   .optional();
 
 export const CreateCollegeSchema = z.object({
-  college: CollegeInsert.pick({
-    name: true,
-    initialism: true,
-  }),
+  college: CollegeInsert,
   dean: CreateCollegeDeanSchema,
 });
 
 export const UpdateCollegeSchema = z.object({
-  college: CollegeUpdate.pick({
-    name: true,
-    initialism: true,
-  }).optional(),
+  college: CollegeUpdate.optional(),
   dean: CreateCollegeDeanSchema,
 });
 

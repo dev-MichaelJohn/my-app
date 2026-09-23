@@ -53,20 +53,20 @@ export const ProgramUpdate = createUpdateSchema(Programs, {
 
 export const ProgramChairSelect = createSelectSchema(ProgramChairs, {
   program_id: (schema) =>
-    schema.int("Program ID must be an integer.").positive("Invaild Program ID."),
-  chair_id: (schema) => schema.int("Chair ID must be an integer.").positive("Invaild Chair ID."),
+    schema.int("Program ID must be an integer.").positive("Invalid Program ID."),
+  chair_id: (schema) => schema.int("Chair ID must be an integer.").positive("Invalid Chair ID."),
 });
 
 export const ProgramChairInsert = createInsertSchema(ProgramChairs, {
   program_id: (schema) =>
-    schema.int("Program ID must be an integer.").positive("Invaild Program ID."),
-  chair_id: (schema) => schema.int("Chair ID must be an integer.").positive("Invaild Chair ID."),
+    schema.int("Program ID must be an integer.").positive("Invalid Program ID."),
+  chair_id: (schema) => schema.int("Chair ID must be an integer.").positive("Invalid Chair ID."),
 });
 
 export const ProgramChairUpdate = createUpdateSchema(ProgramChairs, {
   program_id: (schema) =>
-    schema.int("Program ID must be an integer.").positive("Invaild Program ID."),
-  chair_id: (schema) => schema.int("Chair ID must be an integer.").positive("Invaild Chair ID."),
+    schema.int("Program ID must be an integer.").positive("Invalid Program ID."),
+  chair_id: (schema) => schema.int("Chair ID must be an integer.").positive("Invalid Chair ID."),
 });
 
 export type IProgramSelect = z.infer<typeof ProgramSelect>;
@@ -117,28 +117,22 @@ export const CreateProgramChairSchema = z
     }),
     z.object({
       type: z.literal("new"),
-      info: CreateUserSchema.omit({
-        role: true,
+      info: CreateUserSchema.pick({
+        account: true,
+        details: true,
       }),
     }),
   ])
+  .nullable()
   .optional();
 
 export const CreateProgramSchema = z.object({
-  program: ProgramInsert.omit({
-    created_at: true,
-    deleted_at: true,
-    updated_at: true,
-  }),
+  program: ProgramInsert,
   chair: CreateProgramChairSchema,
 });
 
 export const UpdateProgramSchema = z.object({
-  program: ProgramUpdate.omit({
-    created_at: true,
-    deleted_at: true,
-    updated_at: true,
-  }),
+  program: ProgramUpdate.optional(),
   chair: CreateProgramChairSchema,
 });
 

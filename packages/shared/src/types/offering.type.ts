@@ -14,7 +14,11 @@ export const OfferingSelect = createSelectSchema(CourseOfferings, {
   semester_id: (schema) =>
     schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
   faculty_id: (schema) =>
-    schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
+    schema
+      .int("Faculty ID must be an integer")
+      .positive("Please select a valid faculty.")
+      .nullable()
+      .optional(),
 });
 
 export const OfferingInsert = createInsertSchema(CourseOfferings, {
@@ -25,7 +29,11 @@ export const OfferingInsert = createInsertSchema(CourseOfferings, {
   semester_id: (schema) =>
     schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
   faculty_id: (schema) =>
-    schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
+    schema
+      .int("Faculty ID must be an integer")
+      .positive("Please select a valid faculty.")
+      .nullable()
+      .optional(),
 });
 
 export const OfferingUpdate = createUpdateSchema(CourseOfferings, {
@@ -36,7 +44,11 @@ export const OfferingUpdate = createUpdateSchema(CourseOfferings, {
   semester_id: (schema) =>
     schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
   faculty_id: (schema) =>
-    schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
+    schema
+      .int("Faculty ID must be an integer")
+      .positive("Please select a valid faculty.")
+      .nullable()
+      .optional(),
 });
 
 export type IOfferingSelect = z.infer<typeof OfferingSelect>;

@@ -66,9 +66,7 @@ export const ClassQuerySchema = z.object({
       return false;
     }, z.boolean())
     .default(false),
-  sort_by: z
-    .enum(["created_at", "year_level", "semester_term", "program_id", "course_id"])
-    .default("year_level"),
+  sort_by: z.enum(["created_at", "year_level", "section", "program_id"]).default("year_level"),
   order: z.enum(["asc", "desc"]).default("asc"),
 });
 

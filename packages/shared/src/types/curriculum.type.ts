@@ -1,4 +1,4 @@
-import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-orm/zod";
+import { createSelectSchema } from "drizzle-orm/zod";
 import {
   CourseCurriculums,
   SemeterTermEnum,
@@ -23,35 +23,14 @@ export const CurriculumSelect = createSelectSchema(CourseCurriculums, {
     }),
 });
 
-export const CurriculumInsert = createInsertSchema(CourseCurriculums, {
-  course_id: (schema) =>
-    schema.int("Course ID must be an integer").positive("Please select a valid course."),
-  program_id: (schema) =>
-    schema.int("Program ID must be an integer").positive("Please select a valid program."),
-  year_level: (schema) =>
-    schema.refine((val) => val != null && String(val).trim() !== "", {
-      message: "Please select a valid year level.",
-    }),
-  semester_term: (schema) =>
-    schema.refine((val) => val != null && String(val).trim() !== "", {
-      message: "Please select a valid semester term.",
-    }),
+export const CurriculumInsert = CurriculumSelect.omit({
+  id: true,
+  created_at: true,
+  updated_at: true,
+  deleted_at: true,
 });
 
-export const CurriculumUpdate = createUpdateSchema(CourseCurriculums, {
-  course_id: (schema) =>
-    schema.int("Course ID must be an integer").positive("Please select a valid course."),
-  program_id: (schema) =>
-    schema.int("Program ID must be an integer").positive("Please select a valid program."),
-  year_level: (schema) =>
-    schema.refine((val) => val != null && String(val).trim() !== "", {
-      message: "Please select a valid year level.",
-    }),
-  semester_term: (schema) =>
-    schema.refine((val) => val != null && String(val).trim() !== "", {
-      message: "Please select a valid semester term.",
-    }),
-});
+export const CurriculumUpdate = CurriculumInsert.partial();
 
 export type ICurriculumSelect = z.infer<typeof CurriculumSelect>;
 export type ICurriculumInsert = z.infer<typeof CurriculumInsert>;

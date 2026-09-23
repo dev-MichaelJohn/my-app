@@ -13,7 +13,7 @@ export const CourseSelect = createSelectSchema(Courses, {
       .trim()
       .min(1, "Initialism is required.")
       .max(16, "Initialism must be 16 characters or fewer.")
-      .toUpperCase(),
+      .transform((val) => val.toUpperCase()),
 });
 
 export const CourseInsert = createInsertSchema(Courses, {
@@ -27,7 +27,7 @@ export const CourseInsert = createInsertSchema(Courses, {
       .trim()
       .min(1, "Initialism is required.")
       .max(16, "Initialism must be 16 characters or fewer.")
-      .toUpperCase(),
+      .transform((val) => val.toUpperCase()),
 });
 
 export const CourseUpdate = createUpdateSchema(Courses, {
@@ -41,7 +41,7 @@ export const CourseUpdate = createUpdateSchema(Courses, {
       .trim()
       .min(1, "Initialism is required.")
       .max(16, "Initialism must be 16 characters or fewer.")
-      .toUpperCase(),
+      .transform((val) => val.toUpperCase()),
 });
 
 export type ICourseSelect = z.infer<typeof CourseSelect>;
