@@ -57,7 +57,8 @@ export default function CollegePage() {
   const colleges = response?.data ?? [];
   const pagination = response?.pagination;
 
-  const handlePageSizeChange = (val: string) => {
+  const handlePageSizeChange = (val: string | null) => {
+    if (val === null) return;
     if (val === "all") {
       setQuery((prev) => ({
         ...prev,

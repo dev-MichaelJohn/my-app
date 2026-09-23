@@ -47,7 +47,7 @@ export function CollegeFormDialog({ open, onOpenChange, collegeToEdit }: College
         if (isEditing && collegeToEdit) {
           await updateMutation.mutateAsync({
             id: collegeToEdit.college.id,
-            data: { college: value.college },
+            info: { college: value.college },
           });
           toast.success("College updated successfully.");
         } else {

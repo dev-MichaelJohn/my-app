@@ -3,7 +3,7 @@ import { ROLE_PERMISSION_MATRIX, type Permission, type RoleName } from "@my-app/
 
 export const usePermissions = () => {
   const { data: user, isLoading } = useMe();
-  const { roles } = user;
+  const roles = user?.roles ?? [];
 
   const userPermissions = new Set<Permission>();
   for (const role of roles) {
