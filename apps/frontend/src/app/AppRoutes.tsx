@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router";
 import { AuthGuard, GuestGuard } from "@/components/route-guards";
 import LoginPage from "@/features/auth/page/LoginPage";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 export const AppRoutes = createBrowserRouter([
   {
@@ -14,6 +15,16 @@ export const AppRoutes = createBrowserRouter([
   },
   {
     element: <AuthGuard />,
-    children: [],
+    children: [
+      {
+        element: <DashboardLayout />,
+        children: [
+          {
+            path: "/dashboard",
+            element: <></>,
+          },
+        ],
+      },
+    ],
   },
 ]);
