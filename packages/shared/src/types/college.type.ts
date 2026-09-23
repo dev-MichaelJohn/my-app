@@ -14,7 +14,7 @@ export const CollegeSelect = createSelectSchema(Colleges, {
       .trim()
       .min(1, "Initialism is required.")
       .max(16, "Initialism cannot exceed 16 characters.")
-      .toUpperCase(),
+      .transform((val) => val.toUpperCase()), // 👈 Fixed
 });
 
 export const CollegeInsert = createInsertSchema(Colleges, {
@@ -28,7 +28,7 @@ export const CollegeInsert = createInsertSchema(Colleges, {
       .trim()
       .min(1, "Initialism is required.")
       .max(16, "Initialism cannot exceed 16 characters.")
-      .toUpperCase(),
+      .transform((val) => val.toUpperCase()), // 👈 Fixed
 });
 
 export const CollegeUpdate = createUpdateSchema(Colleges, {
@@ -42,7 +42,7 @@ export const CollegeUpdate = createUpdateSchema(Colleges, {
       .trim()
       .min(1, "Initialism is required.")
       .max(16, "Initialism cannot exceed 16 characters.")
-      .toUpperCase(),
+      .transform((val) => val.toUpperCase()), // 👈 Fixed
 });
 
 export const CollegeDeanSelect = createSelectSchema(CollegeDeans, {
@@ -106,7 +106,7 @@ export const CreateCollegeDeanSchema = z
   .discriminatedUnion("type", [
     z.object({
       type: z.literal("existing"),
-      account_id: z.number().int().positive(),
+      account_id: z.number().int().positive("Please select a valid account."),
     }),
     z.object({
       type: z.literal("new"),
@@ -115,6 +115,7 @@ export const CreateCollegeDeanSchema = z
       }),
     }),
   ])
+  .nullable() // 👈 Added nullable
   .optional();
 
 export const CreateCollegeSchema = z.object({

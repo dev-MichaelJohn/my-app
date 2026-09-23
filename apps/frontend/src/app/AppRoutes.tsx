@@ -2,6 +2,7 @@ import { createBrowserRouter } from "react-router";
 import { AuthGuard, GuestGuard } from "@/components/route-guards";
 import LoginPage from "@/features/auth/page/LoginPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import CollegePage from "@/features/colleges/page/CollegePage";
 
 export const AppRoutes = createBrowserRouter([
   {
@@ -22,6 +23,10 @@ export const AppRoutes = createBrowserRouter([
           {
             path: "/dashboard",
             element: <></>,
+          },
+          {
+            path: "/admin/colleges",
+            element: <CollegePage />,
           },
         ],
       },

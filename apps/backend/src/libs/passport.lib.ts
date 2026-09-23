@@ -60,7 +60,7 @@ export const AuthenticateJWT = (
               err instanceof AppError ? err : new AppError(500, "Authentication error occured."),
             );
 
-          resolve(user);
+          resolve(user || false);
         },
       )(req, res);
     }),
