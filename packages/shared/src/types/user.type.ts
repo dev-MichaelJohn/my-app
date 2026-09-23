@@ -168,35 +168,32 @@ export const UserQuerySchema = z.object({
 });
 
 export const CreateUserSchema = z.object({
-  account: AccountInsert.omit({
-    personal_details_id: true,
-    created_at: true,
-    deleted_at: true,
-    updated_at: true,
+  account: AccountInsert.pick({
+    email: true,
   }).extend({
     password: AccountInsert.shape.password.optional(),
   }),
-  details: PersonalDetailsInsert.omit({
-    id: true,
-    created_at: true,
-    deleted_at: true,
-    updated_at: true,
+  details: PersonalDetailsInsert.pick({
+    institutional_id: true,
+    first_name: true,
+    last_name: true,
+    middle_name: true,
+    suffix: true,
   }),
   role: z.enum(SystemRoles.enumValues),
 });
 
 export const UpdateUserSchema = z.object({
-  account: AccountUpdate.omit({
-    personal_details_id: true,
-    created_at: true,
-    deleted_at: true,
-    updated_at: true,
-  }),
-  details: PersonalDetailsUpdate.omit({
-    id: true,
-    created_at: true,
-    deleted_at: true,
-    updated_at: true,
+  account: AccountUpdate.pick({
+    email: true,
+    password: true,
+  }).optional(),
+  details: PersonalDetailsUpdate.pick({
+    institutional_id: true,
+    first_name: true,
+    last_name: true,
+    middle_name: true,
+    suffix: true,
   }),
   role: z.enum(SystemRoles.enumValues).optional(),
 });

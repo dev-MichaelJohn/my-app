@@ -27,8 +27,7 @@ export const CollegeInsert = createInsertSchema(Colleges, {
     schema
       .trim()
       .min(1, "Initialism is required.")
-      .max(16, "Initialism cannot exceed 16 characters.")
-      .transform((val) => val.toUpperCase()), // 👈 Fixed
+      .max(16, "Initialism cannot exceed 16 characters."),
 });
 
 export const CollegeUpdate = createUpdateSchema(Colleges, {
@@ -41,8 +40,7 @@ export const CollegeUpdate = createUpdateSchema(Colleges, {
     schema
       .trim()
       .min(1, "Initialism is required.")
-      .max(16, "Initialism cannot exceed 16 characters.")
-      .transform((val) => val.toUpperCase()), // 👈 Fixed
+      .max(16, "Initialism cannot exceed 16 characters."),
 });
 
 export const CollegeDeanSelect = createSelectSchema(CollegeDeans, {
@@ -119,20 +117,18 @@ export const CreateCollegeDeanSchema = z
   .optional();
 
 export const CreateCollegeSchema = z.object({
-  college: CollegeInsert.omit({
-    created_at: true,
-    deleted_at: true,
-    updated_at: true,
+  college: CollegeInsert.pick({
+    name: true,
+    initialism: true,
   }),
   dean: CreateCollegeDeanSchema,
 });
 
 export const UpdateCollegeSchema = z.object({
-  college: CollegeUpdate.omit({
-    created_at: true,
-    deleted_at: true,
-    updated_at: true,
-  }),
+  college: CollegeUpdate.pick({
+    name: true,
+    initialism: true,
+  }).optional(),
   dean: CreateCollegeDeanSchema,
 });
 
