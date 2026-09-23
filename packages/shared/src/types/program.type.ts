@@ -3,75 +3,63 @@ import { ProgramChairs, Programs } from "../schemas/institution.schema.js";
 import z from "zod";
 import { CreateUserSchema, GetUserSchema } from "./user.type.js";
 
+const nameField = (schema: z.ZodString) =>
+  schema
+    .trim()
+    .min(3, "Program name must be at least 3 characters.")
+    .max(255, "Program name cannot exceed 255 characters.");
+
+const initialismField = (schema: z.ZodString) =>
+  schema
+    .trim()
+    .min(2, "Initialism must be at least 2 characters (e.g., BSIT, BSEE).")
+    .max(10, "Initialism cannot exceed 10 characters.");
+
+const collegeIdField = (schema: z.ZodNumber) =>
+  schema.int("College ID must be an integer.").positive("Invalid College ID.");
+
+const programIdField = (schema: z.ZodNumber) =>
+  schema.int("Program ID must be an integer.").positive("Invalid Program ID.");
+
+const chairIdField = (schema: z.ZodNumber) =>
+  schema.int("Chair ID must be an integer.").positive("Invalid Chair ID.");
+
 export const ProgramSelect = createSelectSchema(Programs, {
-  name: (schema) =>
-    schema
-      .trim()
-      .min(3, "Program name must be at least 3 characters.")
-      .max(255, "Program name cannot exceed 255 characters."),
-  initialism: (schema) =>
-    schema
-      .trim()
-      .min(2, "Initialism must be at least 2 characters (e.g., BSIT, BSEE).")
-      .max(10, "Initialism cannot exceed 10 characters.")
-      .transform((val) => val.toUpperCase()),
-  college_id: (schema) =>
-    schema.int("College ID must be an integer.").positive("Invalid College ID."),
+  name: nameField,
+  initialism: initialismField,
+  college_id: collegeIdField,
 });
 
 export const ProgramInsert = createInsertSchema(Programs, {
-  name: (schema) =>
-    schema
-      .trim()
-      .min(3, "Program name must be at least 3 characters.")
-      .max(255, "Program name cannot exceed 255 characters."),
-  initialism: (schema) =>
-    schema
-      .trim()
-      .min(2, "Initialism must be at least 2 characters (e.g., BSIT, BSEE).")
-      .max(10, "Initialism cannot exceed 10 characters.")
-      .transform((val) => val.toUpperCase()),
-  college_id: (schema) =>
-    schema.int("College ID must be an integer.").positive("Invalid College ID."),
+  name: nameField,
+  initialism: initialismField,
+  college_id: collegeIdField,
 });
 
 export const ProgramUpdate = createUpdateSchema(Programs, {
-  name: (schema) =>
-    schema
-      .trim()
-      .min(3, "Program name must be at least 3 characters.")
-      .max(255, "Program name cannot exceed 255 characters."),
-  initialism: (schema) =>
-    schema
-      .trim()
-      .min(2, "Initialism must be at least 2 characters (e.g., BSIT, BSEE).")
-      .max(10, "Initialism cannot exceed 10 characters.")
-      .transform((val) => val.toUpperCase()),
-  college_id: (schema) =>
-    schema.int("College ID must be an integer.").positive("Invalid College ID."),
-});
-
-export const ProgramChairSelect = createSelectSchema(ProgramChairs, {
-  program_id: (schema) =>
-    schema.int("Program ID must be an integer.").positive("Invalid Program ID."),
-  chair_id: (schema) => schema.int("Chair ID must be an integer.").positive("Invalid Chair ID."),
-});
-
-export const ProgramChairInsert = createInsertSchema(ProgramChairs, {
-  program_id: (schema) =>
-    schema.int("Program ID must be an integer.").positive("Invalid Program ID."),
-  chair_id: (schema) => schema.int("Chair ID must be an integer.").positive("Invalid Chair ID."),
-});
-
-export const ProgramChairUpdate = createUpdateSchema(ProgramChairs, {
-  program_id: (schema) =>
-    schema.int("Program ID must be an integer.").positive("Invalid Program ID."),
-  chair_id: (schema) => schema.int("Chair ID must be an integer.").positive("Invalid Chair ID."),
+  name: nameField,
+  initialism: initialismField,
+  college_id: collegeIdField,
 });
 
 export type IProgramSelect = z.infer<typeof ProgramSelect>;
 export type IProgramInsert = z.infer<typeof ProgramInsert>;
 export type IProgramUpdate = z.infer<typeof ProgramUpdate>;
+
+export const ProgramChairSelect = createSelectSchema(ProgramChairs, {
+  program_id: programIdField,
+  chair_id: chairIdField,
+});
+
+export const ProgramChairInsert = createInsertSchema(ProgramChairs, {
+  program_id: programIdField,
+  chair_id: chairIdField,
+});
+
+export const ProgramChairUpdate = createUpdateSchema(ProgramChairs, {
+  program_id: programIdField,
+  chair_id: chairIdField,
+});
 
 export type IProgramChairSelect = z.infer<typeof ProgramChairSelect>;
 export type IProgramChairInsert = z.infer<typeof ProgramChairInsert>;
@@ -113,14 +101,11 @@ export const CreateProgramChairSchema = z
   .discriminatedUnion("type", [
     z.object({
       type: z.literal("existing"),
-      account_id: z.number().int().positive(),
+      account_id: z.number().int().positive("Please select a valid account."),
     }),
     z.object({
       type: z.literal("new"),
-      info: CreateUserSchema.pick({
-        account: true,
-        details: true,
-      }),
+      info: CreateUserSchema.pick({ account: true, details: true }),
     }),
   ])
   .nullable()

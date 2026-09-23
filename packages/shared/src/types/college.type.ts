@@ -3,67 +3,57 @@ import { CollegeDeans, Colleges } from "../schemas/institution.schema.js";
 import z from "zod";
 import { CreateUserSchema, GetUserSchema } from "./user.type.js";
 
+const nameField = (schema: z.ZodString) =>
+  schema
+    .trim()
+    .min(1, "College name is required.")
+    .max(128, "College name cannot exceed 128 characters.");
+
+const initialismField = (schema: z.ZodString) =>
+  schema
+    .trim()
+    .min(1, "Initialism is required.")
+    .max(16, "Initialism cannot exceed 16 characters.");
+
+const collegeIdField = (schema: z.ZodNumber) =>
+  schema.int("College ID must be an integer.").positive("Invalid college ID.");
+
+const deanIdField = (schema: z.ZodNumber) =>
+  schema.int("Dean ID must be an integer.").positive("Invalid dean ID.");
+
 export const CollegeSelect = createSelectSchema(Colleges, {
-  name: (schema) =>
-    schema
-      .trim()
-      .min(1, "College name is required.")
-      .max(128, "College name cannot exceed 128 characters."),
-  initialism: (schema) =>
-    schema
-      .trim()
-      .min(1, "Initialism is required.")
-      .max(16, "Initialism cannot exceed 16 characters.")
-      .transform((val) => val.toUpperCase()),
+  name: nameField,
+  initialism: initialismField,
 });
 
 export const CollegeInsert = createInsertSchema(Colleges, {
-  name: (schema) =>
-    schema
-      .trim()
-      .min(1, "College name is required.")
-      .max(128, "College name cannot exceed 128 characters."),
-  initialism: (schema) =>
-    schema
-      .trim()
-      .min(1, "Initialism is required.")
-      .max(16, "Initialism cannot exceed 16 characters."),
+  name: nameField,
+  initialism: initialismField,
 });
 
 export const CollegeUpdate = createUpdateSchema(Colleges, {
-  name: (schema) =>
-    schema
-      .trim()
-      .min(1, "College name is required.")
-      .max(128, "College name cannot exceed 128 characters."),
-  initialism: (schema) =>
-    schema
-      .trim()
-      .min(1, "Initialism is required.")
-      .max(16, "Initialism cannot exceed 16 characters."),
-});
-
-export const CollegeDeanSelect = createSelectSchema(CollegeDeans, {
-  college_id: (schema) =>
-    schema.int("College ID must be an integer.").positive("Invalid college ID."),
-  dean_id: (schema) => schema.int("Dean ID must be an integer.").positive("Invalid dean ID."),
-});
-
-export const CollegeDeanInsert = createInsertSchema(CollegeDeans, {
-  college_id: (schema) =>
-    schema.int("College ID must be an integer.").positive("Invalid college ID."),
-  dean_id: (schema) => schema.int("Dean ID must be an integer.").positive("Invalid dean ID."),
-});
-
-export const CollegeDeanUpdate = createUpdateSchema(CollegeDeans, {
-  college_id: (schema) =>
-    schema.int("College ID must be an integer.").positive("Invalid college ID."),
-  dean_id: (schema) => schema.int("Dean ID must be an integer.").positive("Invalid dean ID."),
+  name: nameField,
+  initialism: initialismField,
 });
 
 export type ICollegeSelect = z.infer<typeof CollegeSelect>;
 export type ICollegeInsert = z.infer<typeof CollegeInsert>;
 export type ICollegeUpdate = z.infer<typeof CollegeUpdate>;
+
+export const CollegeDeanSelect = createSelectSchema(CollegeDeans, {
+  college_id: collegeIdField,
+  dean_id: deanIdField,
+});
+
+export const CollegeDeanInsert = createInsertSchema(CollegeDeans, {
+  college_id: collegeIdField,
+  dean_id: deanIdField,
+});
+
+export const CollegeDeanUpdate = createUpdateSchema(CollegeDeans, {
+  college_id: collegeIdField,
+  dean_id: deanIdField,
+});
 
 export type ICollegeDeanSelect = z.infer<typeof CollegeDeanSelect>;
 export type ICollegeDeanInsert = z.infer<typeof CollegeDeanInsert>;
@@ -108,10 +98,7 @@ export const CreateCollegeDeanSchema = z
     }),
     z.object({
       type: z.literal("new"),
-      info: CreateUserSchema.pick({
-        account: true,
-        details: true,
-      }),
+      info: CreateUserSchema.pick({ account: true, details: true }),
     }),
   ])
   .nullable()

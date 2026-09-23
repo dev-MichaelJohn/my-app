@@ -4,31 +4,27 @@ import z from "zod";
 import { GetUserSchema } from "./user.type.js";
 import { GetOfferingSchema } from "./offering.type.js";
 
+const studentIdField = (schema: z.ZodNumber) =>
+  schema.int("Student ID must be an integer.").positive("Please select a valid student.");
+
+const offeringIdField = (schema: z.ZodNumber) =>
+  schema
+    .int("Course offering ID must be an integer.")
+    .positive("Please select a valid course offering.");
+
 export const StudentClassSelect = createSelectSchema(StudentClasses, {
-  student_account_id: (schema) =>
-    schema.int("Student ID must be an integer").positive("Please select a valid student."),
-  course_offering_id: (schema) =>
-    schema
-      .int("Course offering ID must be an integer")
-      .positive("Please select a valid course offering."),
+  student_account_id: studentIdField,
+  course_offering_id: offeringIdField,
 });
 
 export const StudentClassInsert = createInsertSchema(StudentClasses, {
-  student_account_id: (schema) =>
-    schema.int("Student ID must be an integer").positive("Please select a valid student."),
-  course_offering_id: (schema) =>
-    schema
-      .int("Course offering ID must be an integer")
-      .positive("Please select a valid course offering."),
+  student_account_id: studentIdField,
+  course_offering_id: offeringIdField,
 });
 
 export const StudentClassUpdate = createUpdateSchema(StudentClasses, {
-  student_account_id: (schema) =>
-    schema.int("Student ID must be an integer").positive("Please select a valid student."),
-  course_offering_id: (schema) =>
-    schema
-      .int("Course offering ID must be an integer")
-      .positive("Please select a valid course offering."),
+  student_account_id: studentIdField,
+  course_offering_id: offeringIdField,
 });
 
 export type IStudentClassSelect = z.infer<typeof StudentClassSelect>;
@@ -36,9 +32,7 @@ export type IStudentClassInsert = z.infer<typeof StudentClassInsert>;
 export type IStudentClassUpdate = z.infer<typeof StudentClassUpdate>;
 
 export const GetStudentClassSchema = StudentClassSelect.extend({
-  student: GetUserSchema.omit({
-    roles: true,
-  }),
+  student: GetUserSchema.omit({ roles: true }),
   offering: GetOfferingSchema,
 }).omit({
   student_account_id: true,

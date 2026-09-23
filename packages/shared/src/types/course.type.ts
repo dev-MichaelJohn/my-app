@@ -2,46 +2,31 @@ import { createInsertSchema, createSelectSchema, createUpdateSchema } from "driz
 import { Courses } from "../schemas/institution.schema.js";
 import z from "zod";
 
+const nameField = (schema: z.ZodString) =>
+  schema
+    .trim()
+    .min(1, "Course name is required.")
+    .max(128, "Course name must be 128 characters or fewer.");
+
+const initialismField = (schema: z.ZodString) =>
+  schema
+    .trim()
+    .min(1, "Initialism is required.")
+    .max(16, "Initialism must be 16 characters or fewer.");
+
 export const CourseSelect = createSelectSchema(Courses, {
-  name: (schema) =>
-    schema
-      .trim()
-      .min(1, "Course name is required.")
-      .max(128, "Course name must be 128 characters or fewer."),
-  initialism: (schema) =>
-    schema
-      .trim()
-      .min(1, "Initialism is required.")
-      .max(16, "Initialism must be 16 characters or fewer.")
-      .transform((val) => val.toUpperCase()),
+  name: nameField,
+  initialism: initialismField,
 });
 
 export const CourseInsert = createInsertSchema(Courses, {
-  name: (schema) =>
-    schema
-      .trim()
-      .min(1, "Course name is required.")
-      .max(128, "Course name must be 128 characters or fewer."),
-  initialism: (schema) =>
-    schema
-      .trim()
-      .min(1, "Initialism is required.")
-      .max(16, "Initialism must be 16 characters or fewer.")
-      .transform((val) => val.toUpperCase()),
+  name: nameField,
+  initialism: initialismField,
 });
 
 export const CourseUpdate = createUpdateSchema(Courses, {
-  name: (schema) =>
-    schema
-      .trim()
-      .min(1, "Course name is required.")
-      .max(128, "Course name must be 128 characters or fewer."),
-  initialism: (schema) =>
-    schema
-      .trim()
-      .min(1, "Initialism is required.")
-      .max(16, "Initialism must be 16 characters or fewer.")
-      .transform((val) => val.toUpperCase()),
+  name: nameField,
+  initialism: initialismField,
 });
 
 export type ICourseSelect = z.infer<typeof CourseSelect>;

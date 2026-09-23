@@ -3,48 +3,32 @@ import { Classes, SectionEnum, YearLevelEnum } from "../schemas/institution.sche
 import z from "zod";
 import { ProgramSelect } from "./program.type.js";
 
+const programIdField = (schema: z.ZodNumber) =>
+  schema.int("Program ID must be an integer.").positive("Please select a valid program.");
+
 export const ClassSelect = createSelectSchema(Classes, {
-  program_id: (schema) =>
-    schema.int("Program ID must be an integer").positive("Please select a valid program."),
-  year_level: (schema) =>
-    schema.refine((val) => val != null && String(val).trim() !== "", {
-      message: "Please select a valid year level.",
-    }),
-  section: (schema) =>
-    schema.refine((val) => val != null && String(val).trim() !== "", {
-      message: "Please select a section.",
-    }),
+  program_id: programIdField,
 });
 
 export const ClassInsert = createInsertSchema(Classes, {
-  program_id: (schema) =>
-    schema.int("Program ID must be an integer").positive("Please select a valid program."),
-  year_level: (schema) =>
-    schema.refine((val) => val != null && String(val).trim() !== "", {
-      message: "Please select a valid year level.",
-    }),
-  section: (schema) =>
-    schema.refine((val) => val != null && String(val).trim() !== "", {
-      message: "Please select a section.",
-    }),
+  program_id: programIdField,
 });
 
 export const ClassUpdate = createUpdateSchema(Classes, {
-  program_id: (schema) =>
-    schema.int("Program ID must be an integer").positive("Please select a valid program."),
-  year_level: (schema) =>
-    schema.refine((val) => val != null && String(val).trim() !== "", {
-      message: "Please select a valid year level.",
-    }),
-  section: (schema) =>
-    schema.refine((val) => val != null && String(val).trim() !== "", {
-      message: "Please select a section.",
-    }),
+  program_id: programIdField,
 });
 
 export type IClassSelect = z.infer<typeof ClassSelect>;
 export type IClassInsert = z.infer<typeof ClassInsert>;
 export type IClassUpdate = z.infer<typeof ClassUpdate>;
+
+export const GetClassSchema = ClassSelect.extend({
+  program: ProgramSelect.pick({
+    id: true,
+    name: true,
+    initialism: true,
+  }),
+}).omit({ program_id: true });
 
 export const ClassQuerySchema = z.object({
   paginate: z
@@ -70,15 +54,5 @@ export const ClassQuerySchema = z.object({
   order: z.enum(["asc", "desc"]).default("asc"),
 });
 
-export const GetClassSchema = ClassSelect.extend({
-  program: ProgramSelect.pick({
-    id: true,
-    name: true,
-    initialism: true,
-  }),
-}).omit({
-  program_id: true,
-});
-
-export type ClassQuery = z.infer<typeof ClassQuerySchema>;
 export type GetClass = z.infer<typeof GetClassSchema>;
+export type ClassQuery = z.infer<typeof ClassQuerySchema>;

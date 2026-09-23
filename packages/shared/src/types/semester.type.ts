@@ -1,31 +1,31 @@
-import { createSelectSchema } from "drizzle-orm/zod";
+import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-orm/zod";
 import { Semesters } from "../schemas/institution.schema.js";
 import z from "zod";
 
+const schoolYearField = (schema: z.ZodNumber) =>
+  schema
+    .int("School year must be a whole number.")
+    .min(2000, "School year seems too far in the past.")
+    .max(2100, "School year seems too far in the future.");
+
 export const SemesterSelect = createSelectSchema(Semesters, {
-  school_year_start: (schema) =>
-    schema
-      .int("School year must be a whole number.")
-      .min(2000, "School year seems too far in the past.")
-      .max(2100, "School year seems too far in the future."),
-  school_year_end: (schema) =>
-    schema
-      .int("School year must be a whole number.")
-      .min(2000, "School year seems too far in the past.")
-      .max(2100, "School year seems too far in the future."),
-  start_date: () => z.date("Start date must be a valid date (YYYY-MM-DD)."),
-  end_date: () => z.date("End date must be a valid date (YYYY-MM-DD)."),
+  school_year_start: schoolYearField,
+  school_year_end: schoolYearField,
+  start_date: () => z.coerce.date(),
+  end_date: () => z.coerce.date(),
 });
 
-export const SemesterInsert = SemesterSelect.omit({
-  id: true,
-  school_year_end: true,
-  created_at: true,
-  updated_at: true,
-  deleted_at: true,
+export const SemesterInsert = createInsertSchema(Semesters, {
+  school_year_start: schoolYearField,
+  start_date: () => z.coerce.date(),
+  end_date: () => z.coerce.date(),
 });
 
-export const SemesterUpdate = SemesterInsert.partial();
+export const SemesterUpdate = createUpdateSchema(Semesters, {
+  school_year_start: schoolYearField,
+  start_date: () => z.coerce.date(),
+  end_date: () => z.coerce.date(),
+});
 
 export type ISemesterSelect = z.infer<typeof SemesterSelect>;
 export type ISemesterInsert = z.infer<typeof SemesterInsert>;

@@ -6,54 +6,58 @@ import { GetClassSchema } from "./class.type.js";
 import { SemesterSelect } from "./semester.type.js";
 import { GetUserSchema } from "./user.type.js";
 
+const curriculumIdField = (schema: z.ZodNumber) =>
+  schema.int("Curriculum ID must be an integer.").positive("Please select a valid course.");
+
+const classIdField = (schema: z.ZodNumber) =>
+  schema.int("Class ID must be an integer.").positive("Please select a valid class.");
+
+const semesterIdField = (schema: z.ZodNumber) =>
+  schema.int("Semester ID must be an integer.").positive("Please select a valid semester.");
+
+const facultyIdField = (schema: z.ZodNumber) =>
+  schema
+    .int("Faculty ID must be an integer.")
+    .positive("Please select a valid faculty.")
+    .nullable()
+    .optional();
+
 export const OfferingSelect = createSelectSchema(CourseOfferings, {
-  course_curriculum_id: (schema) =>
-    schema.int("Curriculum ID must be an integer").positive("Please select a valid course."),
-  class_id: (schema) =>
-    schema.int("Class ID must be an integer").positive("Please select a valid class."),
-  semester_id: (schema) =>
-    schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
-  faculty_id: (schema) =>
-    schema
-      .int("Faculty ID must be an integer")
-      .positive("Please select a valid faculty.")
-      .nullable()
-      .optional(),
+  course_curriculum_id: curriculumIdField,
+  class_id: classIdField,
+  semester_id: semesterIdField,
+  faculty_id: facultyIdField,
 });
 
 export const OfferingInsert = createInsertSchema(CourseOfferings, {
-  course_curriculum_id: (schema) =>
-    schema.int("Curriculum ID must be an integer").positive("Please select a valid course."),
-  class_id: (schema) =>
-    schema.int("Class ID must be an integer").positive("Please select a valid class."),
-  semester_id: (schema) =>
-    schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
-  faculty_id: (schema) =>
-    schema
-      .int("Faculty ID must be an integer")
-      .positive("Please select a valid faculty.")
-      .nullable()
-      .optional(),
+  course_curriculum_id: curriculumIdField,
+  class_id: classIdField,
+  semester_id: semesterIdField,
+  faculty_id: facultyIdField,
 });
 
 export const OfferingUpdate = createUpdateSchema(CourseOfferings, {
-  course_curriculum_id: (schema) =>
-    schema.int("Curriculum ID must be an integer").positive("Please select a valid course."),
-  class_id: (schema) =>
-    schema.int("Class ID must be an integer").positive("Please select a valid class."),
-  semester_id: (schema) =>
-    schema.int("Semester ID must be an integer").positive("Please select a valid semester."),
-  faculty_id: (schema) =>
-    schema
-      .int("Faculty ID must be an integer")
-      .positive("Please select a valid faculty.")
-      .nullable()
-      .optional(),
+  course_curriculum_id: curriculumIdField,
+  class_id: classIdField,
+  semester_id: semesterIdField,
+  faculty_id: facultyIdField,
 });
 
 export type IOfferingSelect = z.infer<typeof OfferingSelect>;
 export type IOfferingInsert = z.infer<typeof OfferingInsert>;
 export type IOfferingUpdate = z.infer<typeof OfferingUpdate>;
+
+export const GetOfferingSchema = OfferingSelect.extend({
+  course_curriculum: GetCurriculumSchema.pick({ id: true, course: true }),
+  class: GetClassSchema.pick({ id: true, year_level: true, section: true, program: true }),
+  semester: SemesterSelect,
+  faculty: GetUserSchema.omit({ roles: true }).nullable(),
+}).omit({
+  course_curriculum_id: true,
+  class_id: true,
+  semester_id: true,
+  faculty_id: true,
+});
 
 export const OfferingQuerySchema = z.object({
   paginate: z
@@ -82,27 +86,5 @@ export const OfferingQuerySchema = z.object({
   order: z.enum(["asc", "desc"]).default("asc"),
 });
 
-export const GetOfferingSchema = OfferingSelect.extend({
-  course_curriculum: GetCurriculumSchema.pick({
-    id: true,
-    course: true,
-  }),
-  class: GetClassSchema.pick({
-    id: true,
-    year_level: true,
-    section: true,
-    program: true,
-  }),
-  semester: SemesterSelect,
-  faculty: GetUserSchema.omit({
-    roles: true,
-  }).nullable(),
-}).omit({
-  course_curriculum_id: true,
-  class_id: true,
-  semester_id: true,
-  faculty_id: true,
-});
-
-export type OfferingQuery = z.infer<typeof OfferingQuerySchema>;
 export type GetOffering = z.infer<typeof GetOfferingSchema>;
+export type OfferingQuery = z.infer<typeof OfferingQuerySchema>;
