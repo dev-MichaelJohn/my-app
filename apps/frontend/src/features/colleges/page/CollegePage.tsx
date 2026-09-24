@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toast } from "sonner"; // 👈 Sonner
 import {
   useColleges,
   useDeleteCollege,
@@ -21,16 +22,15 @@ import {
   CollegeTableSkeleton,
   CollegeGridSkeleton,
 } from "@/features/colleges/components/CollegeSkeletons";
-import type { CollegeQuery } from "@my-app/shared";
+import { CollegeFormDialog } from "@/features/colleges/components/CollegeFormDialog";
+import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
+import type { CollegeQuery, GetCollege } from "@my-app/shared";
+import type { ApiError } from "@/lib/api.lib";
 
-export default function CollegePage() {
+export default function CollegesPage() {
   const [viewMode, setViewMode] = useState<"table" | "grid">(() => {
     return (localStorage.getItem("colleges_view_mode") as "table" | "grid") || "grid";
   });
-
-  useEffect(() => {
-    localStorage.setItem("colleges_view_mode", viewMode);
-  }, [viewMode]);
 
   const [query, setQuery] = useState<CollegeQuery>({
     paginate: true,
@@ -50,6 +50,12 @@ export default function CollegePage() {
     return () => clearTimeout(handler);
   }, [searchInput]);
 
+  const [formOpen, setFormOpen] = useState(false);
+  const [collegeToEdit, setCollegeToEdit] = useState<GetCollege | null>(null);
+
+  const [archiveTarget, setArchiveTarget] = useState<GetCollege | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<GetCollege | null>(null);
+
   const { data: response, isLoading, isPlaceholderData } = useColleges(query);
   const deleteMutation = useDeleteCollege();
   const restoreMutation = useRestoreCollege();
@@ -57,21 +63,29 @@ export default function CollegePage() {
   const colleges = response?.data ?? [];
   const pagination = response?.pagination;
 
-  const handlePageSizeChange = (val: string | null) => {
-    if (val === null) return;
-    if (val === "all") {
-      setQuery((prev) => ({
-        ...prev,
-        paginate: false,
-        page: 1,
-      }));
-    } else {
-      setQuery((prev) => ({
-        ...prev,
-        paginate: true,
-        limit: Number(val),
-        page: 1,
-      }));
+  const handleArchiveConfirm = async () => {
+    if (!archiveTarget) return;
+
+    try {
+      await deleteMutation.mutateAsync(archiveTarget.college.id);
+      toast.success(`College "${archiveTarget.college.initialism}" was archived.`);
+      setArchiveTarget(null);
+    } catch (err) {
+      const apiErr = err as ApiError;
+      toast.error(apiErr.message || "Failed to archive college.");
+    }
+  };
+
+  const handleRestoreConfirm = async () => {
+    if (!restoreTarget) return;
+
+    try {
+      await restoreMutation.mutateAsync(restoreTarget.college.id);
+      toast.success(`College "${restoreTarget.college.initialism}" has been restored.`);
+      setRestoreTarget(null);
+    } catch (err) {
+      const apiErr = err as ApiError;
+      toast.error(apiErr.message || "Failed to restore college.");
     }
   };
 
@@ -81,11 +95,17 @@ export default function CollegePage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Colleges</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Manage institutional colleges and appointed academic deans.
+            Manage academic colleges and appointed deans.
           </p>
         </div>
 
-        <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm">
+        <Button
+          onClick={() => {
+            setCollegeToEdit(null);
+            setFormOpen(true);
+          }}
+          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+        >
           <Plus className="w-4 h-4" />
           <span>Add College</span>
         </Button>
@@ -121,7 +141,14 @@ export default function CollegePage() {
 
           <Select
             value={!query.paginate ? "all" : String(query.limit ?? 9)}
-            onValueChange={handlePageSizeChange}
+            onValueChange={(val) => {
+              setQuery((prev) => ({
+                ...prev,
+                paginate: val !== "all",
+                limit: val === "all" ? (prev.limit ?? 9) : Number(val),
+                page: 1,
+              }));
+            }}
           >
             <SelectTrigger className="w-[110px] h-9 text-xs bg-card border-border">
               <SelectValue placeholder="Page Size" />
@@ -140,7 +167,6 @@ export default function CollegePage() {
               size="icon"
               className="h-7 w-7 rounded-md"
               onClick={() => setViewMode("grid")}
-              title="Grid View"
             >
               <LayoutGrid className="w-4 h-4" />
             </Button>
@@ -149,7 +175,6 @@ export default function CollegePage() {
               size="icon"
               className="h-7 w-7 rounded-md"
               onClick={() => setViewMode("table")}
-              title="Table View"
             >
               <List className="w-4 h-4" />
             </Button>
@@ -172,53 +197,66 @@ export default function CollegePage() {
           <CollegeTableView
             colleges={colleges}
             isArchivedView={Boolean(query.is_archived)}
-            onEdit={(college) => console.log("Edit:", college)}
-            onDelete={(college) => deleteMutation.mutate(college.college.id)}
-            onRestore={(college) => restoreMutation.mutate(college.college.id)}
+            onEdit={(item) => {
+              setCollegeToEdit(item);
+              setFormOpen(true);
+            }}
+            onDelete={(item) => setArchiveTarget(item)}
+            onRestore={(item) => setRestoreTarget(item)}
           />
         ) : (
           <CollegeGridView
             colleges={colleges}
             isArchivedView={Boolean(query.is_archived)}
-            onEdit={(college) => console.log("Edit:", college)}
-            onDelete={(college) => deleteMutation.mutate(college.college.id)}
-            onRestore={(college) => restoreMutation.mutate(college.college.id)}
+            onEdit={(item) => {
+              setCollegeToEdit(item);
+              setFormOpen(true);
+            }}
+            onDelete={(item) => setArchiveTarget(item)}
+            onRestore={(item) => setRestoreTarget(item)}
           />
         )}
       </div>
 
-      {query.paginate && pagination && pagination.totalPage > 1 ? (
-        <div className="flex items-center justify-between border-t border-border pt-4">
-          <p className="text-xs text-muted-foreground">
-            Page {pagination.currentPage} of {pagination.totalPage} ({pagination.totalItems}{" "}
-            colleges)
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!pagination.hasPrev}
-              onClick={() => setQuery((prev) => ({ ...prev, page: prev.page! - 1 }))}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!pagination.hasNext}
-              onClick={() => setQuery((prev) => ({ ...prev, page: prev.page! + 1 }))}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between border-t border-border pt-4">
-          <p className="text-xs text-muted-foreground">
-            Showing all {colleges.length} {query.is_archived ? "archived" : "active"} college(s)
-          </p>
-        </div>
-      )}
+      <CollegeFormDialog open={formOpen} onOpenChange={setFormOpen} collegeToEdit={collegeToEdit} />
+
+      <ConfirmActionDialog
+        open={Boolean(archiveTarget)}
+        onOpenChange={(open) => !open && setArchiveTarget(null)}
+        title={`Archive "${archiveTarget?.college.name}"?`}
+        description={
+          <span>
+            Are you sure you want to archive{" "}
+            <strong>
+              {archiveTarget?.college.name} ({archiveTarget?.college.initialism})
+            </strong>
+            ? This will hide the college from academic listings.
+          </span>
+        }
+        confirmLabel="Archive College"
+        variant="destructive"
+        isLoading={deleteMutation.isPending}
+        onConfirm={handleArchiveConfirm}
+      />
+
+      <ConfirmActionDialog
+        open={Boolean(restoreTarget)}
+        onOpenChange={(open) => !open && setRestoreTarget(null)}
+        title={`Restore "${restoreTarget?.college.name}"?`}
+        description={
+          <span>
+            This will reactivate{" "}
+            <strong>
+              {restoreTarget?.college.name} ({restoreTarget?.college.initialism})
+            </strong>{" "}
+            and make it available for academic programs again.
+          </span>
+        }
+        confirmLabel="Restore College"
+        variant="primary"
+        isLoading={restoreMutation.isPending}
+        onConfirm={handleRestoreConfirm}
+      />
     </div>
   );
 }
