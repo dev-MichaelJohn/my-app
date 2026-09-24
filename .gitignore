@@ -52,8 +52,8 @@ tsconfig.tsbuildinfo
 # 4. Backend Logs & Database Backups
 # ==========================================
 # Ignore backend runtime logs
-apps/backend/logs/*
-!apps/backend/logs/.gitkeep
+./apps/backend/logs/*
+!./apps/backend/logs/.gitkeep
 
 # General log and database dump files
 *.log

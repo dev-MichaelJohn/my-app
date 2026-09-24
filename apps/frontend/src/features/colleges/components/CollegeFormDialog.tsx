@@ -28,7 +28,7 @@ import { CreateCollegeSchema, type CreateCollege, type GetCollege } from "@my-ap
 import { useCreateCollege, useUpdateCollege } from "../hooks/useColleges";
 import { useUsers } from "@/features/users/hooks/useUsers";
 import type { ApiError } from "@/lib/api.lib";
-import { Check, ChevronsUpDown, UserCheck, UserPlus, UserX } from "lucide-react";
+import { AlertCircle, Check, ChevronsUpDown, UserCheck, UserPlus, UserX } from "lucide-react";
 import { getErrorMessage } from "@/lib/error.lib";
 import { cn } from "@/lib/utils";
 
@@ -77,7 +77,6 @@ function CollegeFormInner({
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
   const [pendingValues, setPendingValues] = useState<CreateCollege | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
-
   const [facultyComboboxOpen, setFacultyComboboxOpen] = useState(false);
 
   const [deanMode, setDeanMode] = useState<"none" | "existing" | "new">(() => {
@@ -102,7 +101,12 @@ function CollegeFormInner({
       onChange: CreateCollegeSchema,
     },
     onSubmit: ({ value }) => {
-      setPendingValues(value);
+      const sanitizedPayload: CreateCollege = {
+        college: value.college,
+        dean: deanMode === "none" ? undefined : value.dean,
+      };
+
+      setPendingValues(sanitizedPayload);
       setConfirmSaveOpen(true);
     },
   });
@@ -130,8 +134,9 @@ function CollegeFormInner({
       onClose();
     } catch (err) {
       const apiErr = err as ApiError;
-      setGeneralError(apiErr.message || "Failed to save college.");
-      toast.error(apiErr.message || "Failed to save college.");
+      const errorMessage = apiErr.message || "Failed to save college.";
+      setGeneralError(errorMessage);
+      toast.error(errorMessage);
       setConfirmSaveOpen(false);
     }
   };
@@ -168,61 +173,86 @@ function CollegeFormInner({
         className="space-y-5 py-3"
       >
         {generalError && (
-          <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-md font-medium">
-            {generalError}
+          <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-lg font-medium flex items-start gap-2.5 animate-in fade-in duration-200">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="flex-1 text-xs sm:text-sm">{generalError}</div>
           </div>
         )}
 
         {/* ── College Name ── */}
         <form.Field name="college.name">
-          {(field) => (
-            <div className="space-y-1.5">
-              <Label htmlFor="college-name" className="text-foreground">
-                College Name
-              </Label>
-              <Input
-                id="college-name"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-                placeholder="e.g. College of Technology"
-                className="bg-background border-input"
-              />
-              {field.state.meta.isTouched && field.state.meta.errors.length > 0 ? (
-                <p className="text-destructive text-xs mt-1">
-                  {field.state.meta.errors.map(getErrorMessage).join(", ")}
-                </p>
-              ) : null}
-            </div>
-          )}
+          {(field) => {
+            const hasError =
+              (field.state.meta.isTouched || form.state.isSubmitted) &&
+              field.state.meta.errors.length > 0;
+
+            return (
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="college-name"
+                  className={cn("text-foreground", hasError && "text-destructive")}
+                >
+                  College Name
+                </Label>
+                <Input
+                  id="college-name"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="e.g. College of Technology"
+                  className={cn(
+                    "bg-background border-input",
+                    hasError && "border-destructive focus-visible:ring-destructive",
+                  )}
+                />
+                {hasError && (
+                  <p className="text-destructive text-xs mt-1 font-medium">
+                    {field.state.meta.errors.map(getErrorMessage).join(", ")}
+                  </p>
+                )}
+              </div>
+            );
+          }}
         </form.Field>
 
         {/* ── College Initialism ── */}
         <form.Field name="college.initialism">
-          {(field) => (
-            <div className="space-y-1.5">
-              <Label htmlFor="college-code" className="text-foreground">
-                Code / Initialism
-              </Label>
-              <Input
-                id="college-code"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value.toUpperCase())}
-                placeholder="e.g. COT"
-                maxLength={10}
-                className="bg-background border-input font-mono uppercase"
-              />
-              {field.state.meta.isTouched && field.state.meta.errors.length > 0 ? (
-                <p className="text-destructive text-xs mt-1">
-                  {field.state.meta.errors.map(getErrorMessage).join(", ")}
-                </p>
-              ) : null}
-            </div>
-          )}
+          {(field) => {
+            const hasError =
+              (field.state.meta.isTouched || form.state.isSubmitted) &&
+              field.state.meta.errors.length > 0;
+
+            return (
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="college-code"
+                  className={cn("text-foreground", hasError && "text-destructive")}
+                >
+                  Code / Initialism
+                </Label>
+                <Input
+                  id="college-code"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value.toUpperCase())}
+                  placeholder="e.g. COT"
+                  maxLength={10}
+                  className={cn(
+                    "bg-background border-input font-mono uppercase",
+                    hasError && "border-destructive focus-visible:ring-destructive",
+                  )}
+                />
+                {hasError && (
+                  <p className="text-destructive text-xs mt-1 font-medium">
+                    {field.state.meta.errors.map(getErrorMessage).join(", ")}
+                  </p>
+                )}
+              </div>
+            );
+          }}
         </form.Field>
 
-        {/* ── Dean Appointment Modes ── */}
+        {/* ── Appointed Dean Section ── */}
         <div className="space-y-3 pt-2 border-t border-border">
           <div className="flex items-center justify-between">
             <Label className="text-sm font-semibold text-foreground">Appointed Dean</Label>
@@ -246,7 +276,9 @@ function CollegeFormInner({
                 form.setFieldValue("dean", {
                   type: "new",
                   info: {
-                    account: { personal_details_id: 0, email: "", password: "" },
+                    account: {
+                      email: "",
+                    },
                     details: {
                       institutional_id: "",
                       first_name: "",
@@ -255,7 +287,7 @@ function CollegeFormInner({
                       suffix: null,
                     },
                   },
-                });
+                } as any);
               }
             }}
           >
@@ -275,13 +307,12 @@ function CollegeFormInner({
             </TabsList>
           </Tabs>
 
-          {/* 🚀 MODE A: Searchable Combobox for Existing Faculty */}
+          {/* ── MODE A: Searchable Combobox ── */}
           {deanMode === "existing" && (
             <form.Field name="dean">
               {(field) => {
                 const selectedAccountId =
                   field.state.value?.type === "existing" ? field.state.value.account_id : undefined;
-
                 const selectedUser = facultyUsers.find((u) => u.account.id === selectedAccountId);
 
                 return (
@@ -297,12 +328,14 @@ function CollegeFormInner({
                           role="combobox"
                           aria-expanded={facultyComboboxOpen}
                           disabled={isLoadingFaculty}
-                          className="w-full justify-between bg-background border-input font-normal text-sm"
+                          className="w-full h-10 px-3 flex items-center justify-between bg-background border-input text-foreground font-normal text-sm shadow-xs hover:bg-background/80 focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           {isLoadingFaculty ? (
-                            <span className="text-muted-foreground">Loading faculty...</span>
+                            <span className="text-muted-foreground">
+                              Loading faculty members...
+                            </span>
                           ) : selectedUser ? (
-                            <span className="truncate">
+                            <span className="truncate font-medium text-foreground">
                               {selectedUser.details.last_name}, {selectedUser.details.first_name} (
                               {selectedUser.details.institutional_id})
                             </span>
@@ -315,22 +348,25 @@ function CollegeFormInner({
                         </Button>
                       </PopoverTrigger>
 
-                      <PopoverContent className="w-[490px] p-0 border-border bg-popover text-popover-foreground">
+                      <PopoverContent
+                        align="start"
+                        className="w-(--radix-popover-trigger-width) p-0 border-border bg-popover text-popover-foreground shadow-lg"
+                      >
                         <Command
                           filter={(value, search) => {
-                            // Searches name, ID, or email
                             return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
                           }}
+                          className="w-full"
                         >
                           <CommandInput
-                            placeholder="Type faculty name or ID (e.g. 04-0204-20)..."
+                            placeholder="Type faculty name or ID..."
                             className="h-9 text-xs"
                           />
-                          <CommandList className="max-h-56">
+                          <CommandList className="max-h-56 w-full">
                             <CommandEmpty className="p-3 text-xs text-center text-muted-foreground">
                               No matching faculty members found.
                             </CommandEmpty>
-                            <CommandGroup heading="Available Faculty">
+                            <CommandGroup heading="Available Faculty" className="p-1">
                               {facultyUsers.map((u) => {
                                 const searchableText = `${u.details.last_name}, ${u.details.first_name} ${u.details.institutional_id} ${u.account.email}`;
                                 const isSelected = u.account.id === selectedAccountId;
@@ -346,19 +382,19 @@ function CollegeFormInner({
                                       });
                                       setFacultyComboboxOpen(false);
                                     }}
-                                    className="cursor-pointer text-xs flex items-center justify-between"
+                                    className="cursor-pointer text-xs flex items-center justify-between px-2.5 py-2 rounded-md"
                                   >
-                                    <div className="flex flex-col">
-                                      <span className="font-semibold text-foreground">
+                                    <div className="flex flex-col truncate pr-2">
+                                      <span className="font-semibold text-foreground truncate">
                                         {u.details.last_name}, {u.details.first_name}
                                       </span>
-                                      <span className="text-[11px] text-muted-foreground">
+                                      <span className="text-[11px] text-muted-foreground truncate">
                                         ID: {u.details.institutional_id} • {u.account.email}
                                       </span>
                                     </div>
                                     <Check
                                       className={cn(
-                                        "h-4 w-4 text-primary",
+                                        "h-4 w-4 text-primary shrink-0",
                                         isSelected ? "opacity-100" : "opacity-0",
                                       )}
                                     />
@@ -376,74 +412,160 @@ function CollegeFormInner({
             </form.Field>
           )}
 
-          {/* ── MODE B: Register New Faculty Dean ── */}
           {deanMode === "new" && (
             <div className="space-y-3 p-3 bg-muted/40 rounded-lg border border-border">
               <p className="text-xs font-semibold text-foreground">New Faculty Dean Details</p>
 
               <div className="grid grid-cols-2 gap-2">
                 <form.Field name="dean.info.details.first_name">
-                  {(field) => (
-                    <div className="space-y-1">
-                      <Label className="text-[11px] text-muted-foreground">First Name</Label>
-                      <Input
-                        value={field.state.value || ""}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                        placeholder="John"
-                        className="h-8 text-xs bg-background"
-                      />
-                    </div>
-                  )}
+                  {(field) => {
+                    const hasError =
+                      (field.state.meta.isTouched || form.state.isSubmitted) &&
+                      field.state.meta.errors.length > 0;
+
+                    return (
+                      <div className="space-y-1">
+                        <Label
+                          className={cn(
+                            "text-[11px] text-muted-foreground",
+                            hasError && "text-destructive font-medium",
+                          )}
+                        >
+                          First Name
+                        </Label>
+                        <Input
+                          value={field.state.value || ""}
+                          onBlur={field.handleBlur}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          placeholder="John"
+                          className={cn(
+                            "h-8 text-xs bg-background",
+                            hasError && "border-destructive focus-visible:ring-destructive",
+                          )}
+                        />
+                        {hasError && (
+                          <p className="text-destructive text-[10px] mt-0.5 font-medium">
+                            {field.state.meta.errors.map(getErrorMessage).join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  }}
                 </form.Field>
 
                 <form.Field name="dean.info.details.last_name">
-                  {(field) => (
-                    <div className="space-y-1">
-                      <Label className="text-[11px] text-muted-foreground">Last Name</Label>
-                      <Input
-                        value={field.state.value || ""}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                        placeholder="Doe"
-                        className="h-8 text-xs bg-background"
-                      />
-                    </div>
-                  )}
+                  {(field) => {
+                    const hasError =
+                      (field.state.meta.isTouched || form.state.isSubmitted) &&
+                      field.state.meta.errors.length > 0;
+
+                    return (
+                      <div className="space-y-1">
+                        <Label
+                          className={cn(
+                            "text-[11px] text-muted-foreground",
+                            hasError && "text-destructive font-medium",
+                          )}
+                        >
+                          Last Name
+                        </Label>
+                        <Input
+                          value={field.state.value || ""}
+                          onBlur={field.handleBlur}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          placeholder="Doe"
+                          className={cn(
+                            "h-8 text-xs bg-background",
+                            hasError && "border-destructive focus-visible:ring-destructive",
+                          )}
+                        />
+                        {hasError && (
+                          <p className="text-destructive text-[10px] mt-0.5 font-medium">
+                            {field.state.meta.errors.map(getErrorMessage).join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  }}
                 </form.Field>
               </div>
 
               <form.Field name="dean.info.details.institutional_id">
-                {(field) => (
-                  <div className="space-y-1">
-                    <Label className="text-[11px] text-muted-foreground">Institutional ID</Label>
-                    <Input
-                      value={field.state.value || ""}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      placeholder="e.g. 26-1042-001"
-                      className="h-8 text-xs bg-background"
-                    />
-                  </div>
-                )}
+                {(field) => {
+                  const hasError =
+                    (field.state.meta.isTouched || form.state.isSubmitted) &&
+                    field.state.meta.errors.length > 0;
+
+                  return (
+                    <div className="space-y-1">
+                      <Label
+                        className={cn(
+                          "text-[11px] text-muted-foreground",
+                          hasError && "text-destructive font-medium",
+                        )}
+                      >
+                        Institutional ID
+                      </Label>
+                      <Input
+                        value={field.state.value || ""}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        placeholder="e.g. 26-1042-001"
+                        className={cn(
+                          "h-8 text-xs bg-background",
+                          hasError && "border-destructive focus-visible:ring-destructive",
+                        )}
+                      />
+                      {hasError && (
+                        <p className="text-destructive text-[10px] mt-0.5 font-medium">
+                          {field.state.meta.errors.map(getErrorMessage).join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  );
+                }}
               </form.Field>
 
               <form.Field name="dean.info.account.email">
-                {(field) => (
-                  <div className="space-y-1">
-                    <Label className="text-[11px] text-muted-foreground">Email Address</Label>
-                    <Input
-                      type="email"
-                      value={field.state.value || ""}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      placeholder="dean@pit.edu.ph"
-                      className="h-8 text-xs bg-background"
-                    />
-                  </div>
-                )}
+                {(field) => {
+                  const hasError =
+                    (field.state.meta.isTouched || form.state.isSubmitted) &&
+                    field.state.meta.errors.length > 0;
+
+                  return (
+                    <div className="space-y-1">
+                      <Label
+                        className={cn(
+                          "text-[11px] text-muted-foreground",
+                          hasError && "text-destructive font-medium",
+                        )}
+                      >
+                        Email Address
+                      </Label>
+                      <Input
+                        type="email"
+                        value={field.state.value || ""}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        placeholder="dean@pit.edu.ph"
+                        className={cn(
+                          "h-8 text-xs bg-background",
+                          hasError && "border-destructive focus-visible:ring-destructive",
+                        )}
+                      />
+                      {hasError && (
+                        <p className="text-destructive text-[10px] mt-0.5 font-medium">
+                          {field.state.meta.errors.map(getErrorMessage).join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  );
+                }}
               </form.Field>
             </div>
           )}
         </div>
 
-        {/* ── Dialog Actions ── */}
         <DialogFooter className="pt-4 border-t border-border">
           <Button
             type="button"
@@ -473,7 +595,6 @@ function CollegeFormInner({
         </DialogFooter>
       </form>
 
-      {/* ── Confirm Save Dialog ── */}
       <ConfirmActionDialog
         open={confirmSaveOpen}
         onOpenChange={setConfirmSaveOpen}
@@ -486,10 +607,10 @@ function CollegeFormInner({
             </strong>
             ?
             {pendingValues?.dean?.type === "new" && (
-              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                ⚠️ A new user account will be created and assigned the <strong>SUPERVISOR</strong>{" "}
-                role.
-              </p>
+              <span className="block mt-2 text-xs text-amber-600 dark:text-amber-400">
+                A new user account will be created and appointed as{" "}
+                <strong>SUPERVISOR (Dean)</strong>.
+              </span>
             )}
           </span>
         }
@@ -499,7 +620,6 @@ function CollegeFormInner({
         onConfirm={handleConfirmedSave}
       />
 
-      {/* ── Confirm Discard Dialog ── */}
       <ConfirmActionDialog
         open={confirmDiscardOpen}
         onOpenChange={setConfirmDiscardOpen}
