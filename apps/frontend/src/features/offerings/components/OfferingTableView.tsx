@@ -90,7 +90,7 @@ export function OfferingTableView({
                 <TableCell>
                   {item.faculty ? (
                     <div className="flex items-center gap-2">
-                      <UserCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <UserCheck className="w-4 h-4 text-primary shrink-0" />
                       <div>
                         <p className="text-sm font-semibold text-foreground leading-none">
                           {item.faculty.details.first_name} {item.faculty.details.last_name}
@@ -101,7 +101,7 @@ export function OfferingTableView({
                       </div>
                     </div>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-chart-2/10 text-chart-2 border border-chart-2/20">
                       <UserX className="w-3 h-3" />
                       <span>Unassigned</span>
                     </span>

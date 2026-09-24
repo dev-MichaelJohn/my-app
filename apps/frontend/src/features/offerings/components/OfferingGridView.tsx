@@ -123,7 +123,7 @@ export function OfferingGridView({
                 </p>
                 {item.faculty ? (
                   <div className="flex items-center gap-2">
-                    <UserCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <UserCheck className="w-4 h-4 text-primary shrink-0" />
                     <div className="truncate">
                       <p className="text-xs font-bold text-foreground truncate">
                         {item.faculty.details.first_name} {item.faculty.details.last_name}
@@ -135,7 +135,7 @@ export function OfferingGridView({
                   </div>
                 ) : (
                   <div className="flex items-center justify-between pt-0.5">
-                    <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <span className="text-xs font-semibold text-chart-2 flex items-center gap-1">
                       <UserX className="w-3.5 h-3.5" /> Unassigned
                     </span>
                     {!isArchivedView && (

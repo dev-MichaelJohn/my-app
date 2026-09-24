@@ -313,7 +313,7 @@ function SemesterFormInner({
           >
             {isPending ? (
               <div className="flex items-center gap-2">
-                <Spinner size="sm" className="text-white" />
+                <Spinner size="sm" className="text-primary-foreground" />
                 <span>Saving...</span>
               </div>
             ) : isEditing ? (

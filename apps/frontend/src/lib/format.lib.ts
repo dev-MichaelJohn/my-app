@@ -23,13 +23,13 @@ export const getSemesterStatus = (startDate: string, endDate: string) => {
     return {
       label: "Ongoing",
       variant: "default" as const,
-      color: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+      color: "bg-primary/15 text-primary border-primary/20",
     };
   if (today < startDate)
     return {
       label: "Upcoming",
       variant: "secondary" as const,
-      color: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20",
+      color: "bg-chart-2/15 text-chart-2 border-chart-2/20",
     };
   return {
     label: "Concluded",

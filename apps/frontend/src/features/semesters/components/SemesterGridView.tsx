@@ -82,7 +82,7 @@ export function SemesterGridView({
                       {status.label === "Ongoing" && (
                         <DropdownMenuItem
                           onClick={() => onForceStop(item)}
-                          className="gap-2 text-amber-600 focus:bg-amber-500/10 cursor-pointer font-medium"
+                          className="gap-2 text-chart-2 focus:bg-chart-2/10 cursor-pointer font-medium"
                         >
                           <Square className="w-4 h-4" />
                           <span>Force Stop Term</span>

@@ -566,7 +566,7 @@ function ProgramFormInner({
           >
             {isPending ? (
               <div className="flex items-center gap-2">
-                <Spinner size="sm" className="text-white" />
+                <Spinner size="sm" className="text-primary-foreground" />
                 <span>Saving...</span>
               </div>
             ) : isEditing ? (
@@ -590,7 +590,7 @@ function ProgramFormInner({
             </strong>
             ?
             {pendingValues?.chair?.type === "new" && (
-              <span className="block mt-2 text-xs text-amber-600 dark:text-amber-400">
+              <span className="block mt-2 text-xs text-chart-2">
                 A new faculty account will be created and appointed as{" "}
                 <strong>SUPERVISOR (Program Chair)</strong>.
               </span>
