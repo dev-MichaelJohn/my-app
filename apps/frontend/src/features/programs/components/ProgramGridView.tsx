@@ -17,6 +17,7 @@ import {
   UserCheck,
   ShieldAlert,
   BookOpen,
+  Layers,
 } from "lucide-react";
 import type { GetCollege, GetProgram } from "@my-app/shared";
 import { useNavigate } from "react-router";
@@ -93,6 +94,13 @@ export function ProgramGridView({
                       >
                         <BookOpen className="w-4 h-4 text-primary" />
                         <span>View Courses</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => navigate(`/admin/curriculums?program_id=${item.program.id}`)}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <Layers className="w-4 h-4 text-primary" />
+                        <span>View Curriculums</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => onEdit(item)}

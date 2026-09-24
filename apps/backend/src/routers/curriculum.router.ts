@@ -1,3 +1,4 @@
+import { AuthController } from "@/controllers/auth.controller.js";
 import { CurriculumController } from "@/controllers/curriculum.controller.js";
 import { standardApiLimiter } from "@/libs/limiter.lib.js";
 import { RequirePermission } from "@/middlewares/rbac.middleware.js";
@@ -6,7 +7,9 @@ import { Router, type IRouter } from "express";
 
 const CurriculumRouter: IRouter = Router();
 const curriculumController = new CurriculumController();
+const authController = new AuthController();
 
+CurriculumRouter.use(authController.verifyJWT);
 CurriculumRouter.use(standardApiLimiter);
 
 CurriculumRouter.get(
