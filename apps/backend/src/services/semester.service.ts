@@ -28,6 +28,8 @@ import {
   type ISemesterUpdate,
   type PaginatedData,
 } from "@my-app/shared";
+import { OfferingService, type IOfferingService } from "./offering.service.js";
+import { logger } from "@/libs/logger.lib.js";
 
 export interface ISemesterService {
   getSemesterById(
@@ -199,6 +201,11 @@ export class SemesterService implements ISemesterService {
         if (!created) {
           throw new AppError(500, "Failed to create semester record.");
         }
+
+        const offeringService: IOfferingService = new OfferingService();
+        const generateRes = await offeringService.generateOfferingsForSemester(created.id, tx);
+        if (generateRes.isErr())
+          logger.warn("Offering auto-generation warning:", generateRes.error.message);
 
         return created;
       });

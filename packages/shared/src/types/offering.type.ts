@@ -88,3 +88,9 @@ export const OfferingQuerySchema = z.object({
 
 export type GetOffering = z.infer<typeof GetOfferingSchema>;
 export type OfferingQuery = z.infer<typeof OfferingQuerySchema>;
+export interface GenerateOfferingsSummary {
+  semesterId: number;
+  totalClassesProcessed: number;
+  offeringsCreated: number;
+  message: string;
+}

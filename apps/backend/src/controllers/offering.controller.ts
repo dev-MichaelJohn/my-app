@@ -58,8 +58,18 @@ export class OfferingController {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((offeringId) => {
       return this.offeringService.restoreOffering(offeringId).map((data) => ({
         status: 200,
-        message: "Offering archived successfully.",
+        message: "Offering restored successfully.",
         data,
+      }));
+    });
+  });
+
+  generateOfferings = runAsync((req) => {
+    return ValidateSchema(this.idSchema, req.params.semester_id).asyncAndThen((semesterId) => {
+      return this.offeringService.generateOfferingsForSemester(semesterId).map((summary) => ({
+        status: 200,
+        message: summary.message,
+        data: summary,
       }));
     });
   });

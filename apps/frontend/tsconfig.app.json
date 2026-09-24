@@ -24,7 +24,9 @@
 
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+
+    "strict": true
   },
   "include": ["src"]
 }

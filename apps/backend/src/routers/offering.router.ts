@@ -1,3 +1,4 @@
+import { AuthController } from "@/controllers/auth.controller.js";
 import { OfferingController } from "@/controllers/offering.controller.js";
 import { standardApiLimiter } from "@/libs/limiter.lib.js";
 import { RequirePermission } from "@/middlewares/rbac.middleware.js";
@@ -6,7 +7,9 @@ import { Router, type IRouter } from "express";
 
 const OfferingRouter: IRouter = Router();
 const offeringController = new OfferingController();
+const authController = new AuthController();
 
+OfferingRouter.use(authController.verifyJWT);
 OfferingRouter.use(standardApiLimiter);
 
 OfferingRouter.get(
@@ -43,6 +46,12 @@ OfferingRouter.put(
   "/:id/restore",
   RequirePermission(PERMISSIONS.COURSE_OFFERING_UPDATE),
   offeringController.restoreOffering,
+);
+
+OfferingRouter.post(
+  "/generate/:semester_id",
+  RequirePermission(PERMISSIONS.COURSE_OFFERING_CREATE),
+  offeringController.generateOfferings,
 );
 
 export default OfferingRouter;

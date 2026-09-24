@@ -13,6 +13,7 @@ import {
   Programs,
   Semesters,
   StudentClasses,
+  type GenerateOfferingsSummary,
   type GetOffering,
   type IOfferingInsert,
   type IOfferingUpdate,
@@ -60,6 +61,10 @@ export interface IOfferingService {
   ): ResultAsync<GetOffering, AppError>;
   deleteOffering(id: number, client?: DbClient): ResultAsync<void, AppError>;
   restoreOffering(id: number, client?: DbClient): ResultAsync<GetOffering, AppError>;
+  generateOfferingsForSemester(
+    semesterId: number,
+    client?: DbClient,
+  ): ResultAsync<GenerateOfferingsSummary, AppError>;
 }
 
 export class OfferingService implements IOfferingService {
@@ -500,6 +505,120 @@ export class OfferingService implements IOfferingService {
       if (fullRecord.isErr()) throw fullRecord.error;
 
       return fullRecord.value;
+    });
+  }
+
+  generateOfferingsForSemester(
+    semesterId: number,
+    client: DbClient = db,
+  ): ResultAsync<GenerateOfferingsSummary, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const [semester] = await tx
+        .select()
+        .from(Semesters)
+        .where(and(eq(Semesters.id, semesterId), isNull(Semesters.deleted_at)));
+
+      if (!semester) {
+        throw new AppError(404, "Semester record was not found or is inactive.");
+      }
+
+      const activeClasses = await tx
+        .select({
+          classId: Classes.id,
+          programId: Classes.program_id,
+          yearLevel: Classes.year_level,
+          section: Classes.section,
+        })
+        .from(Classes)
+        .innerJoin(Programs, and(eq(Classes.program_id, Programs.id), isNull(Programs.deleted_at)))
+        .where(isNull(Classes.deleted_at));
+
+      if (activeClasses.length === 0) {
+        return {
+          semesterId,
+          totalClassesProcessed: 0,
+          offeringsCreated: 0,
+          message: "No active classes found to generate offerings for.",
+        };
+      }
+
+      const curriculums = await tx
+        .select({
+          curriculumId: CourseCurriculums.id,
+          programId: CourseCurriculums.program_id,
+          yearLevel: CourseCurriculums.year_level,
+        })
+        .from(CourseCurriculums)
+        .innerJoin(
+          Courses,
+          and(eq(CourseCurriculums.course_id, Courses.id), isNull(Courses.deleted_at)),
+        )
+        .where(
+          and(
+            eq(CourseCurriculums.semester_term, semester.semester_term),
+            isNull(CourseCurriculums.deleted_at),
+          ),
+        );
+
+      const curriculumMap = new Map<string, number[]>();
+      for (const curr of curriculums) {
+        const key = `${curr.programId}:${curr.yearLevel}`;
+        if (!curriculumMap.has(key)) {
+          curriculumMap.set(key, []);
+        }
+        curriculumMap.get(key)!.push(curr.curriculumId);
+      }
+
+      const existingOfferings = await tx
+        .select({
+          classId: CourseOfferings.class_id,
+          curriculumId: CourseOfferings.course_curriculum_id,
+        })
+        .from(CourseOfferings)
+        .where(
+          and(eq(CourseOfferings.semester_id, semesterId), isNull(CourseOfferings.deleted_at)),
+        );
+
+      const existingOfferingSet = new Set(
+        existingOfferings.map((o) => `${o.classId}:${o.curriculumId}`),
+      );
+
+      const offeringsToInsert: {
+        class_id: number;
+        course_curriculum_id: number;
+        semester_id: number;
+        faculty_id: null;
+      }[] = [];
+
+      for (const cls of activeClasses) {
+        const key = `${cls.programId}:${cls.yearLevel}`;
+        const matchingCurriculums = curriculumMap.get(key) || [];
+
+        for (const currId of matchingCurriculums) {
+          const offeringKey = `${cls.classId}:${currId}`;
+
+          if (!existingOfferingSet.has(offeringKey)) {
+            offeringsToInsert.push({
+              class_id: cls.classId,
+              course_curriculum_id: currId,
+              semester_id: semesterId,
+              faculty_id: null,
+            });
+            existingOfferingSet.add(offeringKey);
+          }
+        }
+      }
+
+      if (offeringsToInsert.length > 0) {
+        await tx.insert(CourseOfferings).values(offeringsToInsert);
+      }
+
+      return {
+        semesterId,
+        totalClassesProcessed: activeClasses.length,
+        offeringsCreated: offeringsToInsert.length,
+        message: `Successfully generated ${offeringsToInsert.length} course offering(s) across ${activeClasses.length} class section(s).`,
+      };
     });
   }
 
