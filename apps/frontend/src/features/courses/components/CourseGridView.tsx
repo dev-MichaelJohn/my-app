@@ -8,43 +8,31 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  MoreVertical,
-  Edit,
-  Trash2,
-  RotateCcw,
-  GraduationCap,
-  UserCheck,
-  ShieldAlert,
-  BookOpen,
-} from "lucide-react";
-import type { GetCollege, GetProgram } from "@my-app/shared";
-import { useNavigate } from "react-router";
+import { MoreVertical, Edit, Trash2, RotateCcw, BookOpen, ShieldAlert } from "lucide-react";
+import type { GetProgram, ICourseSelect } from "@my-app/shared";
 
-interface ProgramGridViewProps {
-  programs: GetProgram[];
-  collegesMap: Map<number, GetCollege>;
+interface CourseGridViewProps {
+  courses: ICourseSelect[];
+  programsMap: Map<number, GetProgram>;
   isArchivedView: boolean;
-  onEdit: (program: GetProgram) => void;
-  onDelete: (program: GetProgram) => void;
-  onRestore: (program: GetProgram) => void;
+  onEdit: (course: ICourseSelect) => void;
+  onDelete: (course: ICourseSelect) => void;
+  onRestore: (course: ICourseSelect) => void;
 }
 
-export function ProgramGridView({
-  programs,
-  collegesMap,
+export function CourseGridView({
+  courses,
+  programsMap,
   isArchivedView,
   onEdit,
   onDelete,
   onRestore,
-}: ProgramGridViewProps) {
-  const navigate = useNavigate();
-
-  if (programs.length === 0) {
+}: CourseGridViewProps) {
+  if (courses.length === 0) {
     return (
       <div className="text-center py-12 border border-dashed border-border rounded-xl bg-card">
         <ShieldAlert className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-        <h3 className="font-semibold text-foreground">No academic programs found</h3>
+        <h3 className="font-semibold text-foreground">No courses found</h3>
         <p className="text-xs text-muted-foreground mt-1">Try adjusting your search or filters.</p>
       </div>
     );
@@ -52,30 +40,25 @@ export function ProgramGridView({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {programs.map((item) => {
-        const college = collegesMap.get(item.program.college_id);
+      {courses.map((course) => {
+        const program = programsMap.get(course.program_id);
 
         return (
           <Card
-            key={item.program.id}
+            key={course.id}
             className="border-border bg-card text-card-foreground shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
           >
             <CardHeader className="flex flex-row items-start justify-between pb-2">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                  <GraduationCap className="w-5 h-5" />
+                  <BookOpen className="w-5 h-5" />
                 </div>
                 <Badge
                   variant="outline"
                   className="font-mono font-bold text-primary border-primary/20"
                 >
-                  {item.program.initialism}
+                  {course.initialism}
                 </Badge>
-                {college && (
-                  <span className="text-[11px] font-bold px-2 py-0.5 bg-muted rounded-md text-muted-foreground">
-                    {college.college.initialism}
-                  </span>
-                )}
               </div>
 
               <DropdownMenu>
@@ -88,14 +71,7 @@ export function ProgramGridView({
                   {!isArchivedView ? (
                     <>
                       <DropdownMenuItem
-                        onClick={() => navigate(`/admin/courses?program_id=${item.program.id}`)}
-                        className="gap-2 cursor-pointer"
-                      >
-                        <BookOpen className="w-4 h-4 text-primary" />
-                        <span>View Courses</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => onEdit(item)}
+                        onClick={() => onEdit(course)}
                         className="gap-2 cursor-pointer"
                       >
                         <Edit className="w-4 h-4" />
@@ -103,7 +79,7 @@ export function ProgramGridView({
                       </DropdownMenuItem>
                       <DropdownMenuSeparator className="bg-border" />
                       <DropdownMenuItem
-                        onClick={() => onDelete(item)}
+                        onClick={() => onDelete(course)}
                         className="gap-2 text-destructive cursor-pointer"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -112,7 +88,7 @@ export function ProgramGridView({
                     </>
                   ) : (
                     <DropdownMenuItem
-                      onClick={() => onRestore(item)}
+                      onClick={() => onRestore(course)}
                       className="gap-2 text-primary cursor-pointer"
                     >
                       <RotateCcw className="w-4 h-4" />
@@ -123,36 +99,25 @@ export function ProgramGridView({
               </DropdownMenu>
             </CardHeader>
 
-            <CardContent className="space-y-4 pt-1">
+            <CardContent className="space-y-3 pt-1">
               <h3 className="font-bold text-base text-foreground leading-snug line-clamp-2">
-                {item.program.name}
+                {course.name}
               </h3>
 
-              {/* Program Chair Box */}
-              <div className="p-3 bg-muted/40 border border-border/60 rounded-lg">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                  Program Chair
+              <div className="p-2.5 bg-muted/40 border border-border/60 rounded-lg">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">
+                  Degree Program
                 </p>
-                {item.chair ? (
-                  <div className="flex items-center gap-2">
-                    <UserCheck className="w-4 h-4 text-primary shrink-0" />
-                    <div className="truncate">
-                      <p className="text-xs font-bold text-foreground truncate">
-                        {item.chair.details.first_name} {item.chair.details.last_name}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground truncate">
-                        {item.chair.account.email}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground/70 italic">No Chair Assigned</p>
-                )}
+                <p className="text-xs font-semibold text-foreground truncate">
+                  {program
+                    ? `${program.program.initialism} - ${program.program.name}`
+                    : `Program #${course.program_id}`}
+                </p>
               </div>
             </CardContent>
 
             <CardFooter className="pt-0 text-[11px] text-muted-foreground justify-between border-t border-border/50 py-3">
-              <span>ID: #{item.program.id}</span>
+              <span>Course ID: #{course.id}</span>
               <span>{isArchivedView ? "Archived" : "Active"}</span>
             </CardFooter>
           </Card>

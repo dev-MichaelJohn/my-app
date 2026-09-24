@@ -15,42 +15,31 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import {
-  MoreHorizontal,
-  Edit,
-  Trash2,
-  RotateCcw,
-  UserCheck,
-  ShieldAlert,
-  BookOpen,
-} from "lucide-react";
-import type { GetCollege, GetProgram } from "@my-app/shared";
-import { useNavigate } from "react-router";
+import { MoreHorizontal, Edit, Trash2, RotateCcw, ShieldAlert } from "lucide-react";
+import type { GetProgram, ICourseSelect } from "@my-app/shared";
 
-interface ProgramTableViewProps {
-  programs: GetProgram[];
-  collegesMap: Map<number, GetCollege>;
+interface CourseTableViewProps {
+  courses: ICourseSelect[];
+  programsMap: Map<number, GetProgram>;
   isArchivedView: boolean;
-  onEdit: (program: GetProgram) => void;
-  onDelete: (program: GetProgram) => void;
-  onRestore: (program: GetProgram) => void;
+  onEdit: (course: ICourseSelect) => void;
+  onDelete: (course: ICourseSelect) => void;
+  onRestore: (course: ICourseSelect) => void;
 }
 
-export function ProgramTableView({
-  programs,
-  collegesMap,
+export function CourseTableView({
+  courses,
+  programsMap,
   isArchivedView,
   onEdit,
   onDelete,
   onRestore,
-}: ProgramTableViewProps) {
-  const navigate = useNavigate();
-
-  if (programs.length === 0) {
+}: CourseTableViewProps) {
+  if (courses.length === 0) {
     return (
       <div className="text-center py-12 border border-dashed border-border rounded-xl bg-card">
         <ShieldAlert className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-        <h3 className="font-semibold text-foreground">No academic programs found</h3>
+        <h3 className="font-semibold text-foreground">No courses found</h3>
         <p className="text-xs text-muted-foreground mt-1">Try adjusting your search or filters.</p>
       </div>
     );
@@ -61,59 +50,34 @@ export function ProgramTableView({
       <Table>
         <TableHeader className="bg-muted/40">
           <TableRow className="border-border hover:bg-transparent">
-            <TableHead className="w-[120px] font-bold">Code</TableHead>
-            <TableHead className="font-bold">Program Name</TableHead>
-            <TableHead className="font-bold">Parent College</TableHead>
-            <TableHead className="font-bold">Program Chair</TableHead>
+            <TableHead className="w-[130px] font-bold">Course Code</TableHead>
+            <TableHead className="font-bold">Course Title</TableHead>
+            <TableHead className="font-bold">Academic Program</TableHead>
             <TableHead className="w-[80px] text-right font-bold">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {programs.map((item) => {
-            const college = collegesMap.get(item.program.college_id);
+          {courses.map((course) => {
+            const program = programsMap.get(course.program_id);
 
             return (
-              <TableRow
-                key={item.program.id}
-                className="border-border hover:bg-muted/30 transition"
-              >
+              <TableRow key={course.id} className="border-border hover:bg-muted/30 transition">
                 <TableCell>
                   <Badge
                     variant="outline"
                     className="font-mono font-bold bg-primary/10 text-primary border-primary/20"
                   >
-                    {item.program.initialism}
+                    {course.initialism}
                   </Badge>
                 </TableCell>
-                <TableCell className="font-medium text-foreground">{item.program.name}</TableCell>
+                <TableCell className="font-medium text-foreground">{course.name}</TableCell>
                 <TableCell>
-                  {college ? (
+                  {program ? (
                     <span className="text-xs font-semibold px-2 py-1 bg-muted rounded-md text-foreground">
-                      {college.college.initialism}
+                      {program.program.initialism} - {program.program.name}
                     </span>
                   ) : (
-                    <span className="text-xs text-muted-foreground">
-                      ID: #{item.program.college_id}
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {item.chair ? (
-                    <div className="flex items-center gap-2">
-                      <UserCheck className="w-4 h-4 text-primary" />
-                      <div>
-                        <p className="text-sm font-semibold text-foreground leading-none">
-                          {item.chair.details.first_name} {item.chair.details.last_name}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {item.chair.account.email}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <span className="text-xs font-medium text-muted-foreground/70 italic">
-                      No Chair Assigned
-                    </span>
+                    <span className="text-xs text-muted-foreground">ID: #{course.program_id}</span>
                   )}
                 </TableCell>
                 <TableCell className="text-right">
@@ -130,14 +94,7 @@ export function ProgramTableView({
                       {!isArchivedView ? (
                         <>
                           <DropdownMenuItem
-                            onClick={() => navigate(`/admin/courses?program_id=${item.program.id}`)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <BookOpen className="w-4 h-4 text-primary" />
-                            <span>View Courses</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => onEdit(item)}
+                            onClick={() => onEdit(course)}
                             className="gap-2 cursor-pointer"
                           >
                             <Edit className="w-4 h-4 text-muted-foreground" />
@@ -145,7 +102,7 @@ export function ProgramTableView({
                           </DropdownMenuItem>
                           <DropdownMenuSeparator className="bg-border" />
                           <DropdownMenuItem
-                            onClick={() => onDelete(item)}
+                            onClick={() => onDelete(course)}
                             className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -154,7 +111,7 @@ export function ProgramTableView({
                         </>
                       ) : (
                         <DropdownMenuItem
-                          onClick={() => onRestore(item)}
+                          onClick={() => onRestore(course)}
                           className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
                         >
                           <RotateCcw className="w-4 h-4" />

@@ -4,6 +4,7 @@ import LoginPage from "@/features/auth/page/LoginPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import CollegePage from "@/features/colleges/page/CollegePage";
 import ProgramPage from "@/features/programs/page/ProgramPage";
+import CoursePage from "@/features/courses/page/CoursePage";
 
 export const AppRoutes = createBrowserRouter([
   {
@@ -32,6 +33,10 @@ export const AppRoutes = createBrowserRouter([
           {
             path: "/admin/programs",
             element: <ProgramPage />,
+          },
+          {
+            path: "/admin/courses",
+            element: <CoursePage />,
           },
         ],
       },
