@@ -110,7 +110,7 @@ export default function CollegesPage() {
             setCollegeToEdit(null);
             setFormOpen(true);
           }}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
         >
           <Plus className="w-4 h-4" />
           <span>Add College</span>
@@ -124,7 +124,7 @@ export default function CollegesPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search by name or code..."
-            className="pl-9 bg-card border-border"
+            className="pl-9 bg-card border-border shadow-2xs"
           />
         </div>
 
@@ -145,7 +145,7 @@ export default function CollegesPage() {
             </TabsList>
           </Tabs>
 
-          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-lg bg-card">
+          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-lg bg-card shadow-2xs">
             <Switch
               id="paginate-switch"
               checked={Boolean(query.paginate)}
@@ -181,7 +181,7 @@ export default function CollegesPage() {
                     page: 1,
                   }));
                 }}
-                className="w-16 h-8 text-xs bg-card border-border text-center font-medium"
+                className="w-16 h-8 text-xs bg-card border-border text-center font-medium shadow-2xs"
               />
             </div>
           )}

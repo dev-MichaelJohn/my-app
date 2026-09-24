@@ -139,7 +139,7 @@ export default function CoursePage() {
             setCourseToEdit(null);
             setFormOpen(true);
           }}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
         >
           <Plus className="w-4 h-4" />
           <span>Add Course</span>
@@ -154,7 +154,7 @@ export default function CoursePage() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search course title or code..."
-              className="pl-9 bg-card border-border text-sm"
+              className="pl-9 bg-card border-border text-sm shadow-2xs"
             />
           </div>
 
@@ -162,7 +162,7 @@ export default function CoursePage() {
             value={query.program_id ? String(query.program_id) : "all"}
             onValueChange={handleProgramFilterChange}
           >
-            <SelectTrigger className="w-full sm:w-64 md:w-72 bg-card border-border text-xs h-9">
+            <SelectTrigger className="w-full sm:w-64 md:w-72 bg-card border-border text-xs h-9 shadow-2xs">
               <SelectValue placeholder="All Programs">
                 {selectedProgram ? (
                   <span className="truncate block max-w-[200px] md:max-w-[230px] text-left">
@@ -209,7 +209,7 @@ export default function CoursePage() {
             </TabsList>
           </Tabs>
 
-          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-lg bg-card">
+          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-lg bg-card shadow-2xs">
             <Switch
               id="paginate-switch"
               checked={Boolean(query.paginate)}
@@ -245,7 +245,7 @@ export default function CoursePage() {
                     page: 1,
                   }));
                 }}
-                className="w-16 h-8 text-xs bg-card border-border text-center font-medium"
+                className="w-16 h-8 text-xs bg-card border-border text-center font-medium shadow-2xs"
               />
             </div>
           )}

@@ -134,7 +134,7 @@ export default function SemesterPage() {
             setSemesterToEdit(null);
             setFormOpen(true);
           }}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
         >
           <Plus className="w-4 h-4" />
           <span>Add Semester</span>
@@ -149,7 +149,7 @@ export default function SemesterPage() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search year or dates..."
-              className="pl-9 bg-card border-border text-sm"
+              className="pl-9 bg-card border-border text-sm shadow-2xs"
             />
           </div>
 
@@ -163,7 +163,7 @@ export default function SemesterPage() {
               }))
             }
           >
-            <SelectTrigger className="w-full sm:w-36 bg-card border-border text-xs h-9">
+            <SelectTrigger className="w-full sm:w-36 bg-card border-border text-xs h-9 shadow-2xs">
               <SelectValue placeholder="All Terms" />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border text-xs">
@@ -192,7 +192,7 @@ export default function SemesterPage() {
             </TabsList>
           </Tabs>
 
-          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-lg bg-card">
+          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-lg bg-card shadow-2xs">
             <Switch
               id="paginate-switch"
               checked={Boolean(query.paginate)}
@@ -224,7 +224,7 @@ export default function SemesterPage() {
                     page: 1,
                   }));
                 }}
-                className="w-16 h-8 text-xs bg-card border-border text-center font-medium"
+                className="w-16 h-8 text-xs bg-card border-border text-center font-medium shadow-2xs"
               />
             </div>
           )}
