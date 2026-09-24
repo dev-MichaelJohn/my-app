@@ -80,6 +80,8 @@ export class UserService implements IUserService {
             email: Accounts.email,
             is_verified: Accounts.is_verified,
             deleted_at: Accounts.deleted_at,
+            created_at: Accounts.created_at,
+            updated_at: Accounts.updated_at,
           },
           details: {
             id: PersonalDetails.id,
@@ -89,6 +91,8 @@ export class UserService implements IUserService {
             middle_name: PersonalDetails.middle_name,
             suffix: PersonalDetails.suffix,
             deleted_at: PersonalDetails.deleted_at,
+            created_at: PersonalDetails.created_at,
+            updated_at: PersonalDetails.updated_at,
           },
           roles: sql<GetUser["roles"]>`
             COALESCE(
@@ -123,6 +127,8 @@ export class UserService implements IUserService {
             email: Accounts.email,
             is_verified: Accounts.is_verified,
             deleted_at: Accounts.deleted_at,
+            created_at: Accounts.created_at,
+            updated_at: Accounts.updated_at,
           },
           details: {
             id: PersonalDetails.id,
@@ -132,6 +138,8 @@ export class UserService implements IUserService {
             middle_name: PersonalDetails.middle_name,
             suffix: PersonalDetails.suffix,
             deleted_at: PersonalDetails.deleted_at,
+            created_at: PersonalDetails.created_at,
+            updated_at: PersonalDetails.updated_at,
           },
           roles: sql<GetUser["roles"]>`
             COALESCE(
@@ -172,6 +180,8 @@ export class UserService implements IUserService {
                 password: Accounts.password,
                 is_verified: Accounts.is_verified,
                 deleted_at: Accounts.deleted_at,
+                created_at: Accounts.created_at,
+                updated_at: Accounts.updated_at,
               },
               details: {
                 id: PersonalDetails.id,
@@ -181,6 +191,8 @@ export class UserService implements IUserService {
                 middle_name: PersonalDetails.middle_name,
                 suffix: PersonalDetails.suffix,
                 deleted_at: PersonalDetails.deleted_at,
+                created_at: PersonalDetails.created_at,
+                updated_at: PersonalDetails.updated_at,
               },
               roles: sql<GetUser["roles"]>`
                 COALESCE(
@@ -285,6 +297,8 @@ export class UserService implements IUserService {
               email: Accounts.email,
               is_verified: Accounts.is_verified,
               deleted_at: Accounts.deleted_at,
+              created_at: Accounts.created_at,
+              updated_at: Accounts.updated_at,
             },
             details: {
               id: PersonalDetails.id,
@@ -294,6 +308,8 @@ export class UserService implements IUserService {
               middle_name: PersonalDetails.middle_name,
               suffix: PersonalDetails.suffix,
               deleted_at: PersonalDetails.deleted_at,
+              created_at: PersonalDetails.created_at,
+              updated_at: PersonalDetails.updated_at,
             },
             roles: sql<GetUser["roles"]>`
               COALESCE(
