@@ -3,6 +3,7 @@ import { AuthGuard, GuestGuard } from "@/components/route-guards";
 import LoginPage from "@/features/auth/page/LoginPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import CollegePage from "@/features/colleges/page/CollegePage";
+import ProgramPage from "@/features/programs/page/ProgramPage";
 
 export const AppRoutes = createBrowserRouter([
   {
@@ -27,6 +28,10 @@ export const AppRoutes = createBrowserRouter([
           {
             path: "/admin/colleges",
             element: <CollegePage />,
+          },
+          {
+            path: "/admin/programs",
+            element: <ProgramPage />,
           },
         ],
       },

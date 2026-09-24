@@ -16,8 +16,10 @@ import {
   Building2,
   UserCheck,
   ShieldAlert,
+  GraduationCap,
 } from "lucide-react";
 import type { GetCollege } from "@my-app/shared";
+import { useNavigate } from "react-router";
 
 interface CollegeGridViewProps {
   colleges: GetCollege[];
@@ -34,6 +36,8 @@ export function CollegeGridView({
   onDelete,
   onRestore,
 }: CollegeGridViewProps) {
+  const navigate = useNavigate();
+
   if (colleges.length === 0) {
     return (
       <div className="text-center py-12 border border-dashed border-border rounded-xl bg-card">
@@ -73,6 +77,13 @@ export function CollegeGridView({
               <DropdownMenuContent align="end" className="w-36 border-border bg-popover">
                 {!isArchivedView ? (
                   <>
+                    <DropdownMenuItem
+                      onClick={() => navigate(`/admin/programs?college_id=${item.college.id}`)}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <GraduationCap className="w-4 h-4 text-primary" />
+                      <span>View Programs</span>
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onEdit(item)} className="gap-2 cursor-pointer">
                       <Edit className="w-4 h-4" />
                       <span>Edit</span>

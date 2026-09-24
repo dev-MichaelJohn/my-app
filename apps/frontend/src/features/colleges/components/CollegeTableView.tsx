@@ -15,8 +15,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Edit, Trash2, RotateCcw, UserCheck, ShieldAlert } from "lucide-react";
+import {
+  MoreHorizontal,
+  Edit,
+  Trash2,
+  RotateCcw,
+  UserCheck,
+  ShieldAlert,
+  GraduationCap,
+} from "lucide-react";
 import type { GetCollege } from "@my-app/shared";
+import { useNavigate } from "react-router";
 
 interface CollegeTableViewProps {
   colleges: GetCollege[];
@@ -33,6 +42,8 @@ export function CollegeTableView({
   onDelete,
   onRestore,
 }: CollegeTableViewProps) {
+  const navigate = useNavigate();
+
   if (colleges.length === 0) {
     return (
       <div className="text-center py-12 border border-dashed border-border rounded-xl bg-card">
@@ -98,6 +109,13 @@ export function CollegeTableView({
                   >
                     {!isArchivedView ? (
                       <>
+                        <DropdownMenuItem
+                          onClick={() => navigate(`/admin/programs?college_id=${item.college.id}`)}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <GraduationCap className="w-4 h-4 text-primary" />
+                          <span>View Programs</span>
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => onEdit(item)}
                           className="gap-2 cursor-pointer"
