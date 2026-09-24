@@ -15,6 +15,7 @@ import { useVerifyOTP, useLogin } from "../hooks/useAuth";
 import type { ApiError } from "@/lib/api.lib";
 import { getErrorMessage } from "@/lib/error.lib";
 import { maskEmail } from "@/lib/format.lib";
+import { Spinner } from "@/components/ui/spinner";
 
 interface VerifyOTPFormProps {
   email: string;
@@ -149,13 +150,19 @@ export const VerifyOTPForm = ({
             disabled={verifyMutation.isPending || form.state.values.code.length !== OTP_LENGTH}
             className="w-full inline-flex justify-center items-center px-4 py-2.5 bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground text-sm font-medium rounded-md shadow-sm disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition"
           >
-            {verifyMutation.isPending ? "Verifying code..." : "Verify & Log In"}
+            {verifyMutation.isPending ? (
+              <div className="flex items-center gap-2">
+                <Spinner size="sm" className="text-primary-foreground" />
+                <span>Verifying code...</span>
+              </div>
+            ) : (
+              "Verify & Log In"
+            )}
           </button>
         </form>
       </CardContent>
 
       <CardFooter className="flex-col gap-3">
-        {/* Resend Countdown Action */}
         <div className="text-center text-xs text-muted-foreground">
           Didn't receive the code?{" "}
           {secondsLeft > 0 ? (
@@ -165,9 +172,10 @@ export const VerifyOTPForm = ({
               type="button"
               onClick={handleResend}
               disabled={resendMutation.isPending}
-              className="font-medium text-primary hover:underline focus-visible:outline-none"
+              className="font-medium text-primary hover:underline focus-visible:outline-none inline-flex items-center gap-1.5 ml-1"
             >
-              {resendMutation.isPending ? "Resending..." : "Resend Code"}
+              {resendMutation.isPending && <Spinner size="xs" />}
+              <span>{resendMutation.isPending ? "Resending..." : "Resend Code"}</span>
             </button>
           )}
         </div>

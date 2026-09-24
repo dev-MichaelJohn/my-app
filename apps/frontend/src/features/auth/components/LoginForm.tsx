@@ -13,6 +13,7 @@ import { useLogin } from "../hooks/useAuth";
 import type { ApiError } from "@/lib/api.lib";
 import { Link } from "react-router";
 import { getErrorMessage } from "@/lib/error.lib";
+import { Spinner } from "@/components/ui/spinner";
 
 interface LoginFormProps {
   initialValues?: LoginAccount;
@@ -121,7 +122,14 @@ export const LoginForm = ({ initialValues, onSuccess }: LoginFormProps) => {
             disabled={loginMutation.isPending}
             className="w-full mt-2 inline-flex justify-center items-center px-4 py-2.5 bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground text-sm font-medium rounded-md shadow-sm disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition"
           >
-            {loginMutation.isPending ? "Sending code..." : "Next"}
+            {loginMutation.isPending ? (
+              <div className="flex items-center gap-2">
+                <Spinner size="sm" className="text-primary-foreground" />
+                <span>Sending code...</span>
+              </div>
+            ) : (
+              "Next"
+            )}
           </button>
         </form>
       </CardContent>
