@@ -21,7 +21,9 @@ const passwordField = (schema: z.ZodString) =>
     })
     .refine((v) => /[!@#$%^&*_-]/.test(v), {
       message: 'Password must have at least one special character ("!@#$%^&*_-").',
-    });
+    })
+    .nullable()
+    .optional();
 
 const personalDetailsIdField = (schema: z.ZodNumber) =>
   schema.int("Personal details ID must be an integer.").positive("Invalid personal details ID.");
