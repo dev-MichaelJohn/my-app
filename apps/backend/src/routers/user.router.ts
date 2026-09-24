@@ -1,3 +1,4 @@
+import { AuthController } from "@/controllers/auth.controller.js";
 import { UserController } from "@/controllers/user.controller.js";
 import { standardApiLimiter } from "@/libs/limiter.lib.js";
 import { RequirePermission } from "@/middlewares/rbac.middleware.js";
@@ -6,7 +7,9 @@ import { Router, type IRouter } from "express";
 
 const UserRouter: IRouter = Router();
 const userController = new UserController();
+const authController = new AuthController();
 
+UserRouter.use(authController.verifyJWT);
 UserRouter.use(standardApiLimiter);
 
 UserRouter.get("/:id", RequirePermission(PERMISSIONS.ACCOUNT_READ), userController.getUserById);

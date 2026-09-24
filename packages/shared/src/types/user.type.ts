@@ -127,7 +127,7 @@ export const UserQuerySchema = z.object({
 });
 
 export const CreateUserSchema = z.object({
-  account: AccountInsert,
+  account: AccountInsert.omit({ personal_details_id: true }),
   details: PersonalDetailsInsert,
   role: z.enum(SystemRoles.enumValues),
 });

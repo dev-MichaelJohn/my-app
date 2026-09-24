@@ -1,16 +1,20 @@
 import { useState, useEffect } from "react";
-import { LayoutGrid, List, Search, Plus } from "lucide-react";
+import {
+  LayoutGrid,
+  List,
+  Search,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { toast } from "sonner"; // 👈 Sonner
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 import {
   useColleges,
   useDeleteCollege,
@@ -32,10 +36,14 @@ export default function CollegesPage() {
     return (localStorage.getItem("colleges_view_mode") as "table" | "grid") || "grid";
   });
 
+  useEffect(() => {
+    localStorage.setItem("colleges_view_mode", viewMode);
+  }, [viewMode]);
+
   const [query, setQuery] = useState<CollegeQuery>({
     paginate: true,
     page: 1,
-    limit: 9,
+    limit: 10,
     search: "",
     is_archived: false,
     sort_by: "name",
@@ -52,7 +60,6 @@ export default function CollegesPage() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [collegeToEdit, setCollegeToEdit] = useState<GetCollege | null>(null);
-
   const [archiveTarget, setArchiveTarget] = useState<GetCollege | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<GetCollege | null>(null);
 
@@ -65,7 +72,6 @@ export default function CollegesPage() {
 
   const handleArchiveConfirm = async () => {
     if (!archiveTarget) return;
-
     try {
       await deleteMutation.mutateAsync(archiveTarget.college.id);
       toast.success(`College "${archiveTarget.college.initialism}" was archived.`);
@@ -78,7 +84,6 @@ export default function CollegesPage() {
 
   const handleRestoreConfirm = async () => {
     if (!restoreTarget) return;
-
     try {
       await restoreMutation.mutateAsync(restoreTarget.college.id);
       toast.success(`College "${restoreTarget.college.initialism}" has been restored.`);
@@ -91,11 +96,12 @@ export default function CollegesPage() {
 
   return (
     <div className="space-y-6">
+      {/* ── Page Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Colleges</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Manage academic colleges and appointed deans.
+            Manage institutional colleges and appointed academic deans.
           </p>
         </div>
 
@@ -112,7 +118,7 @@ export default function CollegesPage() {
       </div>
 
       <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
-        <div className="relative w-full lg:w-80">
+        <div className="relative w-full lg:w-72">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={searchInput}
@@ -139,27 +145,46 @@ export default function CollegesPage() {
             </TabsList>
           </Tabs>
 
-          <Select
-            value={!query.paginate ? "all" : String(query.limit ?? 9)}
-            onValueChange={(val) => {
-              setQuery((prev) => ({
-                ...prev,
-                paginate: val !== "all",
-                limit: val === "all" ? (prev.limit ?? 9) : Number(val),
-                page: 1,
-              }));
-            }}
-          >
-            <SelectTrigger className="w-[110px] h-9 text-xs bg-card border-border">
-              <SelectValue placeholder="Page Size" />
-            </SelectTrigger>
-            <SelectContent className="bg-popover border-border text-xs">
-              <SelectItem value="9">9 per page</SelectItem>
-              <SelectItem value="18">18 per page</SelectItem>
-              <SelectItem value="36">36 per page</SelectItem>
-              <SelectItem value="all">Show All</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-lg bg-card">
+            <Switch
+              id="paginate-switch"
+              checked={Boolean(query.paginate)}
+              onCheckedChange={(checked) =>
+                setQuery((prev) => ({
+                  ...prev,
+                  paginate: checked,
+                  page: 1,
+                }))
+              }
+            />
+            <Label
+              htmlFor="paginate-switch"
+              className="text-xs font-medium cursor-pointer select-none text-foreground"
+            >
+              Pagination
+            </Label>
+          </div>
+
+          {query.paginate && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span>Per page:</span>
+              <Input
+                type="number"
+                min={1}
+                max={100}
+                value={query.limit ?? 10}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setQuery((prev) => ({
+                    ...prev,
+                    limit: val > 0 ? Math.min(val, 100) : 10,
+                    page: 1,
+                  }));
+                }}
+                className="w-16 h-8 text-xs bg-card border-border text-center font-medium"
+              />
+            </div>
+          )}
 
           <div className="flex items-center border border-border rounded-lg bg-muted p-0.5">
             <Button
@@ -167,6 +192,7 @@ export default function CollegesPage() {
               size="icon"
               className="h-7 w-7 rounded-md"
               onClick={() => setViewMode("grid")}
+              title="Grid View"
             >
               <LayoutGrid className="w-4 h-4" />
             </Button>
@@ -175,6 +201,7 @@ export default function CollegesPage() {
               size="icon"
               className="h-7 w-7 rounded-md"
               onClick={() => setViewMode("table")}
+              title="Table View"
             >
               <List className="w-4 h-4" />
             </Button>
@@ -218,6 +245,84 @@ export default function CollegesPage() {
         )}
       </div>
 
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-4 text-xs text-muted-foreground">
+        <div>
+          {query.paginate && pagination ? (
+            <span>
+              Showing{" "}
+              <strong className="text-foreground">
+                {colleges.length > 0 ? (pagination.currentPage - 1) * (query.limit ?? 10) + 1 : 0}
+              </strong>{" "}
+              to{" "}
+              <strong className="text-foreground">
+                {Math.min(pagination.currentPage * (query.limit ?? 10), pagination.totalItems)}
+              </strong>{" "}
+              of <strong className="text-foreground">{pagination.totalItems}</strong> colleges
+            </span>
+          ) : (
+            <span>
+              Showing all <strong className="text-foreground">{colleges.length}</strong>{" "}
+              {query.is_archived ? "archived" : "active"} college(s) (Unpaginated)
+            </span>
+          )}
+        </div>
+
+        {query.paginate && pagination && (
+          <div className="flex items-center gap-1.5">
+            <span className="mr-2">
+              Page <strong className="text-foreground">{pagination.currentPage}</strong> of{" "}
+              <strong className="text-foreground">{Math.max(1, pagination.totalPage)}</strong>
+            </span>
+
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 border-border"
+              disabled={!pagination.hasPrev}
+              onClick={() => setQuery((prev) => ({ ...prev, page: 1 }))}
+              title="First Page"
+            >
+              <ChevronsLeft className="w-4 h-4" />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 gap-1 border-border"
+              disabled={!pagination.hasPrev}
+              onClick={() =>
+                setQuery((prev) => ({ ...prev, page: Math.max(1, (prev.page ?? 1) - 1) }))
+              }
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Prev</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 gap-1 border-border"
+              disabled={!pagination.hasNext}
+              onClick={() => setQuery((prev) => ({ ...prev, page: (prev.page ?? 1) + 1 }))}
+            >
+              <span>Next</span>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 border-border"
+              disabled={!pagination.hasNext}
+              onClick={() => setQuery((prev) => ({ ...prev, page: pagination.totalPage }))}
+              title="Last Page"
+            >
+              <ChevronsRight className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+
       <CollegeFormDialog open={formOpen} onOpenChange={setFormOpen} collegeToEdit={collegeToEdit} />
 
       <ConfirmActionDialog
@@ -230,7 +335,7 @@ export default function CollegesPage() {
             <strong>
               {archiveTarget?.college.name} ({archiveTarget?.college.initialism})
             </strong>
-            ? This will hide the college from academic listings.
+            ?
           </span>
         }
         confirmLabel="Archive College"
@@ -248,8 +353,8 @@ export default function CollegesPage() {
             This will reactivate{" "}
             <strong>
               {restoreTarget?.college.name} ({restoreTarget?.college.initialism})
-            </strong>{" "}
-            and make it available for academic programs again.
+            </strong>
+            .
           </span>
         }
         confirmLabel="Restore College"
