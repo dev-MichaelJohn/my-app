@@ -71,4 +71,14 @@ export class SemesterController {
       }));
     });
   });
+
+  forceStopSemester = runAsync((req) => {
+    return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((semesterId) => {
+      return this.semesterService.forceStopSemester(semesterId).map((data) => ({
+        status: 200,
+        message: "Academic semester concluded successfully.",
+        data,
+      }));
+    });
+  });
 }

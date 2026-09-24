@@ -54,4 +54,10 @@ SemesterRouter.put(
   semesterController.restoreSemester,
 );
 
+SemesterRouter.put(
+  "/:id/force-stop",
+  RequirePermission(PERMISSIONS.SEMESTER_UPDATE),
+  semesterController.forceStopSemester,
+);
+
 export default SemesterRouter;

@@ -49,6 +49,7 @@ export interface ISemesterService {
   deleteSemester(id: number, client?: DbClient): ResultAsync<void, AppError>;
   restoreSemester(id: number, client?: DbClient): ResultAsync<ISemesterSelect, AppError>;
   validateSemesterOpen(semesterId: number, tx: PgTransaction): Promise<void>;
+  forceStopSemester(id: number, client?: DbClient): ResultAsync<ISemesterSelect, AppError>;
 }
 
 export class SemesterService implements ISemesterService {
@@ -331,6 +332,35 @@ export class SemesterService implements ISemesterService {
         400,
         `Cannot enroll student: The ${semester.term} Semester (A.Y. ${semester.sy_start}-${semester.sy_end}) has already concluded on ${semester.end_date}.`,
       );
+  }
+
+  forceStopSemester(id: number, client: DbClient = db): ResultAsync<ISemesterSelect, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const existing = await this.getSemesterById(id, tx);
+      if (existing.isErr()) throw existing.error;
+      const current = existing.value;
+
+      const yesterdayDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const yesterday = yesterdayDate.toISOString().slice(0, 10);
+
+      const finalEndDate =
+        new Date(current.start_date) > new Date(yesterday) ? current.start_date : yesterday;
+
+      const [updated] = await tx
+        .update(Semesters)
+        .set({
+          end_date: finalEndDate,
+          updated_at: new Date(),
+        })
+        .where(and(eq(Semesters.id, id), isNull(Semesters.deleted_at)))
+        .returning();
+
+      if (!updated) {
+        throw new AppError(500, "Failed to force stop semester.");
+      }
+
+      return updated;
+    });
   }
 
   private async checkSemesterDependencies(semesterId: number, tx: PgTransaction): Promise<void> {

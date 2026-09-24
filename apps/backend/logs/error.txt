@@ -45,3 +45,5 @@
 [2026-09-23 07:34:09:349] [ERROR]: Unhandled Database Query Error: Invalid time value
 [2026-09-23 07:34:30:3430] [ERROR]: Unhandled Database Query Error: Invalid time value
 [2026-09-23 07:35:28:3528] [ERROR]: Unhandled Database Query Error: Invalid time value
+[2026-09-24 21:50:41:5041] [ERROR]: Unhandled Database Query Error: Cannot use 'in' operator to search for 'transaction' in false
+[2026-09-24 21:51:08:518] [ERROR]: Unhandled Database Query Error: Cannot use 'in' operator to search for 'transaction' in false
