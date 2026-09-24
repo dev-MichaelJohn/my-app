@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   ClipboardList,
   UserCheck,
+  Calendar,
 } from "lucide-react";
 
 interface NavItem {
@@ -33,6 +34,12 @@ const NAVIGATION_SECTIONS: NavSection[] = [
   {
     heading: "Institutional Setup",
     items: [
+      {
+        title: "Semesters",
+        href: "/admin/semesters",
+        icon: Calendar,
+        permission: PERMISSIONS.SEMESTER_READ,
+      },
       {
         title: "Colleges",
         href: "/admin/colleges",

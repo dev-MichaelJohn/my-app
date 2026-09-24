@@ -8,7 +8,7 @@ export class ClassController {
 
   private idSchema = z.coerce.number().int().positive("Invalid Class ID provided.");
 
-  getCourseById = runAsync((req, _res) => {
+  getClassById = runAsync((req, _res) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((classId) => {
       return this.classService.getClassById(classId).map((data) => ({
         status: 200,
