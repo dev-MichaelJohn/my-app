@@ -95,3 +95,4 @@ apps/backend/logs/*
 .AppleDouble
 .LSOverride
 Thumbs.db
+apps/backend/logs/*.txt
