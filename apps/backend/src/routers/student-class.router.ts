@@ -1,5 +1,5 @@
 import { AuthController } from "@/controllers/auth.controller.js";
-import { StudentClassController } from "@/controllers/student-class.service.js";
+import { StudentClassController } from "@/controllers/student-class.controller.js";
 import { standardApiLimiter } from "@/libs/limiter.lib.js";
 import { RequirePermission } from "@/middlewares/rbac.middleware.js";
 import { PERMISSIONS } from "@my-app/shared";
