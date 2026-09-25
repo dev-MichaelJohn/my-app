@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,8 +34,13 @@ import { CurriculumFormDialog } from "../components/CurriculumFormDialog";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { YearLevelEnum, type CurriculumQuery, type GetCurriculum } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
+import { useQueryClient } from "@tanstack/react-query";
+import { CsvImportDialog } from "@/components/ui/csv-import-dialog";
 
 export default function CurriculumPage() {
+  const [importOpen, setImportOpen] = useState(false);
+  const queryClient = useQueryClient();
+
   const [searchParams, setSearchParams] = useSearchParams();
   const programIdParam = searchParams.get("program_id");
 
@@ -133,16 +139,28 @@ export default function CurriculumPage() {
           </p>
         </div>
 
-        <Button
-          onClick={() => {
-            setCurriculumToEdit(null);
-            setFormOpen(true);
-          }}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Curriculum</span>
-        </Button>
+        <div className="flex gap-2 items-center">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setImportOpen(true);
+            }}
+            className="gap-2 h-9 text-xs border-border shadow-2xs"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Import CSV</span>
+          </Button>
+          <Button
+            onClick={() => {
+              setCurriculumToEdit(null);
+              setFormOpen(true);
+            }}
+            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Curriculum</span>
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
@@ -446,6 +464,14 @@ export default function CurriculumPage() {
         variant="primary"
         isLoading={restoreMutation.isPending}
         onConfirm={handleRestoreConfirm}
+      />
+
+      <CsvImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entity="curriculums"
+        entityTitle="Curriculums"
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["curriculums"] })}
       />
     </div>
   );

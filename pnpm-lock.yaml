@@ -367,6 +367,9 @@ importers:
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      papaparse:
+        specifier: ^5.7.0
+        version: 5.7.0
       react:
         specifier: ^19.2.8
         version: 19.3.0
@@ -398,6 +401,9 @@ importers:
       '@types/node':
         specifier: ^24.13.3
         version: 24.13.6
+      '@types/papaparse':
+        specifier: ^5.5.2
+        version: 5.5.2
       '@types/react':
         specifier: ^19.2.18
         version: 19.3.0

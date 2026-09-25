@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,8 +31,13 @@ import { CollegeFormDialog } from "@/features/colleges/components/CollegeFormDia
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import type { CollegeQuery, GetCollege } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
+import { useQueryClient } from "@tanstack/react-query";
+import { CsvImportDialog } from "@/components/ui/csv-import-dialog";
 
 export default function CollegesPage() {
+  const [importOpen, setImportOpen] = useState(false);
+  const queryClient = useQueryClient();
+
   const [viewMode, setViewMode] = useState<"table" | "grid">(() => {
     return (localStorage.getItem("colleges_view_mode") as "table" | "grid") || "grid";
   });
@@ -96,7 +102,6 @@ export default function CollegesPage() {
 
   return (
     <div className="space-y-6">
-      {/* ── Page Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Colleges</h1>
@@ -105,16 +110,28 @@ export default function CollegesPage() {
           </p>
         </div>
 
-        <Button
-          onClick={() => {
-            setCollegeToEdit(null);
-            setFormOpen(true);
-          }}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add College</span>
-        </Button>
+        <div className="flex gap-2 items-center">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setImportOpen(true);
+            }}
+            className="gap-2 h-9 text-xs border-border shadow-2xs"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Import CSV</span>
+          </Button>
+          <Button
+            onClick={() => {
+              setCollegeToEdit(null);
+              setFormOpen(true);
+            }}
+            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add College</span>
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
@@ -361,6 +378,14 @@ export default function CollegesPage() {
         variant="primary"
         isLoading={restoreMutation.isPending}
         onConfirm={handleRestoreConfirm}
+      />
+
+      <CsvImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entity="colleges"
+        entityTitle="Colleges"
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["colleges"] })}
       />
     </div>
   );

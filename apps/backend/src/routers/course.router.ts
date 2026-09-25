@@ -29,7 +29,7 @@ CourseRouter.put(
 );
 
 CourseRouter.delete(
-  "/",
+  "/:id",
   RequirePermission(PERMISSIONS.COURSE_DELETE),
   courseController.deleteCourse,
 );
