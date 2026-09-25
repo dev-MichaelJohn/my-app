@@ -7,9 +7,11 @@ import {
   ClassStudentQuerySchema,
   ClassStudents,
   ClassStudentUpdate,
+  CourseOfferings,
   PersonalDetails,
   Programs,
   Semesters,
+  StudentClasses,
   type GetClassStudent,
   type IClassStudentInsert,
   type IClassStudentUpdate,
@@ -26,6 +28,7 @@ import {
   desc,
   eq,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   ne,
@@ -307,6 +310,13 @@ export class ClassStudentService implements IClassStudentService {
           enrollmentId = created.id;
         }
 
+        await this.syncStudentWithClassOfferings(
+          parsed.student_account_id,
+          parsed.class_id,
+          parsed.semester_id,
+          tx,
+        );
+
         const fullRecord = await this.getClassStudentById(enrollmentId, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
@@ -329,6 +339,7 @@ export class ClassStudentService implements IClassStudentService {
       return WithTransaction(client, async (tx) => {
         const existing = await this.getClassStudentById(id, tx);
         if (existing.isErr()) throw existing.error;
+        const current = existing.value;
 
         if (parsed.class_id) {
           const classResult = await this.classService.getClassById(parsed.class_id, tx);
@@ -348,6 +359,10 @@ export class ClassStudentService implements IClassStudentService {
             throw new AppError(400, "The selected account does not have a STUDENT role.");
         }
 
+        const targetStudentId = parsed.student_account_id || current.student.account.id;
+        const targetClassId = parsed.class_id || current.class.id;
+        const targetSemId = parsed.semester_id || current.semester.id;
+
         const [updated] = await tx
           .update(ClassStudents)
           .set(parsed)
@@ -355,6 +370,8 @@ export class ClassStudentService implements IClassStudentService {
           .returning({ id: ClassStudents.id });
 
         if (!updated) throw new AppError(500, "Failed to update enrollment record.");
+
+        await this.syncStudentWithClassOfferings(targetStudentId, targetClassId, targetSemId, tx);
 
         const fullRecord = await this.getClassStudentById(id, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
@@ -368,6 +385,9 @@ export class ClassStudentService implements IClassStudentService {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getClassStudentById(id, tx);
       if (existing.isErr()) throw existing.error;
+      const current = existing.value;
+
+      const deleteTime = new Date();
 
       const [deleted] = await tx
         .update(ClassStudents)
@@ -377,6 +397,31 @@ export class ClassStudentService implements IClassStudentService {
 
       if (!deleted) {
         throw new AppError(404, "Enrollment record was not found or has already been deleted.");
+      }
+
+      const classOfferings = await tx
+        .select({ id: CourseOfferings.id })
+        .from(CourseOfferings)
+        .where(
+          and(
+            eq(CourseOfferings.class_id, current.class.id),
+            eq(CourseOfferings.semester_id, current.semester.id),
+          ),
+        );
+
+      if (classOfferings.length > 0) {
+        const offeringIds = classOfferings.map((o) => o.id);
+
+        await tx
+          .update(StudentClasses)
+          .set({ deleted_at: deleteTime })
+          .where(
+            and(
+              eq(StudentClasses.student_account_id, current.student.account.id),
+              inArray(StudentClasses.course_offering_id, offeringIds),
+              isNull(StudentClasses.deleted_at),
+            ),
+          );
       }
 
       return undefined;
@@ -426,6 +471,13 @@ export class ClassStudentService implements IClassStudentService {
 
       if (!restored) throw new AppError(500, "Failed to restore enrollment record.");
 
+      await this.syncStudentWithClassOfferings(
+        current.student.account.id,
+        current.class.id,
+        current.semester.id,
+        tx,
+      );
+
       const fullRecord = await this.getClassStudentById(id, tx);
       if (fullRecord.isErr()) throw fullRecord.error;
 
@@ -459,5 +511,63 @@ export class ClassStudentService implements IClassStudentService {
         400,
         `Cannot enroll student: The ${semester.term} Semester (A.Y. ${semester.sy_start}-${semester.sy_end}) has already concluded on ${semester.end_date}.`,
       );
+  }
+
+  private async syncStudentWithClassOfferings(
+    studentAccountId: number,
+    classId: number,
+    semesterId: number,
+    tx: PgTransaction,
+  ): Promise<void> {
+    const offerings = await tx
+      .select({ id: CourseOfferings.id })
+      .from(CourseOfferings)
+      .where(
+        and(
+          eq(CourseOfferings.class_id, classId),
+          eq(CourseOfferings.semester_id, semesterId),
+          isNull(CourseOfferings.deleted_at),
+        ),
+      );
+
+    if (offerings.length === 0) return;
+
+    const offeringIds = offerings.map((o) => o.id);
+    const existingStudentClasses = await tx
+      .select({
+        id: StudentClasses.id,
+        offeringId: StudentClasses.course_offering_id,
+        deletedAt: StudentClasses.deleted_at,
+      })
+      .from(StudentClasses)
+      .where(
+        and(
+          eq(StudentClasses.student_account_id, studentAccountId),
+          inArray(StudentClasses.course_offering_id, offeringIds),
+        ),
+      );
+
+    const existingMap = new Map(existingStudentClasses.map((sc) => [sc.offeringId, sc]));
+    const newEnrollments: { student_account_id: number; course_offering_id: number }[] = [];
+
+    for (const offering of offerings) {
+      const match = existingMap.get(offering.id);
+
+      if (!match) {
+        newEnrollments.push({
+          student_account_id: studentAccountId,
+          course_offering_id: offering.id,
+        });
+      } else if (match.deletedAt !== null) {
+        await tx
+          .update(StudentClasses)
+          .set({ deleted_at: null, updated_at: new Date() })
+          .where(eq(StudentClasses.id, match.id));
+      }
+    }
+
+    if (newEnrollments.length > 0) {
+      await tx.insert(StudentClasses).values(newEnrollments);
+    }
   }
 }
