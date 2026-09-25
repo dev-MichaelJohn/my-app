@@ -9,6 +9,7 @@ import CurriculumPage from "@/features/curriculums/page/CurriculumPage";
 import ClassPage from "@/features/classes/page/ClassPage";
 import SemesterPage from "@/features/semesters/page/SemesterPage";
 import OfferingPage from "@/features/offerings/page/OfferingPage";
+import ClassStudentPage from "@/features/class-students/page/ClassStudentPage";
 
 export const AppRoutes = createBrowserRouter([
   {
@@ -57,6 +58,10 @@ export const AppRoutes = createBrowserRouter([
           {
             path: "/admin/offerings",
             element: <OfferingPage />,
+          },
+          {
+            path: "/admin/rosters",
+            element: <ClassStudentPage />,
           },
         ],
       },

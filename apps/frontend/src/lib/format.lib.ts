@@ -37,3 +37,11 @@ export const getSemesterStatus = (startDate: string, endDate: string) => {
     color: "bg-muted text-muted-foreground border-border",
   };
 };
+
+export const isSemesterOpen = (
+  semester?: { start_date: string; end_date: string } | null,
+): boolean => {
+  if (!semester) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return today <= semester.end_date;
+};

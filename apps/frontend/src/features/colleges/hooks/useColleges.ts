@@ -27,6 +27,15 @@ export const useColleges = (query: CollegeQuery) => {
   });
 };
 
+export const useCollege = (id: number, enabled: boolean = true) => {
+  return useQuery({
+    queryKey: COLLEGE_KEYS.detail(id),
+    queryFn: () => toQuery(collegeAPI.getCollege(id)),
+    enabled: Boolean(id) && enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+};
+
 export const useCreateCollege = () => {
   const queryClient = useQueryClient();
 
