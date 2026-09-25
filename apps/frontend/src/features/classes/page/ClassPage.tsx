@@ -30,7 +30,7 @@ import { ClassGridView } from "../components/ClassGridView";
 import { ClassTableSkeleton, ClassGridSkeleton } from "../components/ClassSkeletons";
 import { ClassFormDialog } from "../components/ClassFormDialog";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import type { ClassQuery, GetClass } from "@my-app/shared";
+import { YearLevelEnum, type ClassQuery, type GetClass } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
 
 export default function ClassPage() {
@@ -202,11 +202,11 @@ export default function ClassPage() {
             </SelectTrigger>
             <SelectContent className="bg-popover border-border text-xs">
               <SelectItem value="all">All Years</SelectItem>
-              <SelectItem value="I">Year I</SelectItem>
-              <SelectItem value="II">Year II</SelectItem>
-              <SelectItem value="III">Year III</SelectItem>
-              <SelectItem value="IV">Year IV</SelectItem>
-              <SelectItem value="V">Year V</SelectItem>
+              {YearLevelEnum.enumValues.map((level, idx) => (
+                <SelectItem key={idx} value={level}>
+                  Year {level}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

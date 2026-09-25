@@ -33,7 +33,7 @@ import { SemesterGridView } from "../components/SemesterGridView";
 import { SemesterTableSkeleton, SemesterGridSkeleton } from "../components/SemesterSkeletons";
 import { SemesterFormDialog } from "../components/SemesterFormDialog";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import type { ISemesterSelect, SemesterQuery } from "@my-app/shared";
+import { SemeterTermEnum, type ISemesterSelect, type SemesterQuery } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
 
 export default function SemesterPage() {
@@ -168,9 +168,11 @@ export default function SemesterPage() {
             </SelectTrigger>
             <SelectContent className="bg-popover border-border text-xs">
               <SelectItem value="all">All Terms</SelectItem>
-              <SelectItem value="1st">1st Semester</SelectItem>
-              <SelectItem value="2nd">2nd Semester</SelectItem>
-              <SelectItem value="Summer">Summer Term</SelectItem>
+              {SemeterTermEnum.enumValues.map((term, idx) => (
+                <SelectItem key={idx} value={term}>
+                  {term} Term
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

@@ -31,7 +31,7 @@ import { CurriculumGridView } from "../components/CurriculumGridView";
 import { CurriculumTableSkeleton, CurriculumGridSkeleton } from "../components/CurriculumSkeletons";
 import { CurriculumFormDialog } from "../components/CurriculumFormDialog";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import type { CurriculumQuery, GetCurriculum } from "@my-app/shared";
+import { YearLevelEnum, type CurriculumQuery, type GetCurriculum } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
 
 export default function CurriculumPage() {
@@ -203,11 +203,11 @@ export default function CurriculumPage() {
             </SelectTrigger>
             <SelectContent className="bg-popover border-border text-xs">
               <SelectItem value="all">All Years</SelectItem>
-              <SelectItem value="I">Year I</SelectItem>
-              <SelectItem value="II">Year II</SelectItem>
-              <SelectItem value="III">Year III</SelectItem>
-              <SelectItem value="IV">Year IV</SelectItem>
-              <SelectItem value="V">Year V</SelectItem>
+              {YearLevelEnum.enumValues.map((level, idx) => (
+                <SelectItem key={idx} value={level}>
+                  Year {level}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
