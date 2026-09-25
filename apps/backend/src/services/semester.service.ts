@@ -347,15 +347,35 @@ export class SemesterService implements ISemesterService {
       if (existing.isErr()) throw existing.error;
       const current = existing.value;
 
-      const yesterdayDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const yesterday = yesterdayDate.toISOString().slice(0, 10);
+      const formatLocalDate = (d: Date): string => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      };
 
-      const finalEndDate =
-        new Date(current.start_date) > new Date(yesterday) ? current.start_date : yesterday;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const end = new Date(today);
+      end.setDate(end.getDate() - 1);
+
+      const [startYear, startMonth, startDay] = current.start_date.split("-").map(Number);
+      let start = new Date(startYear!, startMonth! - 1, startDay!);
+      start.setHours(0, 0, 0, 0);
+
+      if (start >= end) {
+        start = new Date(end);
+        start.setDate(start.getDate() - 1);
+      }
+
+      const finalStartDate = formatLocalDate(start);
+      const finalEndDate = formatLocalDate(end);
 
       const [updated] = await tx
         .update(Semesters)
         .set({
+          start_date: finalStartDate,
           end_date: finalEndDate,
           updated_at: new Date(),
         })
