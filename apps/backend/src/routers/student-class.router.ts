@@ -1,3 +1,4 @@
+import { AuthController } from "@/controllers/auth.controller.js";
 import { StudentClassController } from "@/controllers/student-class.service.js";
 import { standardApiLimiter } from "@/libs/limiter.lib.js";
 import { RequirePermission } from "@/middlewares/rbac.middleware.js";
@@ -6,7 +7,9 @@ import { Router, type IRouter } from "express";
 
 const StudentClassRouter: IRouter = Router();
 const studentClassController = new StudentClassController();
+const authController = new AuthController();
 
+StudentClassRouter.use(authController.verifyJWT);
 StudentClassRouter.use(standardApiLimiter);
 
 StudentClassRouter.get(

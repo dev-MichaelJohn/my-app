@@ -23,8 +23,10 @@ import {
   UserCheck,
   UserX,
   ShieldAlert,
+  Users,
 } from "lucide-react";
 import type { GetOffering } from "@my-app/shared";
+import { useNavigate } from "react-router";
 
 interface OfferingTableViewProps {
   offerings: GetOffering[];
@@ -41,6 +43,8 @@ export function OfferingTableView({
   onDelete,
   onRestore,
 }: OfferingTableViewProps) {
+  const navigate = useNavigate();
+
   if (offerings.length === 0) {
     return (
       <div className="text-center py-12 border border-dashed border-border rounded-xl bg-card">
@@ -120,6 +124,15 @@ export function OfferingTableView({
                     >
                       {!isArchivedView ? (
                         <>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              navigate(`/admin/student-classes?course_offering_id=${item.id}`)
+                            }
+                            className="gap-2 cursor-pointer font-medium text-primary focus:bg-primary/10"
+                          >
+                            <Users className="w-4 h-4 text-primary" />
+                            <span>Enrolled Students</span>
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => onEdit(item)}
                             className="gap-2 cursor-pointer"

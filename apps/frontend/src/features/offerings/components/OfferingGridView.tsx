@@ -17,8 +17,10 @@ import {
   UserCheck,
   UserX,
   ShieldAlert,
+  Users,
 } from "lucide-react";
 import type { GetOffering } from "@my-app/shared";
+import { useNavigate } from "react-router";
 
 interface OfferingGridViewProps {
   offerings: GetOffering[];
@@ -35,6 +37,8 @@ export function OfferingGridView({
   onDelete,
   onRestore,
 }: OfferingGridViewProps) {
+  const navigate = useNavigate();
+
   if (offerings.length === 0) {
     return (
       <div className="text-center py-12 border border-dashed border-border rounded-xl bg-card">
@@ -82,6 +86,15 @@ export function OfferingGridView({
                 <DropdownMenuContent align="end" className="w-36 border-border bg-popover">
                   {!isArchivedView ? (
                     <>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          navigate(`/admin/student-classes?course_offering_id=${item.id}`)
+                        }
+                        className="gap-2 cursor-pointer font-medium text-primary focus:bg-primary/10"
+                      >
+                        <Users className="w-4 h-4 text-primary" />
+                        <span>Enrolled Students</span>
+                      </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => onEdit(item)}
                         className="gap-2 cursor-pointer"
@@ -151,6 +164,20 @@ export function OfferingGridView({
                   </div>
                 )}
               </div>
+
+              {!isArchivedView && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/admin/student-classes?course_offering_id=${item.id}`)}
+                    className="w-full text-xs gap-2 h-8 border-border bg-card hover:bg-muted text-foreground"
+                  >
+                    <Users className="w-3.5 h-3.5 text-primary" />
+                    <span>Enrolled Students</span>
+                  </Button>
+                </>
+              )}
             </CardContent>
 
             <CardFooter className="pt-0 text-[11px] text-muted-foreground justify-between border-t border-border/50 py-3">

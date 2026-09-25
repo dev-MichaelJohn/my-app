@@ -9,17 +9,11 @@ export const setAccessToken = (token: string | null) => {
     const cleanToken = token.replace(/^bearer\s+/i, "").trim();
     inMemoryToken = cleanToken;
     localStorage.setItem("access_token", cleanToken);
-    console.log("[Auth] Access Token SAVED:", cleanToken.slice(0, 15) + "...");
   } else {
     inMemoryToken = null;
     localStorage.removeItem("access_token");
-    console.log("[Auth] Access Token CLEARED");
   }
 };
-
-if (typeof window !== "undefined") {
-  (window as any).__getAccessToken = () => inMemoryToken;
-}
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1",
@@ -29,12 +23,8 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use((config) => {
   if (inMemoryToken) {
     config.headers.Authorization = `Bearer ${inMemoryToken}`;
-    console.log(`[HTTP ${config.method?.toUpperCase()}] ${config.url} | Authorization attached`);
-  } else {
-    console.warn(
-      `[HTTP ${config.method?.toUpperCase()}] ${config.url} | No Access Token attached (using cookies only)`,
-    );
   }
+
   return config;
 });
 
@@ -42,7 +32,6 @@ apiClient.interceptors.response.use(
   (response) => {
     const newToken = response.headers["x-access-token"];
     if (newToken) {
-      console.log("[Auth] New Access Token received via x-access-token header!");
       setAccessToken(newToken);
     }
     return response;
@@ -55,10 +44,7 @@ apiClient.interceptors.response.use(
     const isAuthPage =
       window.location.pathname.includes("/login") || window.location.pathname.includes("/auth");
 
-    console.error(`[HTTP Error ${error.response?.status}] ${requestUrl}:`, error.response?.data);
-
     if (error.response?.status === 401 && !isAuthRequest && !isAuthPage) {
-      console.warn("[Auth] 401 Unauthorized encountered. Redirecting to login...");
       setAccessToken(null);
       window.location.href = "/login";
     }

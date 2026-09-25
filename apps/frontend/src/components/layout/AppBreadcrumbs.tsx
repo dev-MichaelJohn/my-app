@@ -13,6 +13,7 @@ import { useProgram } from "@/features/programs/hooks/usePrograms";
 import { useClass } from "@/features/classes/hooks/useClasses";
 import { Home } from "lucide-react";
 import React from "react";
+import { useOffering } from "@/features/offerings/hooks/useOfferings";
 
 interface BreadcrumbSegment {
   label: React.ReactNode;
@@ -27,6 +28,7 @@ export function AppBreadcrumbs() {
   const collegeId = searchParams.get("college_id");
   const programId = searchParams.get("program_id");
   const classId = searchParams.get("class_id");
+  const offeringId = searchParams.get("course_offering_id");
 
   const { data: collegeData, isLoading: isLoadingCollege } = useCollege(
     Number(collegeId),
@@ -41,6 +43,11 @@ export function AppBreadcrumbs() {
   const { data: classData, isLoading: isLoadingClass } = useClass(
     Number(classId),
     Boolean(classId),
+  );
+
+  const { data: offeringData, isLoading: isLoadingOffering } = useOffering(
+    Number(offeringId),
+    Boolean(offeringId),
   );
 
   const segments: BreadcrumbSegment[] = [];
@@ -132,6 +139,22 @@ export function AppBreadcrumbs() {
       segments.push({ label: "Roster", isCurrent: true });
     } else {
       segments.push({ label: "Class Rosters", isCurrent: true });
+    }
+  } else if (pathname.includes("/admin/student-classes")) {
+    segments.push({ label: "Course Offerings", href: "/admin/offerings" });
+
+    if (offeringId) {
+      const offeringLabel = offeringData
+        ? `${offeringData.course_curriculum.course.initialism} (${offeringData.class.program.initialism} ${offeringData.class.year_level}-${offeringData.class.section})`
+        : undefined;
+
+      segments.push({
+        label: renderLabel(offeringLabel, isLoadingOffering),
+        href: `/admin/student-classes?course_offering_id=${offeringId}`,
+      });
+      segments.push({ label: "Enrolled Students", isCurrent: true });
+    } else {
+      segments.push({ label: "Student List", isCurrent: true });
     }
   } else if (pathname.includes("/admin/semesters")) {
     segments.push({ label: "Semesters", isCurrent: true });
