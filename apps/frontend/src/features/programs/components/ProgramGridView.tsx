@@ -90,13 +90,6 @@ export function ProgramGridView({
                   {!isArchivedView ? (
                     <>
                       <DropdownMenuItem
-                        onClick={() => navigate(`/admin/classes?program_id=${item.program.id}`)}
-                        className="gap-2 cursor-pointer"
-                      >
-                        <School className="w-4 h-4 text-primary" />
-                        <span>View Classes</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
                         onClick={() => navigate(`/admin/courses?program_id=${item.program.id}`)}
                         className="gap-2 cursor-pointer"
                       >
@@ -109,6 +102,13 @@ export function ProgramGridView({
                       >
                         <Layers className="w-4 h-4 text-primary" />
                         <span>View Curriculums</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => navigate(`/admin/classes?program_id=${item.program.id}`)}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <School className="w-4 h-4 text-primary" />
+                        <span>View Classes</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => onEdit(item)}
@@ -139,7 +139,7 @@ export function ProgramGridView({
               </DropdownMenu>
             </CardHeader>
 
-            <CardContent className="space-y-4 pt-1">
+            <CardContent className="space-y-3 pt-1">
               <h3 className="font-bold text-base text-foreground leading-snug line-clamp-2">
                 {item.program.name}
               </h3>
@@ -165,6 +165,38 @@ export function ProgramGridView({
                   <p className="text-xs text-muted-foreground/70 italic">No Chair Assigned</p>
                 )}
               </div>
+
+              {!isArchivedView && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/admin/courses?program_id=${item.program.id}`)}
+                    className="w-full text-xs gap-2 h-8 border-border bg-card hover:bg-muted text-foreground"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-primary" />
+                    <span>View Courses</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/admin/curriculums?program_id=${item.program.id}`)}
+                    className="w-full text-xs gap-2 h-8 border-border bg-card hover:bg-muted text-foreground"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-primary" />
+                    <span>View Curriculums</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/admin/classes?program_id=${item.program.id}`)}
+                    className="w-full text-xs gap-2 h-8 border-border bg-card hover:bg-muted text-foreground"
+                  >
+                    <School className="w-3.5 h-3.5 text-primary" />
+                    <span>View Classes</span>
+                  </Button>
+                </>
+              )}
             </CardContent>
 
             <CardFooter className="pt-0 text-[11px] text-muted-foreground justify-between border-t border-border/50 py-3">

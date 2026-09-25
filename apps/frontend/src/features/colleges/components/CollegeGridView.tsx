@@ -110,7 +110,7 @@ export function CollegeGridView({
             </DropdownMenu>
           </CardHeader>
 
-          <CardContent className="space-y-4 pt-1">
+          <CardContent className="space-y-3 pt-1">
             <h3 className="font-bold text-base text-foreground leading-snug line-clamp-2">
               {item.college.name}
             </h3>
@@ -136,6 +136,20 @@ export function CollegeGridView({
                 <p className="text-xs text-muted-foreground/70 italic">No Dean Assigned</p>
               )}
             </div>
+
+            {!isArchivedView && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate(`/admin/programs?college_id=${item.college.id}`)}
+                  className="w-full text-xs gap-2 h-8 border-border bg-card hover:bg-muted text-foreground"
+                >
+                  <GraduationCap className="w-3.5 h-3.5 text-primary" />
+                  <span>View Programs</span>
+                </Button>
+              </>
+            )}
           </CardContent>
 
           <CardFooter className="pt-0 text-[11px] text-muted-foreground justify-between border-t border-border/50 py-3">
