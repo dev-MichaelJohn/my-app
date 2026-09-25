@@ -10,9 +10,11 @@ import { GlobalErrorHandler } from "./middlewares/error.middleware.js";
 import { SeederFunction } from "./libs/seeder.lib.js";
 import V1Router from "./routers/index.router.js";
 import { logger } from "./libs/logger.lib.js";
+import { loggerMiddleware } from "./middlewares/logger.middleware.js";
 
 const app = CreateApp();
 
+app.use(loggerMiddleware);
 app.use("/api/v1", V1Router);
 app.use(GlobalErrorHandler);
 
