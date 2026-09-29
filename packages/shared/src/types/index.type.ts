@@ -15,3 +15,4 @@ export * from "./offering.type.js";
 export * from "./student-class.type.js";
 export * from "./csv-import.type.js";
 export * from "./evaluation-instrument.type.js";
+export * from "./evaluation-schedule.type.js";
