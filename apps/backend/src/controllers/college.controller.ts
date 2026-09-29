@@ -19,7 +19,7 @@ export class CollegeController {
   });
 
   getColleges = runAsync((req, _res) => {
-    return this.collegeService.getColleges(req.query).map((data) => ({
+    return this.collegeService.getColleges(req.query, undefined, req.user).map((data) => ({
       status: 200,
       message: "Colleges retrieved successfully.",
       data,

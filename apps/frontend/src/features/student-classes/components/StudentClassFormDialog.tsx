@@ -42,10 +42,13 @@ export function StudentClassFormDialog({
 }: StudentClassFormDialogProps) {
   const createMutation = useCreateStudentClass();
 
-  const { data: usersResponse, isLoading: isLoadingStudents } = useUsers({
-    role: "STUDENT",
-    paginate: false,
-  });
+  const { data: usersResponse, isLoading: isLoadingStudents } = useUsers(
+    {
+      role: "STUDENT",
+      paginate: false,
+    },
+    open,
+  );
   const studentsList = usersResponse?.data ?? [];
 
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);

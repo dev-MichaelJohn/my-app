@@ -19,7 +19,8 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { useNavigate } from "react-router";
-import type { GetClass } from "@my-app/shared";
+import { PERMISSIONS, type GetClass } from "@my-app/shared";
+import { Can } from "@/components/Can";
 
 interface ClassGridViewProps {
   classes: GetClass[];
@@ -71,56 +72,58 @@ export function ClassGridView({
                 </Badge>
               </div>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40 border-border bg-popover">
-                  {!isArchivedView ? (
-                    <>
+              <Can anyPermission={[PERMISSIONS.CLASS_CREATE, PERMISSIONS.CLASS_UPDATE]}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40 border-border bg-popover">
+                    {!isArchivedView ? (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() => navigate(`/admin/offerings?class_id=${item.id}`)}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <CalendarDays className="w-4 h-4 text-primary" />
+                          <span>View Offerings</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => navigate(`/admin/rosters?class_id=${item.id}`)}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <Users className="w-4 h-4 text-primary" />
+                          <span>View Roster</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => onEdit(item)}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <Edit className="w-4 h-4" />
+                          <span>Edit</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="bg-border" />
+                        <DropdownMenuItem
+                          onClick={() => onDelete(item)}
+                          className="gap-2 text-destructive cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Archive</span>
+                        </DropdownMenuItem>
+                      </>
+                    ) : (
                       <DropdownMenuItem
-                        onClick={() => navigate(`/admin/offerings?class_id=${item.id}`)}
-                        className="gap-2 cursor-pointer"
+                        onClick={() => onRestore(item)}
+                        className="gap-2 text-primary cursor-pointer"
                       >
-                        <CalendarDays className="w-4 h-4 text-primary" />
-                        <span>View Offerings</span>
+                        <RotateCcw className="w-4 h-4" />
+                        <span>Restore</span>
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => navigate(`/admin/rosters?class_id=${item.id}`)}
-                        className="gap-2 cursor-pointer"
-                      >
-                        <Users className="w-4 h-4 text-primary" />
-                        <span>View Roster</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => onEdit(item)}
-                        className="gap-2 cursor-pointer"
-                      >
-                        <Edit className="w-4 h-4" />
-                        <span>Edit</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator className="bg-border" />
-                      <DropdownMenuItem
-                        onClick={() => onDelete(item)}
-                        className="gap-2 text-destructive cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        <span>Archive</span>
-                      </DropdownMenuItem>
-                    </>
-                  ) : (
-                    <DropdownMenuItem
-                      onClick={() => onRestore(item)}
-                      className="gap-2 text-primary cursor-pointer"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                      <span>Restore</span>
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </Can>
             </CardHeader>
 
             <CardContent className="space-y-3 pt-1">

@@ -43,6 +43,8 @@ import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { isSemesterOpen } from "@/lib/format.lib";
 import type { ClassStudentQuery, GetClassStudent } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
+import { Can } from "@/components/Can";
+import { PERMISSIONS } from "@my-app/shared";
 
 export default function ClassStudentsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -214,17 +216,23 @@ export default function ClassStudentsPage() {
           </p>
         </div>
 
-        <Button
-          onClick={() => {
-            setEnrollmentToEdit(null);
-            setFormOpen(true);
-          }}
-          disabled={isCurrentSemesterConcluded}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm disabled:opacity-50"
-        >
-          {isCurrentSemesterConcluded ? <Lock className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          <span>{isCurrentSemesterConcluded ? "Term Concluded" : "Enroll Student"}</span>
-        </Button>
+        <Can permission={PERMISSIONS.CLASS_STUDENT_CREATE}>
+          <Button
+            onClick={() => {
+              setEnrollmentToEdit(null);
+              setFormOpen(true);
+            }}
+            disabled={isCurrentSemesterConcluded}
+            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm disabled:opacity-50"
+          >
+            {isCurrentSemesterConcluded ? (
+              <Lock className="w-4 h-4" />
+            ) : (
+              <Plus className="w-4 h-4" />
+            )}
+            <span>{isCurrentSemesterConcluded ? "Term Concluded" : "Enroll Student"}</span>
+          </Button>
+        </Can>
       </div>
 
       {isCurrentSemesterConcluded && (

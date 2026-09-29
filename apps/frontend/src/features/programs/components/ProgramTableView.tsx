@@ -27,8 +27,9 @@ import {
   Layers,
   School,
 } from "lucide-react";
-import type { GetCollege, GetProgram } from "@my-app/shared";
+import { PERMISSIONS, type GetCollege, type GetProgram } from "@my-app/shared";
 import { useNavigate } from "react-router";
+import { Can } from "@/components/Can";
 
 interface ProgramTableViewProps {
   programs: GetProgram[];
@@ -70,7 +71,9 @@ export function ProgramTableView({
             <TableHead className="font-bold">Program Name</TableHead>
             <TableHead className="font-bold">Parent College</TableHead>
             <TableHead className="font-bold">Program Chair</TableHead>
-            <TableHead className="w-[80px] text-right font-bold">Actions</TableHead>
+            <Can anyPermission={[PERMISSIONS.PROGRAM_CREATE, PERMISSIONS.PROGRAM_UPDATE]}>
+              <TableHead className="w-[80px] text-right font-bold">Actions</TableHead>
+            </Can>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -121,79 +124,90 @@ export function ProgramTableView({
                     </span>
                   )}
                 </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="w-44 border-border bg-popover text-popover-foreground"
-                    >
-                      {!isArchivedView ? (
-                        <>
-                          <DropdownMenuItem
-                            onClick={() => navigate(`/admin/courses?program_id=${item.program.id}`)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <BookOpen className="w-4 h-4 text-primary" />
-                            <span>View Courses</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              navigate(`/admin/curriculums?program_id=${item.program.id}`)
-                            }
-                            className="gap-2 cursor-pointer"
-                          >
-                            <Layers className="w-4 h-4 text-primary" />
-                            <span>View Curriculums</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => navigate(`/admin/classes?program_id=${item.program.id}`)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <School className="w-4 h-4 text-primary" />
-                            <span>View Classes</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => onEdit(item)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <Edit className="w-4 h-4 text-muted-foreground" />
-                            <span>Edit</span>
-                          </DropdownMenuItem>
-                          {item.chair && (
-                            <DropdownMenuItem
-                              onClick={() => onUnassignChair(item)}
-                              className="gap-2 text-amber-600 dark:text-amber-400 focus:bg-amber-500/10 cursor-pointer font-medium"
-                            >
-                              <UserX className="w-4 h-4" />
-                              <span>Unassign Chair</span>
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuSeparator className="bg-border" />
-                          <DropdownMenuItem
-                            onClick={() => onDelete(item)}
-                            className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            <span>Archive</span>
-                          </DropdownMenuItem>
-                        </>
-                      ) : (
-                        <DropdownMenuItem
-                          onClick={() => onRestore(item)}
-                          className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
+
+                <Can anyPermission={[PERMISSIONS.PROGRAM_CREATE, PERMISSIONS.PROGRAM_UPDATE]}>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground"
                         >
-                          <RotateCcw className="w-4 h-4" />
-                          <span>Restore</span>
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="w-44 border-border bg-popover text-popover-foreground"
+                      >
+                        {!isArchivedView ? (
+                          <>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                navigate(`/admin/courses?program_id=${item.program.id}`)
+                              }
+                              className="gap-2 cursor-pointer"
+                            >
+                              <BookOpen className="w-4 h-4 text-primary" />
+                              <span>View Courses</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                navigate(`/admin/curriculums?program_id=${item.program.id}`)
+                              }
+                              className="gap-2 cursor-pointer"
+                            >
+                              <Layers className="w-4 h-4 text-primary" />
+                              <span>View Curriculums</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                navigate(`/admin/classes?program_id=${item.program.id}`)
+                              }
+                              className="gap-2 cursor-pointer"
+                            >
+                              <School className="w-4 h-4 text-primary" />
+                              <span>View Classes</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => onEdit(item)}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <Edit className="w-4 h-4 text-muted-foreground" />
+                              <span>Edit</span>
+                            </DropdownMenuItem>
+                            {item.chair && (
+                              <DropdownMenuItem
+                                onClick={() => onUnassignChair(item)}
+                                className="gap-2 text-amber-600 dark:text-amber-400 focus:bg-amber-500/10 cursor-pointer font-medium"
+                              >
+                                <UserX className="w-4 h-4" />
+                                <span>Unassign Chair</span>
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator className="bg-border" />
+                            <DropdownMenuItem
+                              onClick={() => onDelete(item)}
+                              className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span>Archive</span>
+                            </DropdownMenuItem>
+                          </>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => onRestore(item)}
+                            className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            <span>Restore</span>
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </Can>
               </TableRow>
             );
           })}

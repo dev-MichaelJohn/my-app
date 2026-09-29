@@ -19,7 +19,7 @@ export class CourseController {
   });
 
   getCourses = runAsync((req, _res) => {
-    return this.courseService.getCourses(req.query).map((data) => ({
+    return this.courseService.getCourses(req.query, undefined, req.user).map((data) => ({
       status: 200,
       message: "Courses retrieved successfully.",
       data,

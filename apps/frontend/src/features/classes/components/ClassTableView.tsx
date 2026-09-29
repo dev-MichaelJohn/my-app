@@ -25,7 +25,8 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { useNavigate } from "react-router";
-import type { GetClass } from "@my-app/shared";
+import { PERMISSIONS, type GetClass } from "@my-app/shared";
+import { Can } from "@/components/Can";
 
 interface ClassTableViewProps {
   classes: GetClass[];
@@ -63,7 +64,9 @@ export function ClassTableView({
             <TableHead className="font-bold">Degree Program</TableHead>
             <TableHead className="font-bold">Year Level</TableHead>
             <TableHead className="font-bold">Section</TableHead>
-            <TableHead className="w-[80px] text-right font-bold">Actions</TableHead>
+            <Can anyPermission={[PERMISSIONS.CLASS_CREATE, PERMISSIONS.CLASS_UPDATE]}>
+              <TableHead className="w-[80px] text-right font-bold">Actions</TableHead>
+            </Can>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -91,64 +94,70 @@ export function ClassTableView({
                     Section {item.section}
                   </span>
                 </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="w-44 border-border bg-popover text-popover-foreground"
-                    >
-                      {!isArchivedView ? (
-                        <>
-                          {/* Quick Jump to Class Roster */}
-                          <DropdownMenuItem
-                            onClick={() => navigate(`/admin/offerings?class_id=${item.id}`)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <CalendarDays className="w-4 h-4 text-primary" />
-                            <span>View Offerings</span>
-                          </DropdownMenuItem>
-
-                          <DropdownMenuItem
-                            onClick={() => navigate(`/admin/rosters?class_id=${item.id}`)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <Users className="w-4 h-4 text-primary" />
-                            <span>View Roster</span>
-                          </DropdownMenuItem>
-
-                          <DropdownMenuItem
-                            onClick={() => onEdit(item)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <Edit className="w-4 h-4 text-muted-foreground" />
-                            <span>Edit Section</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-border" />
-                          <DropdownMenuItem
-                            onClick={() => onDelete(item)}
-                            className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            <span>Archive</span>
-                          </DropdownMenuItem>
-                        </>
-                      ) : (
-                        <DropdownMenuItem
-                          onClick={() => onRestore(item)}
-                          className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
+                <Can anyPermission={[PERMISSIONS.CLASS_CREATE, PERMISSIONS.CLASS_UPDATE]}>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground"
                         >
-                          <RotateCcw className="w-4 h-4" />
-                          <span>Restore</span>
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="w-44 border-border bg-popover text-popover-foreground"
+                      >
+                        {!isArchivedView ? (
+                          <>
+                            {/* Quick Jump to Class Roster */}
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/admin/offerings?class_id=${item.id}`)}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <CalendarDays className="w-4 h-4 text-primary" />
+                              <span>View Offerings</span>
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/admin/rosters?class_id=${item.id}`)}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <Users className="w-4 h-4 text-primary" />
+                              <span>View Roster</span>
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem
+                              onClick={() => onEdit(item)}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <Edit className="w-4 h-4 text-muted-foreground" />
+                              <span>Edit Section</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-border" />
+                            <DropdownMenuItem
+                              onClick={() => onDelete(item)}
+                              className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span>Archive</span>
+                            </DropdownMenuItem>
+                          </>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => onRestore(item)}
+                            className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            <span>Restore</span>
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </Can>
               </TableRow>
             );
           })}

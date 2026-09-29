@@ -19,7 +19,7 @@ export class ProgramController {
   });
 
   getPrograms = runAsync((req, _res) => {
-    return this.programService.getPrograms(req.query).map((data) => ({
+    return this.programService.getPrograms(req.query, undefined, req.user).map((data) => ({
       status: 200,
       message: "Programs retrieved successfully.",
       data,

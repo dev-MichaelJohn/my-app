@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lte, gte, ne, isNotNull, desc } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, gte, ne, isNotNull, desc, asc } from "drizzle-orm";
 import { type ResultAsync } from "neverthrow";
 import db from "@/configs/db.config.js";
 import {
@@ -20,7 +20,8 @@ import {
   SupervisorEvaluationRatings,
   SupervisorEvaluations,
   SupervisorEvaluationSchedules,
-  type TeachingCourseOfferingWithStudents,
+  type FacultyTeachingOffering,
+  type TeachingStudentItem,
 } from "@my-app/shared";
 import { AppError } from "@/libs/error.lib.js";
 import { ValidateSchema } from "@/libs/result.lib.js";
@@ -40,6 +41,7 @@ import {
   type SubmitSupervisorEvaluation,
   type SupervisorEvaluationFormView,
 } from "@my-app/shared";
+import { UserService, type IUserService } from "./user.service.js";
 
 export interface IEvaluationSubmissionService {
   // Student (SET)
@@ -90,16 +92,17 @@ export interface IEvaluationSubmissionService {
     AppError
   >;
 
-  getFacultyTeachingClasses(
+  getFacultyTeachingOfferings(
     facultyAccountId: number,
     semesterId?: number,
     client?: DbClient,
-  ): ResultAsync<TeachingCourseOfferingWithStudents[], AppError>;
+  ): ResultAsync<FacultyTeachingOffering[], AppError>;
 }
 
 export class EvaluationSubmissionService implements IEvaluationSubmissionService {
   constructor(
     private instrumentService: IEvaluationInstrumentService = new EvaluationInstrumentService(),
+    private userService: IUserService = new UserService(),
   ) {}
 
   // =========================================================================
@@ -453,6 +456,14 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
   > {
     return ValidateSchema(SubmitStudentEvaluationSchema, payload).asyncAndThen((data) => {
       return WithTransaction(client, async (tx) => {
+        const isStudent = await this.userService.hasRole(studentAccountId, "STUDENT", tx);
+        if (isStudent.isErr() || !isStudent.value) {
+          throw new AppError(
+            403,
+            "Administrators and non-students cannot submit student evaluations.",
+          );
+        }
+
         const now = new Date();
 
         const [schedule] = await tx
@@ -964,6 +975,11 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
   > {
     return ValidateSchema(SubmitSupervisorEvaluationSchema, payload).asyncAndThen((data) => {
       return WithTransaction(client, async (tx) => {
+        const isSupervisor = await this.userService.hasRole(evaluatorAccountId, "SUPERVISOR", tx);
+        if (isSupervisor.isErr() || !isSupervisor.value) {
+          throw new AppError(403, "Administrators cannot submit supervisory evaluations.");
+        }
+
         const now = new Date();
 
         const [schedule] = await tx
@@ -1080,27 +1096,44 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
     });
   }
 
-  getFacultyTeachingClasses(
+  getFacultyTeachingOfferings(
     facultyAccountId: number,
     semesterId?: number,
     client: DbClient = db,
-  ): ResultAsync<TeachingCourseOfferingWithStudents[], AppError> {
+  ): ResultAsync<FacultyTeachingOffering[], AppError> {
     return WithTransaction(client, async (tx) => {
-      // 1. Get semester
-      const targetSemesterId =
-        semesterId ??
-        (
-          await tx
+      // 1. Determine Target Semester (active or latest)
+      let targetSemesterId = semesterId;
+      if (!targetSemesterId) {
+        const today = new Date().toISOString().slice(0, 10);
+        const [activeSem] = await tx
+          .select({ id: Semesters.id })
+          .from(Semesters)
+          .where(
+            and(
+              lte(Semesters.start_date, today),
+              gte(Semesters.end_date, today),
+              isNull(Semesters.deleted_at),
+            ),
+          )
+          .limit(1);
+
+        if (activeSem) {
+          targetSemesterId = activeSem.id;
+        } else {
+          const [latestSem] = await tx
             .select({ id: Semesters.id })
             .from(Semesters)
             .where(isNull(Semesters.deleted_at))
             .orderBy(desc(Semesters.start_date))
-            .limit(1)
-        )[0]?.id;
+            .limit(1);
+          targetSemesterId = latestSem?.id;
+        }
+      }
 
       if (!targetSemesterId) return [];
 
-      // 2. Fetch offerings taught by this faculty member
+      // 2. Fetch all offerings assigned to this faculty member for the semester
       const offerings = await tx
         .select({
           id: CourseOfferings.id,
@@ -1136,17 +1169,22 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           ),
         );
 
-      const results: TeachingCourseOfferingWithStudents[] = [];
+      if (offerings.length === 0) return [];
+
+      const results: FacultyTeachingOffering[] = [];
 
       for (const off of offerings) {
-        // Enrolled students in this subject offering
-        const enrolledStudents = await tx
+        // 3. Fetch all enrolled students for this course offering
+        const enrollments = await tx
           .select({
             studentClassId: StudentClasses.id,
             accountId: Accounts.id,
+            email: Accounts.email,
             institutionalId: PersonalDetails.institutional_id,
             firstName: PersonalDetails.first_name,
             lastName: PersonalDetails.last_name,
+            middleName: PersonalDetails.middle_name,
+            suffix: PersonalDetails.suffix,
           })
           .from(StudentClasses)
           .innerJoin(Accounts, eq(StudentClasses.student_account_id, Accounts.id))
@@ -1157,25 +1195,49 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
               isNull(StudentClasses.deleted_at),
               isNull(Accounts.deleted_at),
             ),
-          );
+          )
+          .orderBy(asc(PersonalDetails.last_name), asc(PersonalDetails.first_name));
 
-        const studentClassIds = enrolledStudents.map((s) => s.studentClassId);
+        const studentClassIds = enrollments.map((e) => e.studentClassId);
 
-        // Fetch submissions for this offering
+        // 4. Fetch SET submissions for this offering
         const submissions =
           studentClassIds.length > 0
             ? await tx
-                .select({ studentClassId: StudentEvaluations.student_class_id })
+                .select({
+                  studentClassId: StudentEvaluations.student_class_id,
+                  submittedAt: StudentEvaluations.submitted_at,
+                })
                 .from(StudentEvaluations)
                 .where(
                   and(
                     inArray(StudentEvaluations.student_class_id, studentClassIds),
-                    isNotNull(StudentEvaluations.submitted_at),
+                    isNotNull(StudentEvaluations.submitted_at), // Only finalized submissions
                   ),
                 )
             : [];
 
-        const evaluatedSet = new Set(submissions.map((s) => s.studentClassId));
+        const submissionMap = new Map(submissions.map((s) => [s.studentClassId, s.submittedAt]));
+
+        const students: TeachingStudentItem[] = enrollments.map((s) => {
+          const submittedAt = submissionMap.get(s.studentClassId);
+          return {
+            student_account_id: s.accountId,
+            institutional_id: s.institutionalId,
+            first_name: s.firstName,
+            last_name: s.lastName,
+            middle_name: s.middleName,
+            suffix: s.suffix,
+            email: s.email,
+            has_evaluated: Boolean(submittedAt),
+            evaluated_at: submittedAt ?? null,
+          };
+        });
+
+        const totalStudents = students.length;
+        const totalEvaluated = students.filter((s) => s.has_evaluated).length;
+        const completionRate =
+          totalStudents > 0 ? Number(((totalEvaluated / totalStudents) * 100).toFixed(1)) : 0;
 
         results.push({
           offering: {
@@ -1206,15 +1268,10 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
             updated_at: new Date(),
             deleted_at: null,
           },
-          totalStudents: enrolledStudents.length,
-          totalEvaluated: evaluatedSet.size,
-          students: enrolledStudents.map((s) => ({
-            student_id: s.accountId,
-            institutional_id: s.institutionalId,
-            first_name: s.firstName,
-            last_name: s.lastName,
-            has_evaluated: evaluatedSet.has(s.studentClassId),
-          })),
+          total_students: totalStudents,
+          total_evaluated: totalEvaluated,
+          completion_rate: completionRate,
+          students,
         });
       }
 

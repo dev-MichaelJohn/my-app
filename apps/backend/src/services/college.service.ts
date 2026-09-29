@@ -29,6 +29,7 @@ import {
   desc,
   eq,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   ne,
@@ -36,7 +37,7 @@ import {
   SQL,
   sql,
 } from "drizzle-orm";
-import { errAsync, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import { createPaginatedData } from "@/libs/response.lib.js";
 import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
 import { UserService, type IUserService } from "./user.service.js";
@@ -50,6 +51,7 @@ export interface ICollegeService {
   getColleges(
     rawQuery: unknown,
     client?: DbClient,
+    actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetCollege[]>, AppError>;
   createCollege(collegeInfo: CreateCollege, client?: DbClient): ResultAsync<GetCollege, AppError>;
   updateCollege(
@@ -138,6 +140,7 @@ export class CollegeService implements ICollegeService {
   getColleges(
     rawQuery: unknown,
     client: DbClient = db,
+    actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetCollege[]>, AppError> {
     return ValidateSchema(CollegeQuerySchema, rawQuery).asyncAndThen((parsed) => {
       const { paginate, page, limit, search, has_dean, is_archived, sort_by, order } = parsed;
@@ -145,6 +148,26 @@ export class CollegeService implements ICollegeService {
       const filters: SQL[] = [
         is_archived ? isNotNull(Colleges.deleted_at) : isNull(Colleges.deleted_at),
       ];
+
+      // ── Scoping for Deans & Program Chairs ──
+      const roles = actorUser?.roles ?? [];
+      const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+
+      if (!isPrivileged && actorUser) {
+        const deanships = actorUser.offices?.deanships || [];
+        const chairships = actorUser.offices?.chairships || [];
+
+        if (deanships.length > 0) {
+          // Dean: Can only see the college(s) they govern
+          const deanCollegeIds = deanships.map((d) => d.id);
+          filters.push(inArray(Colleges.id, deanCollegeIds));
+        } else if (chairships.length > 0) {
+          // Program Chair: Has NO access to college-level data
+          return okAsync(
+            createPaginatedData({ data: [], currentPage: 1, pageSize: limit, totalItems: 0 }),
+          );
+        }
+      }
 
       if (search) {
         const term = `%${search}%`;

@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { MoreHorizontal, Edit, Trash2, RotateCcw, ShieldAlert } from "lucide-react";
-import type { GetClassStudent } from "@my-app/shared";
+import { PERMISSIONS, type GetClassStudent } from "@my-app/shared";
+import { Can } from "@/components/Can";
 
 interface ClassStudentTableViewProps {
   roster: GetClassStudent[];
@@ -54,7 +55,11 @@ export function ClassStudentTableView({
             <TableHead className="font-bold">Institutional ID</TableHead>
             <TableHead className="w-[140px] font-bold">Class Section</TableHead>
             <TableHead className="font-bold">Academic Semester</TableHead>
-            <TableHead className="w-[80px] text-right font-bold">Actions</TableHead>
+            <Can
+              anyPermission={[PERMISSIONS.CLASS_STUDENT_CREATE, PERMISSIONS.CLASS_STUDENT_UPDATE]}
+            >
+              <TableHead className="w-[80px] text-right font-bold">Actions</TableHead>
+            </Can>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -94,47 +99,59 @@ export function ClassStudentTableView({
                   {item.semester.semester_term} Sem (A.Y. {item.semester.school_year_start}-
                   {item.semester.school_year_end})
                 </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="w-44 border-border bg-popover text-popover-foreground"
-                    >
-                      {!isArchivedView ? (
-                        <>
-                          <DropdownMenuItem
-                            onClick={() => onEdit(item)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <Edit className="w-4 h-4 text-muted-foreground" />
-                            <span>Edit Section</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-border" />
-                          <DropdownMenuItem
-                            onClick={() => onDelete(item)}
-                            className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            <span>Unenroll Student</span>
-                          </DropdownMenuItem>
-                        </>
-                      ) : (
-                        <DropdownMenuItem
-                          onClick={() => onRestore(item)}
-                          className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
+
+                <Can
+                  anyPermission={[
+                    PERMISSIONS.CLASS_STUDENT_CREATE,
+                    PERMISSIONS.CLASS_STUDENT_UPDATE,
+                  ]}
+                >
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground"
                         >
-                          <RotateCcw className="w-4 h-4" />
-                          <span>Re-enroll Student</span>
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="w-44 border-border bg-popover text-popover-foreground"
+                      >
+                        {!isArchivedView ? (
+                          <>
+                            <DropdownMenuItem
+                              onClick={() => onEdit(item)}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <Edit className="w-4 h-4 text-muted-foreground" />
+                              <span>Edit Section</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-border" />
+                            <DropdownMenuItem
+                              onClick={() => onDelete(item)}
+                              className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span>Unenroll Student</span>
+                            </DropdownMenuItem>
+                          </>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => onRestore(item)}
+                            className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            <span>Re-enroll Student</span>
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </Can>
               </TableRow>
             );
           })}

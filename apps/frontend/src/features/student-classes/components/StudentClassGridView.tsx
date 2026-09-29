@@ -8,7 +8,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MoreVertical, Trash2, RotateCcw, Lock, ShieldAlert } from "lucide-react";
-import type { GetStudentClass } from "@my-app/shared";
+import { PERMISSIONS, type GetStudentClass } from "@my-app/shared";
+import { Can } from "@/components/Can";
 
 interface StudentClassGridViewProps {
   students: GetStudentClass[];
@@ -62,38 +63,42 @@ export function StudentClassGridView({
                 </div>
               </div>
 
-              {isConcluded ? (
-                <span className="text-xs text-muted-foreground p-1" title="Term Concluded">
-                  <Lock className="w-3.5 h-3.5" />
-                </span>
-              ) : (
-                <DropdownMenu>
-                  <DropdownMenuTrigger>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                      <MoreVertical className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-36 border-border bg-popover">
-                    {!isArchivedView ? (
-                      <DropdownMenuItem
-                        onClick={() => onDelete(item)}
-                        className="gap-2 text-destructive cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        <span>Unenroll</span>
-                      </DropdownMenuItem>
-                    ) : (
-                      <DropdownMenuItem
-                        onClick={() => onRestore(item)}
-                        className="gap-2 text-primary cursor-pointer"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                        <span>Re-enroll</span>
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+              <Can
+                anyPermission={[PERMISSIONS.STUDENT_CLASS_CREATE, PERMISSIONS.STUDENT_CLASS_UPDATE]}
+              >
+                {isConcluded ? (
+                  <span className="text-xs text-muted-foreground p-1" title="Term Concluded">
+                    <Lock className="w-3.5 h-3.5" />
+                  </span>
+                ) : (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                        <MoreVertical className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-36 border-border bg-popover">
+                      {!isArchivedView ? (
+                        <DropdownMenuItem
+                          onClick={() => onDelete(item)}
+                          className="gap-2 text-destructive cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Unenroll</span>
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem
+                          onClick={() => onRestore(item)}
+                          className="gap-2 text-primary cursor-pointer"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          <span>Re-enroll</span>
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </Can>
             </CardHeader>
 
             <CardContent className="space-y-2.5 pt-1">

@@ -31,10 +31,11 @@ import { CourseGridView } from "../components/CourseGridView";
 import { CourseTableSkeleton, CourseGridSkeleton } from "../components/CourseSkeletons";
 import { CourseFormDialog } from "../components/CourseFormDialog";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import type { CourseQuery, GetProgram, ICourseSelect } from "@my-app/shared";
+import { PERMISSIONS, type CourseQuery, type GetProgram, type ICourseSelect } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
 import { useQueryClient } from "@tanstack/react-query";
 import { CsvImportDialog } from "@/components/ui/csv-import-dialog";
+import { Can } from "@/components/Can";
 
 export default function CoursePage() {
   const [importOpen, setImportOpen] = useState(false);
@@ -140,28 +141,30 @@ export default function CoursePage() {
           </p>
         </div>
 
-        <div className="flex gap-2 items-center">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setImportOpen(true);
-            }}
-            className="gap-2 h-9 text-xs border-border shadow-2xs"
-          >
-            <Upload className="w-4 h-4" />
-            <span>Import CSV</span>
-          </Button>
-          <Button
-            onClick={() => {
-              setCourseToEdit(null);
-              setFormOpen(true);
-            }}
-            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Course</span>
-          </Button>
-        </div>
+        <Can permission={PERMISSIONS.CLASS_CREATE}>
+          <div className="flex gap-2 items-center">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setImportOpen(true);
+              }}
+              className="gap-2 h-9 text-xs border-border shadow-2xs"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Import CSV</span>
+            </Button>
+            <Button
+              onClick={() => {
+                setCourseToEdit(null);
+                setFormOpen(true);
+              }}
+              className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Course</span>
+            </Button>
+          </div>
+        </Can>
       </div>
 
       <div className="flex flex-col lg:flex-row items-center justify-between gap-3">

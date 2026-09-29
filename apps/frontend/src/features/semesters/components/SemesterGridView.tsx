@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreVertical, Edit, Trash2, RotateCcw, Calendar, ShieldAlert, Square } from "lucide-react";
 import { getSemesterStatus } from "@/lib/format.lib";
-import type { ISemesterSelect } from "@my-app/shared";
+import { PERMISSIONS, type ISemesterSelect } from "@my-app/shared";
+import { Can } from "@/components/Can";
 
 interface SemesterGridViewProps {
   semesters: ISemesterSelect[];
@@ -62,53 +63,55 @@ export function SemesterGridView({
                 </Badge>
               </div>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-36 border-border bg-popover">
-                  {!isArchivedView ? (
-                    <>
-                      <DropdownMenuItem
-                        onClick={() => onEdit(item)}
-                        className="gap-2 cursor-pointer"
-                      >
-                        <Edit className="w-4 h-4 text-muted-foreground" />
-                        <span>Edit</span>
-                      </DropdownMenuItem>
-
-                      {status.label === "Ongoing" && (
+              <Can anyPermission={[PERMISSIONS.SEMESTER_CREATE, PERMISSIONS.SEMESTER_UPDATE]}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-36 border-border bg-popover">
+                    {!isArchivedView ? (
+                      <>
                         <DropdownMenuItem
-                          onClick={() => onForceStop(item)}
-                          className="gap-2 text-chart-2 focus:bg-chart-2/10 cursor-pointer font-medium"
+                          onClick={() => onEdit(item)}
+                          className="gap-2 cursor-pointer"
                         >
-                          <Square className="w-4 h-4" />
-                          <span>Force Stop Term</span>
+                          <Edit className="w-4 h-4 text-muted-foreground" />
+                          <span>Edit</span>
                         </DropdownMenuItem>
-                      )}
 
-                      <DropdownMenuSeparator className="bg-border" />
+                        {status.label === "Ongoing" && (
+                          <DropdownMenuItem
+                            onClick={() => onForceStop(item)}
+                            className="gap-2 text-chart-2 focus:bg-chart-2/10 cursor-pointer font-medium"
+                          >
+                            <Square className="w-4 h-4" />
+                            <span>Force Stop Term</span>
+                          </DropdownMenuItem>
+                        )}
+
+                        <DropdownMenuSeparator className="bg-border" />
+                        <DropdownMenuItem
+                          onClick={() => onDelete(item)}
+                          className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Archive</span>
+                        </DropdownMenuItem>
+                      </>
+                    ) : (
                       <DropdownMenuItem
-                        onClick={() => onDelete(item)}
-                        className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
+                        onClick={() => onRestore(item)}
+                        className="gap-2 text-primary cursor-pointer"
                       >
-                        <Trash2 className="w-4 h-4" />
-                        <span>Archive</span>
+                        <RotateCcw className="w-4 h-4" />
+                        <span>Restore</span>
                       </DropdownMenuItem>
-                    </>
-                  ) : (
-                    <DropdownMenuItem
-                      onClick={() => onRestore(item)}
-                      className="gap-2 text-primary cursor-pointer"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                      <span>Restore</span>
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </Can>
             </CardHeader>
 
             <CardContent className="space-y-3 pt-1">

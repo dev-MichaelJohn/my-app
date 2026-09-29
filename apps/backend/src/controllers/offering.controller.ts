@@ -19,7 +19,7 @@ export class OfferingController {
   });
 
   getOfferings = runAsync((req, _res) => {
-    return this.offeringService.getOfferings(req.query).map((data) => ({
+    return this.offeringService.getOfferings(req.query, undefined, req.user).map((data) => ({
       status: 200,
       message: "Offerings retrieved successfully.",
       data,

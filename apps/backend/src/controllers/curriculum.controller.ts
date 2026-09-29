@@ -19,7 +19,7 @@ export class CurriculumController {
   });
 
   getCurriculums = runAsync((req, _res) => {
-    return this.curriculumService.getCurriculums(req.query).map((data) => ({
+    return this.curriculumService.getCurriculums(req.query, undefined, req.user).map((data) => ({
       status: 200,
       message: "Curriculums retrieved successfully.",
       data,

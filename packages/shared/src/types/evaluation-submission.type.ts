@@ -93,15 +93,22 @@ export interface SupervisorEvaluationFormView {
   submitted_at: Date | string | null;
 }
 
-export interface TeachingCourseOfferingWithStudents {
+export interface TeachingStudentItem {
+  student_account_id: number;
+  institutional_id: string;
+  first_name: string;
+  last_name: string;
+  middle_name: string | null;
+  suffix: string | null;
+  email: string;
+  has_evaluated: boolean; // 🔒 Status only! Anonymity preserved (scores & comments hidden)
+  evaluated_at: Date | string | null;
+}
+
+export interface FacultyTeachingOffering {
   offering: GetOffering;
-  totalStudents: number;
-  totalEvaluated: number;
-  students: {
-    student_id: number;
-    institutional_id: string;
-    first_name: string;
-    last_name: string;
-    has_evaluated: boolean; // 🔒 Status only! Anonymity preserved (no score or comment revealed)
-  }[];
+  total_students: number;
+  total_evaluated: number;
+  completion_rate: number; // e.g. 85.5%
+  students: TeachingStudentItem[];
 }

@@ -1,7 +1,7 @@
 import { AuthController } from "@/controllers/auth.controller.js";
 import { UserController } from "@/controllers/user.controller.js";
 import { standardApiLimiter } from "@/libs/limiter.lib.js";
-import { RequirePermission } from "@/middlewares/rbac.middleware.js";
+import { RequireAnyPermission, RequirePermission } from "@/middlewares/rbac.middleware.js";
 import { PERMISSIONS } from "@my-app/shared";
 import { Router, type IRouter } from "express";
 
@@ -13,8 +13,24 @@ UserRouter.use(authController.verifyJWT);
 UserRouter.use(standardApiLimiter);
 
 // ── Read & Query ──
-UserRouter.get("/:id", RequirePermission(PERMISSIONS.ACCOUNT_READ), userController.getUserById);
-UserRouter.get("/", RequirePermission(PERMISSIONS.ACCOUNT_READ), userController.getUsers);
+UserRouter.get(
+  "/:id",
+  RequireAnyPermission(
+    PERMISSIONS.ACCOUNT_READ,
+    PERMISSIONS.STUDENT_READ,
+    PERMISSIONS.FACULTY_READ,
+  ),
+  userController.getUserById,
+);
+UserRouter.get(
+  "/",
+  RequireAnyPermission(
+    PERMISSIONS.ACCOUNT_READ,
+    PERMISSIONS.STUDENT_READ,
+    PERMISSIONS.FACULTY_READ,
+  ),
+  userController.getUsers,
+);
 
 // ── Create & Provision ──
 UserRouter.post("/", RequirePermission(PERMISSIONS.ACCOUNT_CREATE), userController.createUser);

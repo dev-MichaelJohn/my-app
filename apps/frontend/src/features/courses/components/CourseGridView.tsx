@@ -9,7 +9,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MoreVertical, Edit, Trash2, RotateCcw, BookOpen, ShieldAlert } from "lucide-react";
-import type { GetProgram, ICourseSelect } from "@my-app/shared";
+import { PERMISSIONS, type GetProgram, type ICourseSelect } from "@my-app/shared";
+import { Can } from "@/components/Can";
 
 interface CourseGridViewProps {
   courses: ICourseSelect[];
@@ -61,42 +62,44 @@ export function CourseGridView({
                 </Badge>
               </div>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-36 border-border bg-popover">
-                  {!isArchivedView ? (
-                    <>
+              <Can anyPermission={[PERMISSIONS.COURSE_CREATE, PERMISSIONS.COURSE_UPDATE]}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-36 border-border bg-popover">
+                    {!isArchivedView ? (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() => onEdit(course)}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <Edit className="w-4 h-4" />
+                          <span>Edit</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="bg-border" />
+                        <DropdownMenuItem
+                          onClick={() => onDelete(course)}
+                          className="gap-2 text-destructive cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Archive</span>
+                        </DropdownMenuItem>
+                      </>
+                    ) : (
                       <DropdownMenuItem
-                        onClick={() => onEdit(course)}
-                        className="gap-2 cursor-pointer"
+                        onClick={() => onRestore(course)}
+                        className="gap-2 text-primary cursor-pointer"
                       >
-                        <Edit className="w-4 h-4" />
-                        <span>Edit</span>
+                        <RotateCcw className="w-4 h-4" />
+                        <span>Restore</span>
                       </DropdownMenuItem>
-                      <DropdownMenuSeparator className="bg-border" />
-                      <DropdownMenuItem
-                        onClick={() => onDelete(course)}
-                        className="gap-2 text-destructive cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        <span>Archive</span>
-                      </DropdownMenuItem>
-                    </>
-                  ) : (
-                    <DropdownMenuItem
-                      onClick={() => onRestore(course)}
-                      className="gap-2 text-primary cursor-pointer"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                      <span>Restore</span>
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </Can>
             </CardHeader>
 
             <CardContent className="space-y-3 pt-1">

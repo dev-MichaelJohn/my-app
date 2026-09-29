@@ -1,5 +1,5 @@
 import { createBrowserRouter } from "react-router";
-import { AuthGuard, GuestGuard } from "@/components/route-guards";
+import { AuthGuard, GuestGuard, PermissionGuard, RoleGuard } from "@/components/route-guards";
 import LoginPage from "@/features/auth/page/LoginPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import CollegePage from "@/features/colleges/page/CollegePage";
@@ -17,8 +17,11 @@ import EvaluationSchedulesPage from "@/features/evaluation-schedules/page/Evalua
 import StudentEvaluationPage from "@/features/evaluations/page/StudentEvaluationPage";
 import SupervisorEvaluationPage from "@/features/evaluations/page/SupervisorEvaluationPage";
 import UserPage from "@/features/users/page/UserPage";
+import { PERMISSIONS } from "@my-app/shared";
+import FacultyTeachingPage from "@/features/evaluations/page/FacultyTeachingPage";
 
 export const AppRoutes = createBrowserRouter([
+  // ── Public / Guest Routes ──
   {
     element: <GuestGuard />,
     children: [
@@ -28,6 +31,8 @@ export const AppRoutes = createBrowserRouter([
       },
     ],
   },
+
+  // ── Authenticated Routes ──
   {
     element: <AuthGuard />,
     children: [
@@ -38,65 +43,151 @@ export const AppRoutes = createBrowserRouter([
             path: "/dashboard",
             element: <></>,
           },
+
+          // ── 1. User Management (SYS_ADMIN & ADMIN only) ──
           {
-            path: "/admin/semesters",
-            element: <SemesterPage />,
+            element: <RoleGuard allowedRoles={["SYS_ADMIN", "ADMIN"]} />,
+            children: [
+              {
+                path: "/admin/users",
+                element: <UserPage />,
+              },
+            ],
+          },
+
+          // ── 2. Evaluation Form Design & Schedules (SYS_ADMIN & ADMIN only) ──
+          {
+            element: <RoleGuard allowedRoles={["SYS_ADMIN", "ADMIN"]} />,
+            children: [
+              {
+                path: "/admin/evaluation-forms",
+                element: <EvaluationInstrumentsPage />,
+              },
+              {
+                path: "/admin/evaluation-forms/:type/:id/builder",
+                element: <EvaluationFormBuilderPage />,
+              },
+              {
+                path: "/admin/evaluation-periods",
+                element: <EvaluationSchedulesPage />,
+              },
+            ],
+          },
+
+          // ── 3. Institutional Setup (Deans & Chairs have read access) ──
+          {
+            element: <PermissionGuard permission={PERMISSIONS.SEMESTER_READ} />,
+            children: [
+              {
+                path: "/admin/semesters",
+                element: <SemesterPage />,
+              },
+            ],
           },
           {
-            path: "/admin/colleges",
-            element: <CollegePage />,
+            element: <PermissionGuard permission={PERMISSIONS.COLLEGE_READ} />,
+            children: [
+              {
+                path: "/admin/colleges",
+                element: <CollegePage />,
+              },
+            ],
           },
           {
-            path: "/admin/programs",
-            element: <ProgramPage />,
+            element: <PermissionGuard permission={PERMISSIONS.PROGRAM_READ} />,
+            children: [
+              {
+                path: "/admin/programs",
+                element: <ProgramPage />,
+              },
+            ],
           },
           {
-            path: "/admin/courses",
-            element: <CoursePage />,
+            element: <PermissionGuard permission={PERMISSIONS.COURSE_READ} />,
+            children: [
+              {
+                path: "/admin/courses",
+                element: <CoursePage />,
+              },
+            ],
           },
           {
-            path: "/admin/curriculums",
-            element: <CurriculumPage />,
+            element: <PermissionGuard permission={PERMISSIONS.COURSE_CURRICULUM_READ} />,
+            children: [
+              {
+                path: "/admin/curriculums",
+                element: <CurriculumPage />,
+              },
+            ],
           },
           {
-            path: "/admin/classes",
-            element: <ClassPage />,
+            element: <PermissionGuard permission={PERMISSIONS.CLASS_READ} />,
+            children: [
+              {
+                path: "/admin/classes",
+                element: <ClassPage />,
+              },
+            ],
+          },
+
+          // ── 4. Academic Operations ──
+          {
+            element: <RoleGuard allowedRoles={["FACULTY", "SUPERVISOR"]} />,
+            children: [
+              {
+                path: "/faculty/classes",
+                element: <FacultyTeachingPage />,
+              },
+            ],
           },
           {
-            path: "/admin/offerings",
-            element: <OfferingPage />,
+            element: <PermissionGuard permission={PERMISSIONS.COURSE_OFFERING_READ} />,
+            children: [
+              {
+                path: "/admin/offerings",
+                element: <OfferingPage />,
+              },
+            ],
           },
           {
-            path: "/admin/rosters",
-            element: <ClassStudentPage />,
+            element: <PermissionGuard permission={PERMISSIONS.CLASS_STUDENT_READ} />,
+            children: [
+              {
+                path: "/admin/rosters",
+                element: <ClassStudentPage />,
+              },
+            ],
           },
           {
-            path: "/admin/student-classes",
-            element: <StudentClassPage />,
+            element: <PermissionGuard permission={PERMISSIONS.STUDENT_CLASS_READ} />,
+            children: [
+              {
+                path: "/admin/student-classes",
+                element: <StudentClassPage />,
+              },
+            ],
           },
+
+          // ── 5. Student Evaluation Hub (Students & SysAdmin only) ──
           {
-            path: "/admin/evaluation-forms",
-            element: <EvaluationInstrumentsPage />,
+            element: <RoleGuard allowedRoles={["STUDENT"]} />,
+            children: [
+              {
+                path: "/evaluations/student",
+                element: <StudentEvaluationPage />,
+              },
+            ],
           },
+
+          // ── 6. Supervisor Evaluation Hub (Deans, Chairs & SysAdmin only) ──
           {
-            path: "/admin/evaluation-forms/:type/:id/builder",
-            element: <EvaluationFormBuilderPage />,
-          },
-          {
-            path: "/admin/evaluation-periods",
-            element: <EvaluationSchedulesPage />,
-          },
-          {
-            path: "/admin/users",
-            element: <UserPage />,
-          },
-          {
-            path: "/evaluations/student",
-            element: <StudentEvaluationPage />,
-          },
-          {
-            path: "/evaluations/supervisor",
-            element: <SupervisorEvaluationPage />,
+            element: <RoleGuard allowedRoles={["SUPERVISOR"]} />,
+            children: [
+              {
+                path: "/evaluations/supervisor",
+                element: <SupervisorEvaluationPage />,
+              },
+            ],
           },
         ],
       },

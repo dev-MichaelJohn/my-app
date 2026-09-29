@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { MoreHorizontal, Edit, Trash2, RotateCcw, ShieldAlert } from "lucide-react";
-import type { GetCurriculum } from "@my-app/shared";
+import { PERMISSIONS, type GetCurriculum } from "@my-app/shared";
+import { Can } from "@/components/Can";
 
 interface CurriculumTableViewProps {
   curriculums: GetCurriculum[];
@@ -53,7 +54,14 @@ export function CurriculumTableView({
             <TableHead className="font-bold">Program</TableHead>
             <TableHead className="font-bold">Year Level</TableHead>
             <TableHead className="font-bold">Term</TableHead>
-            <TableHead className="w-[80px] text-right font-bold">Actions</TableHead>
+            <Can
+              anyPermission={[
+                PERMISSIONS.COURSE_CURRICULUM_CREATE,
+                PERMISSIONS.COURSE_CURRICULUM_UPDATE,
+              ]}
+            >
+              <TableHead className="w-[80px] text-right font-bold">Actions</TableHead>
+            </Can>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -83,47 +91,54 @@ export function CurriculumTableView({
                   {item.semester_term} Term
                 </span>
               </TableCell>
-              <TableCell className="text-right">
-                <DropdownMenu>
-                  <DropdownMenuTrigger>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    className="w-40 border-border bg-popover text-popover-foreground"
-                  >
-                    {!isArchivedView ? (
-                      <>
+              <Can
+                anyPermission={[
+                  PERMISSIONS.COURSE_CURRICULUM_CREATE,
+                  PERMISSIONS.COURSE_CURRICULUM_UPDATE,
+                ]}
+              >
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      className="w-40 border-border bg-popover text-popover-foreground"
+                    >
+                      {!isArchivedView ? (
+                        <>
+                          <DropdownMenuItem
+                            onClick={() => onEdit(item)}
+                            className="gap-2 cursor-pointer"
+                          >
+                            <Edit className="w-4 h-4 text-muted-foreground" />
+                            <span>Edit</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator className="bg-border" />
+                          <DropdownMenuItem
+                            onClick={() => onDelete(item)}
+                            className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Archive</span>
+                          </DropdownMenuItem>
+                        </>
+                      ) : (
                         <DropdownMenuItem
-                          onClick={() => onEdit(item)}
-                          className="gap-2 cursor-pointer"
+                          onClick={() => onRestore(item)}
+                          className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
                         >
-                          <Edit className="w-4 h-4 text-muted-foreground" />
-                          <span>Edit</span>
+                          <RotateCcw className="w-4 h-4" />
+                          <span>Restore</span>
                         </DropdownMenuItem>
-                        <DropdownMenuSeparator className="bg-border" />
-                        <DropdownMenuItem
-                          onClick={() => onDelete(item)}
-                          className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          <span>Archive</span>
-                        </DropdownMenuItem>
-                      </>
-                    ) : (
-                      <DropdownMenuItem
-                        onClick={() => onRestore(item)}
-                        className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                        <span>Restore</span>
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TableCell>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </Can>
             </TableRow>
           ))}
         </TableBody>

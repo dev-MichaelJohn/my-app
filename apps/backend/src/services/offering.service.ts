@@ -15,6 +15,7 @@ import {
   StudentClasses,
   type GenerateOfferingsSummary,
   type GetOffering,
+  type GetUser,
   type IOfferingInsert,
   type IOfferingUpdate,
   type PaginatedData,
@@ -31,6 +32,7 @@ import {
   desc,
   eq,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   ne,
@@ -52,6 +54,7 @@ export interface IOfferingService {
   getOfferings(
     rawQuery: unknown,
     client?: DbClient,
+    actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetOffering[]>, AppError>;
   createOffering(info: IOfferingInsert, client?: DbClient): ResultAsync<GetOffering, AppError>;
   updateOffering(
@@ -189,6 +192,7 @@ export class OfferingService implements IOfferingService {
   getOfferings(
     rawQuery: unknown,
     client: DbClient = db,
+    actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetOffering[]>, AppError> {
     return ValidateSchema(OfferingQuerySchema, rawQuery).asyncAndThen((parsed) => {
       const {
@@ -213,6 +217,24 @@ export class OfferingService implements IOfferingService {
         isNull(Programs.deleted_at),
         isNull(Semesters.deleted_at),
       ];
+
+      const roles = actorUser?.roles ?? [];
+      const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+
+      if (!isPrivileged && actorUser) {
+        const deanships = actorUser.offices?.deanships || [];
+        const chairships = actorUser.offices?.chairships || [];
+
+        if (chairships.length > 0) {
+          // Chair: Lock strictly to their program(s)
+          const chairProgramIds = chairships.map((c) => c.id);
+          filters.push(inArray(Programs.id, chairProgramIds));
+        } else if (deanships.length > 0) {
+          // Dean: Lock strictly to programs in their college(s)
+          const deanCollegeIds = deanships.map((d) => d.id);
+          filters.push(inArray(Programs.college_id, deanCollegeIds));
+        }
+      }
 
       if (search) {
         const term = `%${search}%`;

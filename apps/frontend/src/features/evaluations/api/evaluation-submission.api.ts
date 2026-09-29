@@ -3,6 +3,7 @@ import type { ResultAsync } from "neverthrow";
 import type {
   EvaluableStudentSubject,
   EvaluableSupervisorOffering,
+  FacultyTeachingOffering,
   StudentEvaluationFormView,
   SubmitStudentEvaluation,
   SubmitSupervisorEvaluation,
@@ -54,5 +55,13 @@ export class EvaluationSubmissionAPI {
     ApiError
   > {
     return http.post("/evaluation-submissions/supervisor/submit", payload);
+  }
+
+  getFacultyTeachingOfferings(
+    semesterId?: number,
+  ): ResultAsync<FacultyTeachingOffering[], ApiError> {
+    return http.get<FacultyTeachingOffering[]>("/evaluation-submissions/faculty/teaching-classes", {
+      semester_id: semesterId,
+    });
   }
 }

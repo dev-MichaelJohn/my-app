@@ -51,9 +51,9 @@ SubmissionRouter.post(
 );
 
 SubmissionRouter.get(
-  "/faculty/my-classes",
-  RequireAnyPermission(PERMISSIONS.EVALUATION_REPORT_VIEW_SELF, PERMISSIONS.COURSE_OFFERING_READ),
-  controller.getFacultyTeachingClasses,
+  "/faculty/teaching-classes",
+  RequireAnyPermission(PERMISSIONS.COURSE_OFFERING_READ, PERMISSIONS.EVALUATION_REPORT_VIEW_SELF),
+  controller.getFacultyTeachingOfferings,
 );
 
 export default SubmissionRouter;

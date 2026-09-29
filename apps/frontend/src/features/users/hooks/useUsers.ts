@@ -11,12 +11,13 @@ export const USER_KEYS = {
   detail: (id: number) => [...USER_KEYS.details(), id] as const,
 };
 
-export const useUsers = (query?: unknown) => {
+export const useUsers = (query?: unknown, enabled = true) => {
   return useQuery({
     queryKey: USER_KEYS.list(query),
     queryFn: () => toQuery(userApi.getUsers(query)),
     placeholderData: keepPreviousData,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 };
 

@@ -19,7 +19,7 @@ export class ClassController {
   });
 
   getClasses = runAsync((req, _res) => {
-    return this.classService.getClasses(req.query).map((data) => ({
+    return this.classService.getClasses(req.query, undefined, req.user).map((data) => ({
       status: 200,
       message: "Classes retrieved successfully.",
       data,

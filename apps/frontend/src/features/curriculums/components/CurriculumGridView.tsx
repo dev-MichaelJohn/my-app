@@ -9,7 +9,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MoreVertical, Edit, Trash2, RotateCcw, Layers, ShieldAlert } from "lucide-react";
-import type { GetCurriculum } from "@my-app/shared";
+import { PERMISSIONS, type GetCurriculum } from "@my-app/shared";
+import { Can } from "@/components/Can";
 
 interface CurriculumGridViewProps {
   curriculums: GetCurriculum[];
@@ -59,39 +60,49 @@ export function CurriculumGridView({
               </Badge>
             </div>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                  <MoreVertical className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-36 border-border bg-popover">
-                {!isArchivedView ? (
-                  <>
-                    <DropdownMenuItem onClick={() => onEdit(item)} className="gap-2 cursor-pointer">
-                      <Edit className="w-4 h-4" />
-                      <span>Edit</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator className="bg-border" />
+            <Can
+              anyPermission={[
+                PERMISSIONS.COURSE_CURRICULUM_CREATE,
+                PERMISSIONS.COURSE_CURRICULUM_UPDATE,
+              ]}
+            >
+              <DropdownMenu>
+                <DropdownMenuTrigger>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-36 border-border bg-popover">
+                  {!isArchivedView ? (
+                    <>
+                      <DropdownMenuItem
+                        onClick={() => onEdit(item)}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <Edit className="w-4 h-4" />
+                        <span>Edit</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-border" />
+                      <DropdownMenuItem
+                        onClick={() => onDelete(item)}
+                        className="gap-2 text-destructive cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Archive</span>
+                      </DropdownMenuItem>
+                    </>
+                  ) : (
                     <DropdownMenuItem
-                      onClick={() => onDelete(item)}
-                      className="gap-2 text-destructive cursor-pointer"
+                      onClick={() => onRestore(item)}
+                      className="gap-2 text-primary cursor-pointer"
                     >
-                      <Trash2 className="w-4 h-4" />
-                      <span>Archive</span>
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Restore</span>
                     </DropdownMenuItem>
-                  </>
-                ) : (
-                  <DropdownMenuItem
-                    onClick={() => onRestore(item)}
-                    className="gap-2 text-primary cursor-pointer"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Restore</span>
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </Can>
           </CardHeader>
 
           <CardContent className="space-y-3 pt-1">

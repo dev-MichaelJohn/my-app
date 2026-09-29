@@ -76,3 +76,11 @@ export const useSubmitSupervisorEvaluation = () => {
     },
   });
 };
+
+export const useFacultyTeachingOfferings = (semesterId?: number) => {
+  return useQuery({
+    queryKey: ["evaluation-submissions", "faculty", "teaching-classes", semesterId],
+    queryFn: () => toQuery(submissionApi.getFacultyTeachingOfferings(semesterId)),
+    staleTime: 60 * 1000,
+  });
+};

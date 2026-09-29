@@ -33,6 +33,7 @@ import {
   desc,
   eq,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   or,
@@ -51,6 +52,7 @@ export interface IProgramService {
   getPrograms(
     rawQuery: unknown,
     client?: DbClient,
+    actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetProgram[]>, AppError>;
   createProgram(programInfo: CreateProgram, client?: DbClient): ResultAsync<GetProgram, AppError>;
   updateProgram(
@@ -139,6 +141,7 @@ export class ProgramService implements IProgramService {
   getPrograms(
     rawQuery: unknown,
     client: DbClient = db,
+    actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetProgram[]>, AppError> {
     return ValidateSchema(ProgramQuerySchema, rawQuery).asyncAndThen((parsed) => {
       const { paginate, page, limit, search, college_id, has_chair, is_archived, sort_by, order } =
@@ -147,6 +150,24 @@ export class ProgramService implements IProgramService {
       const filters: SQL[] = [
         is_archived ? isNotNull(Programs.deleted_at) : isNull(Programs.deleted_at),
       ];
+
+      const roles = actorUser?.roles ?? [];
+      const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+
+      if (!isPrivileged && actorUser) {
+        const deanships = actorUser.offices?.deanships || [];
+        const chairships = actorUser.offices?.chairships || [];
+
+        if (chairships.length > 0) {
+          // Chair: Lock strictly to their program(s)
+          const chairProgramIds = chairships.map((c) => c.id);
+          filters.push(inArray(Programs.id, chairProgramIds));
+        } else if (deanships.length > 0) {
+          // Dean: Lock strictly to programs in their college(s)
+          const deanCollegeIds = deanships.map((d) => d.id);
+          filters.push(inArray(Programs.college_id, deanCollegeIds));
+        }
+      }
 
       if (search) {
         const term = `%${search}%`;

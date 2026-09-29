@@ -33,8 +33,14 @@ import { SemesterGridView } from "../components/SemesterGridView";
 import { SemesterTableSkeleton, SemesterGridSkeleton } from "../components/SemesterSkeletons";
 import { SemesterFormDialog } from "../components/SemesterFormDialog";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import { SemeterTermEnum, type ISemesterSelect, type SemesterQuery } from "@my-app/shared";
+import {
+  PERMISSIONS,
+  SemeterTermEnum,
+  type ISemesterSelect,
+  type SemesterQuery,
+} from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
+import { Can } from "@/components/Can";
 
 export default function SemesterPage() {
   const [viewMode, setViewMode] = useState<"table" | "grid">(() => {
@@ -129,16 +135,18 @@ export default function SemesterPage() {
           </p>
         </div>
 
-        <Button
-          onClick={() => {
-            setSemesterToEdit(null);
-            setFormOpen(true);
-          }}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Semester</span>
-        </Button>
+        <Can permission={PERMISSIONS.SEMESTER_CREATE}>
+          <Button
+            onClick={() => {
+              setSemesterToEdit(null);
+              setFormOpen(true);
+            }}
+            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Semester</span>
+          </Button>
+        </Can>
       </div>
 
       <div className="flex flex-col lg:flex-row items-center justify-between gap-3">

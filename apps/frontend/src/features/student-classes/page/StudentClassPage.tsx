@@ -35,6 +35,8 @@ import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { isSemesterOpen } from "@/lib/format.lib";
 import type { GetStudentClass, StudentClassQuery } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
+import { Can } from "@/components/Can";
+import { PERMISSIONS } from "@my-app/shared";
 
 export default function StudentClassPage() {
   const [searchParams] = useSearchParams();
@@ -154,16 +156,18 @@ export default function StudentClassPage() {
           </p>
         </div>
 
-        {offering && (
-          <Button
-            onClick={() => setFormOpen(true)}
-            disabled={isConcluded}
-            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
-          >
-            {isConcluded ? <Lock className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            <span>{isConcluded ? "Term Concluded" : "Enroll Student / Irregular"}</span>
-          </Button>
-        )}
+        <Can permission={PERMISSIONS.STUDENT_CLASS_CREATE}>
+          {offering && (
+            <Button
+              onClick={() => setFormOpen(true)}
+              disabled={isConcluded}
+              className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+            >
+              {isConcluded ? <Lock className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              <span>{isConcluded ? "Term Concluded" : "Enroll Student / Irregular"}</span>
+            </Button>
+          )}
+        </Can>
       </div>
 
       {isConcluded && (
@@ -364,7 +368,7 @@ export default function StudentClassPage() {
         )}
       </div>
 
-      {offering && (
+      {formOpen && offering && (
         <StudentClassFormDialog open={formOpen} onOpenChange={setFormOpen} offering={offering} />
       )}
 

@@ -22,11 +22,13 @@ export class ClassStudentController {
   });
 
   getClassStudents = runAsync((req, _res) => {
-    return this.classStudentService.getClassStudents(req.query).map((data) => ({
-      status: 200,
-      message: "Class-students retrieved successfully.",
-      data,
-    }));
+    return this.classStudentService
+      .getClassStudents(req.query, undefined, req.user)
+      .map((data) => ({
+        status: 200,
+        message: "Class-students retrieved successfully.",
+        data,
+      }));
   });
 
   createClassStudent = runAsync((req, _res) => {

@@ -15,6 +15,7 @@ import {
   ClipboardList,
   UserCheck,
   Calendar,
+  BookOpenCheck,
 } from "lucide-react";
 
 interface NavItem {
@@ -76,6 +77,12 @@ const NAVIGATION_SECTIONS: NavSection[] = [
     heading: "Academic Operations",
     items: [
       {
+        title: "My Teaching Classes",
+        href: "/faculty/classes",
+        icon: BookOpenCheck,
+        anyPermissions: [PERMISSIONS.COURSE_OFFERING_READ, PERMISSIONS.EVALUATION_REPORT_VIEW_SELF],
+      },
+      {
         title: "Course Offerings",
         href: "/admin/offerings",
         icon: CalendarDays,
@@ -96,13 +103,13 @@ const NAVIGATION_SECTIONS: NavSection[] = [
         title: "Evaluation Instruments",
         href: "/admin/evaluation-forms",
         icon: ClipboardList,
-        permission: PERMISSIONS.EVALUATION_FORM_READ,
+        permission: PERMISSIONS.EVALUATION_FORM_MANAGE,
       },
       {
         title: "Evaluation Schedules",
         href: "/admin/evaluation-periods",
         icon: CalendarDays,
-        permission: PERMISSIONS.EVALUATION_PERIOD_READ,
+        permission: PERMISSIONS.EVALUATION_PERIOD_MANAGE,
       },
       {
         title: "Evaluate Instructors",
@@ -146,7 +153,8 @@ const NAVIGATION_SECTIONS: NavSection[] = [
 ];
 
 export function AppSidebar({ onClose }: { onClose?: () => void }) {
-  const { hasPermission, hasAnyPermission } = usePermissions();
+  const { hasPermission, hasAnyPermission, isChair, isDean, isSysAdmin, isAdmin } =
+    usePermissions();
 
   return (
     <aside className="w-64 h-full flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border select-none">
@@ -187,6 +195,10 @@ export function AppSidebar({ onClose }: { onClose?: () => void }) {
         {NAVIGATION_SECTIONS.map((section) => {
           // Filter items based on permissions
           const visibleItems = section.items.filter((item) => {
+            if (item.href === "/admin/colleges" && isChair && !isDean && !isSysAdmin && !isAdmin) {
+              return false;
+            }
+
             if (item.permission) return hasPermission(item.permission);
             if (item.anyPermissions) return hasAnyPermission(item.anyPermissions);
             return true;

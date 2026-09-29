@@ -13,6 +13,7 @@ import {
   Semesters,
   StudentClasses,
   type GetClassStudent,
+  type GetUser,
   type IClassStudentInsert,
   type IClassStudentUpdate,
   type PaginatedData,
@@ -48,6 +49,7 @@ export interface IClassStudentService {
   getClassStudents(
     rawQuery: unknown,
     client?: DbClient,
+    actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetClassStudent[]>, AppError>;
   createClassStudent(
     classStudentInfo: IClassStudentInsert,
@@ -156,6 +158,7 @@ export class ClassStudentService implements IClassStudentService {
   getClassStudents(
     rawQuery: unknown,
     client?: DbClient,
+    actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetClassStudent[]>, AppError> {
     return ValidateSchema(ClassStudentQuerySchema, rawQuery).asyncAndThen((parsed) => {
       const {
@@ -177,6 +180,24 @@ export class ClassStudentService implements IClassStudentService {
         isNull(Semesters.deleted_at),
         isNull(Accounts.deleted_at),
       ];
+
+      const roles = actorUser?.roles ?? [];
+      const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+
+      if (!isPrivileged && actorUser) {
+        const deanships = actorUser.offices?.deanships || [];
+        const chairships = actorUser.offices?.chairships || [];
+
+        if (chairships.length > 0) {
+          // Chair: Lock strictly to their program(s)
+          const chairProgramIds = chairships.map((c) => c.id);
+          filters.push(inArray(Programs.id, chairProgramIds));
+        } else if (deanships.length > 0) {
+          // Dean: Lock strictly to programs in their college(s)
+          const deanCollegeIds = deanships.map((d) => d.id);
+          filters.push(inArray(Programs.college_id, deanCollegeIds));
+        }
+      }
 
       if (search) {
         const term = `%${search}%`;
@@ -237,6 +258,7 @@ export class ClassStudentService implements IClassStudentService {
           .select({ total: countDistinct(ClassStudents.id) })
           .from(ClassStudents)
           .innerJoin(Classes, eq(ClassStudents.class_id, Classes.id))
+          .innerJoin(Programs, eq(Classes.program_id, Programs.id))
           .innerJoin(Semesters, eq(ClassStudents.semester_id, Semesters.id))
           .innerJoin(Accounts, eq(ClassStudents.student_account_id, Accounts.id))
           .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))

@@ -7,6 +7,8 @@ import {
   CourseQuerySchema,
   Courses,
   CourseUpdate,
+  Programs,
+  type GetUser,
   type ICourseInsert,
   type ICourseSelect,
   type ICourseUpdate,
@@ -23,6 +25,7 @@ import {
   desc,
   eq,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   or,
@@ -40,6 +43,7 @@ export interface ICourseService {
   getCourses(
     rawQuery: unknown,
     client?: DbClient,
+    actorUser?: GetUser,
   ): ResultAsync<PaginatedData<ICourseSelect[]>, AppError>;
   createCourse(courseInfo: ICourseInsert, client?: DbClient): ResultAsync<ICourseSelect, AppError>;
   updateCourse(
@@ -73,6 +77,7 @@ export class CourseService implements ICourseService {
   getCourses(
     rawQuery: unknown,
     client: DbClient = db,
+    actorUser?: GetUser,
   ): ResultAsync<PaginatedData<ICourseSelect[]>, AppError> {
     return ValidateSchema(CourseQuerySchema, rawQuery).asyncAndThen((parsed) => {
       const { paginate, page, limit, search, program_id, is_archived, sort_by, order } = parsed;
@@ -80,6 +85,24 @@ export class CourseService implements ICourseService {
       const filters: SQL[] = [
         is_archived ? isNotNull(Courses.deleted_at) : isNull(Courses.deleted_at),
       ];
+
+      const roles = actorUser?.roles ?? [];
+      const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+
+      if (!isPrivileged && actorUser) {
+        const deanships = actorUser.offices?.deanships || [];
+        const chairships = actorUser.offices?.chairships || [];
+
+        if (chairships.length > 0) {
+          // Chair: Lock strictly to their program(s)
+          const chairProgramIds = chairships.map((c) => c.id);
+          filters.push(inArray(Programs.id, chairProgramIds));
+        } else if (deanships.length > 0) {
+          // Dean: Lock strictly to programs in their college(s)
+          const deanCollegeIds = deanships.map((d) => d.id);
+          filters.push(inArray(Programs.college_id, deanCollegeIds));
+        }
+      }
 
       if (search) {
         const term = `%${search}%`;
@@ -102,8 +125,17 @@ export class CourseService implements ICourseService {
 
       return WithTransaction(client, async (tx) => {
         const baseDataQuery = tx
-          .select()
+          .select({
+            id: Courses.id,
+            program_id: Courses.program_id,
+            name: Courses.name,
+            initialism: Courses.initialism,
+            created_at: Courses.created_at,
+            updated_at: Courses.updated_at,
+            deleted_at: Courses.deleted_at,
+          })
           .from(Courses)
+          .innerJoin(Programs, eq(Courses.program_id, Programs.id))
           .where(whereCondition)
           .orderBy(orderByClause);
 
@@ -123,10 +155,12 @@ export class CourseService implements ICourseService {
         const countQuery = tx
           .select({ total: countDistinct(Courses.id) })
           .from(Courses)
+          .innerJoin(Programs, eq(Courses.program_id, Programs.id))
           .where(whereCondition);
 
         const [courses, countResult] = await Promise.all([paginatedDataQuery, countQuery]);
         const totalItems = countResult[0]?.total ?? 0;
+
         return createPaginatedData({
           data: courses,
           currentPage: page,

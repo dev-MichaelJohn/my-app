@@ -39,8 +39,9 @@ import { OfferingGridView } from "../components/OfferingGridView";
 import { OfferingTableSkeleton, OfferingGridSkeleton } from "../components/OfferingSkeletons";
 import { OfferingFormDialog } from "../components/OfferingFormDialog";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import type { GetOffering, OfferingQuery } from "@my-app/shared";
+import { PERMISSIONS, type GetOffering, type OfferingQuery } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
+import { Can } from "@/components/Can";
 
 export default function OfferingPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -228,29 +229,33 @@ export default function OfferingPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {effectiveSemesterId && (
-            <Button
-              variant="outline"
-              onClick={() => setConfirmGenerateOpen(true)}
-              className="gap-2 h-9 text-xs border-primary/40 text-primary hover:bg-primary/10 shadow-2xs"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-primary" />
-              <span>Auto-Generate</span>
-            </Button>
-          )}
+        <Can
+          anyPermission={[PERMISSIONS.COURSE_OFFERING_CREATE, PERMISSIONS.COURSE_OFFERING_UPDATE]}
+        >
+          <div className="flex items-center gap-2">
+            {effectiveSemesterId && (
+              <Button
+                variant="outline"
+                onClick={() => setConfirmGenerateOpen(true)}
+                className="gap-2 h-9 text-xs border-primary/40 text-primary hover:bg-primary/10 shadow-2xs"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-primary" />
+                <span>Auto-Generate</span>
+              </Button>
+            )}
 
-          <Button
-            onClick={() => {
-              setOfferingToEdit(null);
-              setFormOpen(true);
-            }}
-            className="gap-2 h-9 text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Offering</span>
-          </Button>
-        </div>
+            <Button
+              onClick={() => {
+                setOfferingToEdit(null);
+                setFormOpen(true);
+              }}
+              className="gap-2 h-9 text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Offering</span>
+            </Button>
+          </div>
+        </Can>
       </div>
 
       <div className="flex flex-col gap-3 p-1">

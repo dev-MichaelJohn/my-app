@@ -25,8 +25,9 @@ import {
   ShieldAlert,
   Users,
 } from "lucide-react";
-import type { GetOffering } from "@my-app/shared";
+import { PERMISSIONS, type GetOffering } from "@my-app/shared";
 import { useNavigate } from "react-router";
+import { Can } from "@/components/Can";
 
 interface OfferingTableViewProps {
   offerings: GetOffering[];
@@ -66,7 +67,14 @@ export function OfferingTableView({
             <TableHead className="font-bold">Course Title</TableHead>
             <TableHead className="w-[130px] font-bold">Class Section</TableHead>
             <TableHead className="font-bold">Assigned Instructor</TableHead>
-            <TableHead className="w-[80px] text-right font-bold">Actions</TableHead>
+            <Can
+              anyPermission={[
+                PERMISSIONS.COURSE_OFFERING_CREATE,
+                PERMISSIONS.COURSE_OFFERING_UPDATE,
+              ]}
+            >
+              <TableHead className="w-[80px] text-right font-bold">Actions</TableHead>
+            </Can>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -111,56 +119,67 @@ export function OfferingTableView({
                     </span>
                   )}
                 </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="w-40 border-border bg-popover text-popover-foreground"
-                    >
-                      {!isArchivedView ? (
-                        <>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              navigate(`/admin/student-classes?course_offering_id=${item.id}`)
-                            }
-                            className="gap-2 cursor-pointer font-medium text-primary focus:bg-primary/10"
-                          >
-                            <Users className="w-4 h-4 text-primary" />
-                            <span>Enrolled Students</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => onEdit(item)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <Edit className="w-4 h-4 text-muted-foreground" />
-                            <span>Assign / Edit</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-border" />
-                          <DropdownMenuItem
-                            onClick={() => onDelete(item)}
-                            className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            <span>Archive</span>
-                          </DropdownMenuItem>
-                        </>
-                      ) : (
-                        <DropdownMenuItem
-                          onClick={() => onRestore(item)}
-                          className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
+                <Can
+                  anyPermission={[
+                    PERMISSIONS.COURSE_OFFERING_UPDATE,
+                    PERMISSIONS.COURSE_OFFERING_CREATE,
+                  ]}
+                >
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground"
                         >
-                          <RotateCcw className="w-4 h-4" />
-                          <span>Restore</span>
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="w-40 border-border bg-popover text-popover-foreground"
+                      >
+                        {!isArchivedView ? (
+                          <>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                navigate(`/admin/student-classes?course_offering_id=${item.id}`)
+                              }
+                              className="gap-2 cursor-pointer font-medium text-primary focus:bg-primary/10"
+                            >
+                              <Users className="w-4 h-4 text-primary" />
+                              <span>Enrolled Students</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => onEdit(item)}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <Edit className="w-4 h-4 text-muted-foreground" />
+                              <span>Assign / Edit</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-border" />
+                            <DropdownMenuItem
+                              onClick={() => onDelete(item)}
+                              className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span>Archive</span>
+                            </DropdownMenuItem>
+                          </>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => onRestore(item)}
+                            className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            <span>Restore</span>
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </Can>
               </TableRow>
             );
           })}

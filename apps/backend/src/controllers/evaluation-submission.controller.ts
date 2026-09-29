@@ -89,12 +89,16 @@ export class EvaluationSubmissionController {
       }));
   });
 
-  getFacultyTeachingClasses = runAsync((req) => {
+  getFacultyTeachingOfferings = runAsync((req) => {
     if (!req.user) return errAsync(new AppError(401, "Authentication required."));
-    return this.submissionService.getFacultyTeachingClasses(req.user.account.id).map((data) => ({
-      status: 200,
-      message: "Course-offerings retrieved successfully.",
-      data,
-    }));
+    const semId = req.query.semester_id ? Number(req.query.semester_id) : undefined;
+
+    return this.submissionService
+      .getFacultyTeachingOfferings(req.user.account.id, semId)
+      .map((data) => ({
+        status: 200,
+        message: "Faculty teaching classes retrieved.",
+        data,
+      }));
   });
 }
