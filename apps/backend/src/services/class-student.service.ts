@@ -272,7 +272,42 @@ export class ClassStudentService implements IClassStudentService {
           throw new AppError(400, "The selected account does not have a STUDENT role.");
         }
 
-        const [existing] = await tx
+        // ── 1. Check if the student is already actively enrolled in ANY class for this semester ──
+        const [activeEnrollment] = await tx
+          .select({
+            id: ClassStudents.id,
+            classId: ClassStudents.class_id,
+            section: Classes.section,
+            yearLevel: Classes.year_level,
+            programCode: Programs.initialism,
+          })
+          .from(ClassStudents)
+          .innerJoin(Classes, eq(ClassStudents.class_id, Classes.id))
+          .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+          .where(
+            and(
+              eq(ClassStudents.semester_id, parsed.semester_id),
+              eq(ClassStudents.student_account_id, parsed.student_account_id),
+              isNull(ClassStudents.deleted_at),
+            ),
+          );
+
+        if (activeEnrollment) {
+          if (activeEnrollment.classId === parsed.class_id) {
+            throw new AppError(
+              409,
+              "This student is already enrolled in this class section for this semester.",
+            );
+          }
+
+          throw new AppError(
+            409,
+            `Cannot enroll: Student is already enrolled in section ${activeEnrollment.programCode} ${activeEnrollment.yearLevel}-${activeEnrollment.section} for this semester. A student can only be enrolled in one class roster per semester.`,
+          );
+        }
+
+        // ── 2. Check if there was a previous soft-deleted enrollment in THIS class to restore ──
+        const [existingDeleted] = await tx
           .select()
           .from(ClassStudents)
           .where(
@@ -280,22 +315,17 @@ export class ClassStudentService implements IClassStudentService {
               eq(ClassStudents.class_id, parsed.class_id),
               eq(ClassStudents.semester_id, parsed.semester_id),
               eq(ClassStudents.student_account_id, parsed.student_account_id),
+              isNotNull(ClassStudents.deleted_at),
             ),
           );
 
         let enrollmentId: number;
 
-        if (existing) {
-          if (existing.deleted_at === null)
-            throw new AppError(
-              409,
-              "This student is already enrolled in this class for the selected semester.",
-            );
-
+        if (existingDeleted) {
           const [restored] = await tx
             .update(ClassStudents)
             .set({ deleted_at: null })
-            .where(eq(ClassStudents.id, existing.id))
+            .where(eq(ClassStudents.id, existingDeleted.id))
             .returning({ id: ClassStudents.id });
 
           if (!restored) throw new AppError(500, "Failed to restore enrollment record.");
@@ -362,6 +392,33 @@ export class ClassStudentService implements IClassStudentService {
         const targetStudentId = parsed.student_account_id || current.student.account.id;
         const targetClassId = parsed.class_id || current.class.id;
         const targetSemId = parsed.semester_id || current.semester.id;
+
+        // ── Ensure target student is not already active in another class for target semester ──
+        const [conflict] = await tx
+          .select({
+            id: ClassStudents.id,
+            section: Classes.section,
+            yearLevel: Classes.year_level,
+            programCode: Programs.initialism,
+          })
+          .from(ClassStudents)
+          .innerJoin(Classes, eq(ClassStudents.class_id, Classes.id))
+          .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+          .where(
+            and(
+              ne(ClassStudents.id, id),
+              eq(ClassStudents.semester_id, targetSemId),
+              eq(ClassStudents.student_account_id, targetStudentId),
+              isNull(ClassStudents.deleted_at),
+            ),
+          );
+
+        if (conflict) {
+          throw new AppError(
+            409,
+            `Cannot reassign: Student is already enrolled in section ${conflict.programCode} ${conflict.yearLevel}-${conflict.section} for this semester.`,
+          );
+        }
 
         const [updated] = await tx
           .update(ClassStudents)
@@ -444,13 +501,20 @@ export class ClassStudentService implements IClassStudentService {
 
       await this.validateSemesterOpen(current.semester.id, tx);
 
+      // ── Ensure student doesn't already have an active class in this semester ──
       const [conflict] = await tx
-        .select()
+        .select({
+          id: ClassStudents.id,
+          section: Classes.section,
+          yearLevel: Classes.year_level,
+          programCode: Programs.initialism,
+        })
         .from(ClassStudents)
+        .innerJoin(Classes, eq(ClassStudents.class_id, Classes.id))
+        .innerJoin(Programs, eq(Classes.program_id, Programs.id))
         .where(
           and(
             ne(ClassStudents.id, id),
-            eq(ClassStudents.class_id, current.class.id),
             eq(ClassStudents.semester_id, current.semester.id),
             eq(ClassStudents.student_account_id, current.student.account.id),
             isNull(ClassStudents.deleted_at),
@@ -460,7 +524,7 @@ export class ClassStudentService implements IClassStudentService {
       if (conflict)
         throw new AppError(
           409,
-          "Cannot restore: Student is already actively enrolled in this class for the selected semester.",
+          `Cannot restore: Student is already actively enrolled in section ${conflict.programCode} ${conflict.yearLevel}-${conflict.section} for this semester.`,
         );
 
       const [restored] = await tx

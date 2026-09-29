@@ -277,8 +277,8 @@ export const ClassStudents = pgTable(
     deleted_at: timestamp("deleted_at"),
   },
   (t) => [
-    uniqueIndex("uidx_active_semester_class_student")
-      .on(t.class_id, t.semester_id, t.student_account_id)
+    uniqueIndex("uidx_active_semester_student")
+      .on(t.semester_id, t.student_account_id)
       .where(sql`deleted_at IS NULL`),
     index("idx_class_students_class_semester").on(t.class_id, t.semester_id),
     index("idx_class_students_student_account_id").on(t.student_account_id),
