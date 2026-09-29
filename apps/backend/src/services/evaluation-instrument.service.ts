@@ -5,10 +5,10 @@ import {
   desc,
   eq,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   ne,
-  sql,
   type SQL,
 } from "drizzle-orm";
 import { type ResultAsync } from "neverthrow";
@@ -148,65 +148,9 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
     client: DbClient = db,
   ): ResultAsync<GetStudentEvaluationForm, AppError> {
     return WithTransaction(client, async (tx) => {
+      // 1. Fetch Form Root
       const [form] = await tx
-        .select({
-          id: StudentEvaluationForms.id,
-          title: StudentEvaluationForms.title,
-          description: StudentEvaluationForms.description,
-          min_rating: StudentEvaluationForms.min_rating,
-          max_rating: StudentEvaluationForms.max_rating,
-          created_at: StudentEvaluationForms.created_at,
-          updated_at: StudentEvaluationForms.updated_at,
-          deleted_at: StudentEvaluationForms.deleted_at,
-          categories: sql<GetStudentEvaluationForm["categories"]>`
-            COALESCE(
-              (
-                SELECT JSON_AGG(
-                  JSON_BUILD_OBJECT(
-                    'id', ${StudentEvaluationCategories.id},
-                    'form_id', ${StudentEvaluationCategories.form_id},
-                    'parent_id', ${StudentEvaluationCategories.parent_id},
-                    'name', ${StudentEvaluationCategories.name},
-                    'description', ${StudentEvaluationCategories.description},
-                    'order', ${StudentEvaluationCategories.order},
-                    'version', ${StudentEvaluationCategories.version},
-                    'created_at', ${StudentEvaluationCategories.created_at},
-                    'updated_at', ${StudentEvaluationCategories.updated_at},
-                    'deleted_at', ${StudentEvaluationCategories.deleted_at},
-                    'questions', COALESCE(
-                      (
-                        SELECT JSON_AGG(
-                          JSON_BUILD_OBJECT(
-                            'id', ${StudentEvaluationQuestions.id},
-                            'category_id', ${StudentEvaluationQuestions.category_id},
-                            'parent_id', ${StudentEvaluationQuestions.parent_id},
-                            'question', ${StudentEvaluationQuestions.question},
-                            'max_rating', ${StudentEvaluationQuestions.max_rating},
-                            'order', ${StudentEvaluationQuestions.order},
-                            'version', ${StudentEvaluationQuestions.version},
-                            'created_at', ${StudentEvaluationQuestions.created_at},
-                            'updated_at', ${StudentEvaluationQuestions.updated_at},
-                            'deleted_at', ${StudentEvaluationQuestions.deleted_at}
-                          )
-                          ORDER BY ${StudentEvaluationQuestions.order} ASC
-                        )
-                        FROM ${StudentEvaluationQuestions}
-                        WHERE ${StudentEvaluationQuestions.category_id} = ${StudentEvaluationCategories.id}
-                          AND ${StudentEvaluationQuestions.deleted_at} IS NULL
-                      ),
-                      '[]'::json
-                    )
-                  )
-                  ORDER BY ${StudentEvaluationCategories.order} ASC
-                )
-                FROM ${StudentEvaluationCategories}
-                WHERE ${StudentEvaluationCategories.form_id} = ${StudentEvaluationForms.id}
-                  AND ${StudentEvaluationCategories.deleted_at} IS NULL
-              ),
-              '[]'::json
-            )
-          `,
-        })
+        .select()
         .from(StudentEvaluationForms)
         .where(
           and(
@@ -215,8 +159,51 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
           ),
         );
 
-      if (!form) throw new AppError(404, "Student evaluation form not found.");
-      return form;
+      if (!form) throw new AppError(404, "Student evaluation form was not found.");
+
+      // 2. Fetch Active Categories
+      const categories = await tx
+        .select()
+        .from(StudentEvaluationCategories)
+        .where(
+          and(
+            eq(StudentEvaluationCategories.form_id, form.id),
+            isNull(StudentEvaluationCategories.deleted_at),
+          ),
+        )
+        .orderBy(asc(StudentEvaluationCategories.order));
+
+      if (categories.length === 0) {
+        return { ...form, categories: [] };
+      }
+
+      const catIds = categories.map((c) => c.id);
+
+      // 3. Fetch Active Questions for all categories in this form
+      const questions = await tx
+        .select()
+        .from(StudentEvaluationQuestions)
+        .where(
+          and(
+            inArray(StudentEvaluationQuestions.category_id, catIds),
+            isNull(StudentEvaluationQuestions.deleted_at),
+          ),
+        )
+        .orderBy(asc(StudentEvaluationQuestions.order));
+
+      // 4. Assemble tree in memory (Fast O(N) map)
+      const categoryMap = new Map(
+        categories.map((c) => [c.id, { ...c, questions: [] as typeof questions }]),
+      );
+
+      for (const q of questions) {
+        categoryMap.get(q.category_id)?.questions.push(q);
+      }
+
+      return {
+        ...form,
+        categories: Array.from(categoryMap.values()),
+      };
     });
   }
 
@@ -455,87 +442,9 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
     client: DbClient = db,
   ): ResultAsync<GetSupervisorEvaluationForm, AppError> {
     return WithTransaction(client, async (tx) => {
+      // 1. Fetch Form Root
       const [form] = await tx
-        .select({
-          id: SupervisorEvaluationForms.id,
-          title: SupervisorEvaluationForms.title,
-          description: SupervisorEvaluationForms.description,
-          min_rating: SupervisorEvaluationForms.min_rating,
-          max_rating: SupervisorEvaluationForms.max_rating,
-          created_at: SupervisorEvaluationForms.created_at,
-          updated_at: SupervisorEvaluationForms.updated_at,
-          deleted_at: SupervisorEvaluationForms.deleted_at,
-          categories: sql<GetSupervisorEvaluationForm["categories"]>`
-            COALESCE(
-              (
-                SELECT JSON_AGG(
-                  JSON_BUILD_OBJECT(
-                    'id', ${SupervisorEvaluationCategories.id},
-                    'form_id', ${SupervisorEvaluationCategories.form_id},
-                    'parent_id', ${SupervisorEvaluationCategories.parent_id},
-                    'name', ${SupervisorEvaluationCategories.name},
-                    'description', ${SupervisorEvaluationCategories.description},
-                    'order', ${SupervisorEvaluationCategories.order},
-                    'version', ${SupervisorEvaluationCategories.version},
-                    'created_at', ${SupervisorEvaluationCategories.created_at},
-                    'updated_at', ${SupervisorEvaluationCategories.updated_at},
-                    'deleted_at', ${SupervisorEvaluationCategories.deleted_at},
-                    'questions', COALESCE(
-                      (
-                        SELECT JSON_AGG(
-                          JSON_BUILD_OBJECT(
-                            'id', ${SupervisorEvaluationQuestions.id},
-                            'category_id', ${SupervisorEvaluationQuestions.category_id},
-                            'parent_id', ${SupervisorEvaluationQuestions.parent_id},
-                            'question', ${SupervisorEvaluationQuestions.question},
-                            'max_rating', ${SupervisorEvaluationQuestions.max_rating},
-                            'order', ${SupervisorEvaluationQuestions.order},
-                            'version', ${SupervisorEvaluationQuestions.version},
-                            'created_at', ${SupervisorEvaluationQuestions.created_at},
-                            'updated_at', ${SupervisorEvaluationQuestions.updated_at},
-                            'deleted_at', ${SupervisorEvaluationQuestions.deleted_at},
-                            'means', COALESCE(
-                              (
-                                SELECT JSON_AGG(
-                                  JSON_BUILD_OBJECT(
-                                    'id', ${SupervisorEvaluationMeans.id},
-                                    'question_id', ${SupervisorEvaluationMeans.question_id},
-                                    'parent_id', ${SupervisorEvaluationMeans.parent_id},
-                                    'descriptor', ${SupervisorEvaluationMeans.descriptor},
-                                    'order', ${SupervisorEvaluationMeans.order},
-                                    'version', ${SupervisorEvaluationMeans.version},
-                                    'created_at', ${SupervisorEvaluationMeans.created_at},
-                                    'updated_at', ${SupervisorEvaluationMeans.updated_at},
-                                    'deleted_at', ${SupervisorEvaluationMeans.deleted_at}
-                                  )
-                                  ORDER BY ${SupervisorEvaluationMeans.order} ASC
-                                )
-                                FROM ${SupervisorEvaluationMeans}
-                                WHERE ${SupervisorEvaluationMeans.question_id} = ${SupervisorEvaluationQuestions.id}
-                                  AND ${SupervisorEvaluationMeans.deleted_at} IS NULL
-                              ),
-                              '[]'::json
-                            )
-                          )
-                          ORDER BY ${SupervisorEvaluationQuestions.order} ASC
-                        )
-                        FROM ${SupervisorEvaluationQuestions}
-                        WHERE ${SupervisorEvaluationQuestions.category_id} = ${SupervisorEvaluationCategories.id}
-                          AND ${SupervisorEvaluationQuestions.deleted_at} IS NULL
-                      ),
-                      '[]'::json
-                    )
-                  )
-                  ORDER BY ${SupervisorEvaluationCategories.order} ASC
-                )
-                FROM ${SupervisorEvaluationCategories}
-                WHERE ${SupervisorEvaluationCategories.form_id} = ${SupervisorEvaluationForms.id}
-                  AND ${SupervisorEvaluationCategories.deleted_at} IS NULL
-              ),
-              '[]'::json
-            )
-          `,
-        })
+        .select()
         .from(SupervisorEvaluationForms)
         .where(
           and(
@@ -544,8 +453,82 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
           ),
         );
 
-      if (!form) throw new AppError(404, "Supervisor evaluation form not found.");
-      return form;
+      if (!form) throw new AppError(404, "Supervisor evaluation form was not found.");
+
+      // 2. Fetch Active Categories
+      const categories = await tx
+        .select()
+        .from(SupervisorEvaluationCategories)
+        .where(
+          and(
+            eq(SupervisorEvaluationCategories.form_id, form.id),
+            isNull(SupervisorEvaluationCategories.deleted_at),
+          ),
+        )
+        .orderBy(asc(SupervisorEvaluationCategories.order));
+
+      if (categories.length === 0) {
+        return { ...form, categories: [] };
+      }
+
+      const catIds = categories.map((c) => c.id);
+
+      // 3. Fetch Questions
+      const questions = await tx
+        .select()
+        .from(SupervisorEvaluationQuestions)
+        .where(
+          and(
+            inArray(SupervisorEvaluationQuestions.category_id, catIds),
+            isNull(SupervisorEvaluationQuestions.deleted_at),
+          ),
+        )
+        .orderBy(asc(SupervisorEvaluationQuestions.order));
+
+      const questionIds = questions.map((q) => q.id);
+
+      // 4. Fetch MOVs / Means Descriptors
+      const means =
+        questionIds.length > 0
+          ? await tx
+              .select()
+              .from(SupervisorEvaluationMeans)
+              .where(
+                and(
+                  inArray(SupervisorEvaluationMeans.question_id, questionIds),
+                  isNull(SupervisorEvaluationMeans.deleted_at),
+                ),
+              )
+              .orderBy(asc(SupervisorEvaluationMeans.order))
+          : [];
+
+      // 5. Assemble full 4-tier tree in memory
+      const questionMap = new Map(
+        questions.map((q) => [q.id, { ...q, means: [] as typeof means }]),
+      );
+
+      for (const m of means) {
+        questionMap.get(m.question_id)?.means.push(m);
+      }
+
+      const categoryMap = new Map(
+        categories.map((c) => [
+          c.id,
+          {
+            ...c,
+            questions: [] as ((typeof questions)[0] & { means: typeof means })[],
+          },
+        ]),
+      );
+
+      for (const q of questionMap.values()) {
+        categoryMap.get(q.category_id)?.questions.push(q);
+      }
+
+      return {
+        ...form,
+        categories: Array.from(categoryMap.values()),
+      };
     });
   }
 

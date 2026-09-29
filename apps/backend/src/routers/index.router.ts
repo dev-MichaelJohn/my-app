@@ -12,6 +12,8 @@ import StudentClassRouter from "./student-class.router.js";
 import UserRouter from "./user.router.js";
 import SemesterRouter from "./semester.router.js";
 import BulkImportRouter from "./bulk-import.router.js";
+import InstrumentRouter from "./evaluation-instrument.router.js";
+import BuilderRouter from "./evaluation-builder.router.js";
 
 const V1Router: IRouter = Router();
 
@@ -32,5 +34,7 @@ V1Router.use("/student-classes", StudentClassRouter);
 V1Router.use("/users", UserRouter);
 V1Router.use("/semesters", SemesterRouter);
 V1Router.use("/bulk-import", BulkImportRouter);
+V1Router.use("/evaluation-instruments", InstrumentRouter);
+V1Router.use("/evaluation-builder", BuilderRouter);
 
 export default V1Router;

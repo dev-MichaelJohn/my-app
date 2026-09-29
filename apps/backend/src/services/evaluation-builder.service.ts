@@ -178,22 +178,24 @@ export class EvaluationBuilderService {
     info: IStudentEvalCategoryInsert,
     client: DbClient = db,
   ): ResultAsync<IStudentEvalCategorySelect, AppError> {
-    return ValidateSchema(StudentEvalCategoryInsert, info).asyncAndThen((parsed) => {
-      return WithTransaction(client, async (tx) => {
-        const [created] = await tx
-          .insert(StudentEvaluationCategories)
-          .values({
-            ...parsed,
-            form_id: formId,
-            version: 1,
-            parent_id: null,
-          })
-          .returning();
+    return ValidateSchema(StudentEvalCategoryInsert, { ...info, form_id: formId }).asyncAndThen(
+      (parsed) => {
+        return WithTransaction(client, async (tx) => {
+          const [created] = await tx
+            .insert(StudentEvaluationCategories)
+            .values({
+              ...parsed,
+              form_id: parsed.form_id,
+              version: 1,
+              parent_id: null,
+            })
+            .returning();
 
-        if (!created) throw new AppError(500, "Failed to add category.");
-        return created;
-      });
-    });
+          if (!created) throw new AppError(500, "Failed to add category.");
+          return created;
+        });
+      },
+    );
   }
 
   updateStudentCategory(
@@ -380,13 +382,16 @@ export class EvaluationBuilderService {
     info: IStudentEvalQuestionInsert,
     client: DbClient = db,
   ): ResultAsync<IStudentEvalQuestionSelect, AppError> {
-    return ValidateSchema(StudentEvalQuestionInsert, info).asyncAndThen((parsed) => {
+    return ValidateSchema(StudentEvalQuestionInsert, {
+      ...info,
+      category_id: categoryId,
+    }).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
         const [created] = await tx
           .insert(StudentEvaluationQuestions)
           .values({
             ...parsed,
-            category_id: categoryId,
+            category_id: parsed.category_id,
             version: 1,
             parent_id: null,
           })
@@ -558,17 +563,19 @@ export class EvaluationBuilderService {
     info: ISupervisorEvalCategoryInsert,
     client: DbClient = db,
   ): ResultAsync<ISupervisorEvalCategorySelect, AppError> {
-    return ValidateSchema(SupervisorEvalCategoryInsert, info).asyncAndThen((parsed) => {
-      return WithTransaction(client, async (tx) => {
-        const [created] = await tx
-          .insert(SupervisorEvaluationCategories)
-          .values({ ...parsed, form_id: formId, version: 1, parent_id: null })
-          .returning();
+    return ValidateSchema(SupervisorEvalCategoryInsert, { ...info, form_id: formId }).asyncAndThen(
+      (parsed) => {
+        return WithTransaction(client, async (tx) => {
+          const [created] = await tx
+            .insert(SupervisorEvaluationCategories)
+            .values({ ...parsed, form_id: parsed.form_id, version: 1, parent_id: null })
+            .returning();
 
-        if (!created) throw new AppError(500, "Failed to add supervisor category.");
-        return created;
-      });
-    });
+          if (!created) throw new AppError(500, "Failed to add supervisor category.");
+          return created;
+        });
+      },
+    );
   }
 
   updateSupervisorCategory(
@@ -762,11 +769,14 @@ export class EvaluationBuilderService {
     info: ISupervisorEvalQuestionInsert,
     client: DbClient = db,
   ): ResultAsync<ISupervisorEvalQuestionSelect, AppError> {
-    return ValidateSchema(SupervisorEvalQuestionInsert, info).asyncAndThen((parsed) => {
+    return ValidateSchema(SupervisorEvalQuestionInsert, {
+      ...info,
+      category_id: categoryId,
+    }).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
         const [created] = await tx
           .insert(SupervisorEvaluationQuestions)
-          .values({ ...parsed, category_id: categoryId, version: 1, parent_id: null })
+          .values({ ...parsed, category_id: parsed.category_id, version: 1, parent_id: null })
           .returning();
 
         if (!created) throw new AppError(500, "Failed to add question.");
@@ -956,11 +966,14 @@ export class EvaluationBuilderService {
     info: ISupervisorEvalMeansInsert,
     client: DbClient = db,
   ): ResultAsync<ISupervisorEvalMeansSelect, AppError> {
-    return ValidateSchema(SupervisorEvalMeansInsert, info).asyncAndThen((parsed) => {
+    return ValidateSchema(SupervisorEvalMeansInsert, {
+      ...info,
+      question_id: questionId,
+    }).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
         const [created] = await tx
           .insert(SupervisorEvaluationMeans)
-          .values({ ...parsed, question_id: questionId, version: 1, parent_id: null })
+          .values({ ...parsed, question_id: parsed.question_id, version: 1, parent_id: null })
           .returning();
 
         if (!created) throw new AppError(500, "Failed to add MOV descriptor.");
