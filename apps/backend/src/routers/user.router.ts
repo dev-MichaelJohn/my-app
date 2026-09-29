@@ -12,16 +12,42 @@ const authController = new AuthController();
 UserRouter.use(authController.verifyJWT);
 UserRouter.use(standardApiLimiter);
 
+// ── Read & Query ──
 UserRouter.get("/:id", RequirePermission(PERMISSIONS.ACCOUNT_READ), userController.getUserById);
-
 UserRouter.get("/", RequirePermission(PERMISSIONS.ACCOUNT_READ), userController.getUsers);
 
+// ── Create & Provision ──
 UserRouter.post("/", RequirePermission(PERMISSIONS.ACCOUNT_CREATE), userController.createUser);
 
+// ── Update ──
 UserRouter.put("/:id", RequirePermission(PERMISSIONS.ACCOUNT_UPDATE), userController.updateUser);
 
-UserRouter.delete("/:id", RequirePermission(PERMISSIONS.ACCOUNT_DELETE), userController.deleteUser);
+// ── Roles & Security ──
+UserRouter.put(
+  "/:id/roles",
+  RequirePermission(PERMISSIONS.ACCOUNT_MANAGE_ROLES),
+  userController.manageRoles,
+);
+UserRouter.put(
+  "/:id/reset-password",
+  RequirePermission(PERMISSIONS.ACCOUNT_UPDATE),
+  userController.resetUserPassword,
+);
+UserRouter.post(
+  "/:id/resend-welcome",
+  RequirePermission(PERMISSIONS.ACCOUNT_UPDATE),
+  userController.resendWelcomeEmail,
+);
 
+// ── Self Password Change ──
+UserRouter.put(
+  "/self/change-password",
+  RequirePermission(PERMISSIONS.ACCOUNT_UPDATE_OWN),
+  userController.changePassword,
+);
+
+// ── Archive & Restore ──
+UserRouter.delete("/:id", RequirePermission(PERMISSIONS.ACCOUNT_DELETE), userController.deleteUser);
 UserRouter.put(
   "/:id/restore",
   RequirePermission(PERMISSIONS.ACCOUNT_UPDATE),

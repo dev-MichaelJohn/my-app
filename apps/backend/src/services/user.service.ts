@@ -11,10 +11,11 @@ import {
   PersonalDetails,
   Roles,
   UserQuerySchema,
+  ChangePasswordSchema,
+  ManageUserRolesSchema,
   type CreateUser,
   type GetUser,
   type UpdateUser,
-  type IAccountInsert,
   type LoginAccount,
   type PaginatedData,
   type SystemRole,
@@ -26,6 +27,7 @@ import {
   CourseOfferings,
   ClassStudents,
   StudentClasses,
+  type ChangePassword,
 } from "@my-app/shared";
 import {
   and,
@@ -35,6 +37,8 @@ import {
   desc,
   eq,
   ilike,
+  inArray,
+  isNotNull,
   isNull,
   ne,
   or,
@@ -54,23 +58,57 @@ import {
 import env from "@/configs/env.config.js";
 
 export interface IUserService {
-  getUserById(id: number, client?: DbClient): ResultAsync<GetUser, AppError>;
+  getUserById(
+    id: number,
+    client?: DbClient,
+    includeArchived?: boolean,
+  ): ResultAsync<GetUser, AppError>;
   getUserByEmail(email: string, client?: DbClient): ResultAsync<GetUser, AppError>;
   getUserForLogin(credentials: LoginAccount, client?: DbClient): ResultAsync<GetUser, AppError>;
   getUsers(rawQuery: unknown, client?: DbClient): ResultAsync<PaginatedData<GetUser[]>, AppError>;
-  createUser(info: CreateUser, client?: DbClient): ResultAsync<GetUser, AppError>;
-  grantRole(accountId: number, role: SystemRole, client: DbClient): ResultAsync<void, AppError>;
-  updateUser(id: number, info: UpdateUser, client?: DbClient): ResultAsync<GetUser, AppError>;
+  createUser(
+    info: CreateUser,
+    client?: DbClient,
+    actorRole?: SystemRole,
+  ): ResultAsync<GetUser, AppError>;
+  updateUser(
+    id: number,
+    info: UpdateUser,
+    client?: DbClient,
+    actorRole?: SystemRole,
+  ): ResultAsync<GetUser, AppError>;
   deleteUser(id: number, client?: DbClient): ResultAsync<void, AppError>;
   restoreUser(id: number, client?: DbClient): ResultAsync<GetUser, AppError>;
-  revokeRole(accountId: number, role: SystemRole, client: DbClient): ResultAsync<void, AppError>;
-  hasRole(accountId: number, role: SystemRole, client: DbClient): ResultAsync<boolean, AppError>;
+  grantRole(accountId: number, role: SystemRole, client?: DbClient): ResultAsync<void, AppError>;
+  revokeRole(accountId: number, role: SystemRole, client?: DbClient): ResultAsync<void, AppError>;
+  hasRole(accountId: number, role: SystemRole, client?: DbClient): ResultAsync<boolean, AppError>;
+  manageRoles(
+    accountId: number,
+    roles: SystemRole[],
+    client?: DbClient,
+    actorRole?: SystemRole,
+  ): ResultAsync<GetUser, AppError>;
+  resetUserPassword(
+    accountId: number,
+    client?: DbClient,
+  ): ResultAsync<{ temporaryPassword: string }, AppError>;
+  changePassword(
+    accountId: number,
+    payload: ChangePassword,
+    client?: DbClient,
+    isSelfService?: boolean,
+  ): ResultAsync<void, AppError>;
+  resendWelcomeEmail(accountId: number, client?: DbClient): ResultAsync<void, AppError>;
 }
 
 export class UserService implements IUserService {
   constructor(private emailService: IEmailService = new EmailService()) {}
 
-  getUserById(id: number, client: DbClient = db): ResultAsync<GetUser, AppError> {
+  getUserById(
+    id: number,
+    client: DbClient = db,
+    includeArchived = false,
+  ): ResultAsync<GetUser, AppError> {
     return WithTransaction(client, async (tx) => {
       const [user] = await tx
         .select({
@@ -96,7 +134,7 @@ export class UserService implements IUserService {
           },
           roles: sql<GetUser["roles"]>`
             COALESCE(
-              JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL),
+              JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL AND ${AccountRoles.deleted_at} IS NULL AND ${Roles.deleted_at} IS NULL),
               '[]'
             )
           `,
@@ -108,7 +146,7 @@ export class UserService implements IUserService {
           and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
         )
         .leftJoin(Roles, and(eq(AccountRoles.role_id, Roles.id), isNull(Roles.deleted_at)))
-        .where(and(eq(Accounts.id, id), isNull(Accounts.deleted_at)))
+        .where(and(eq(Accounts.id, id), includeArchived ? undefined : isNull(Accounts.deleted_at)))
         .groupBy(Accounts.id, PersonalDetails.id);
 
       return user ?? null;
@@ -143,7 +181,7 @@ export class UserService implements IUserService {
           },
           roles: sql<GetUser["roles"]>`
             COALESCE(
-              JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL),
+              JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL AND ${AccountRoles.deleted_at} IS NULL AND ${Roles.deleted_at} IS NULL),
               '[]'
             )
           `,
@@ -196,7 +234,7 @@ export class UserService implements IUserService {
               },
               roles: sql<GetUser["roles"]>`
                 COALESCE(
-                  JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL),
+                  JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL AND ${AccountRoles.deleted_at} IS NULL AND ${Roles.deleted_at} IS NULL),
                   '[]'
                 )
               `,
@@ -256,9 +294,12 @@ export class UserService implements IUserService {
     client: DbClient = db,
   ): ResultAsync<PaginatedData<GetUser[]>, AppError> {
     return ValidateSchema(UserQuerySchema, rawQuery).asyncAndThen((parsed) => {
-      const { paginate, page, limit, search, role, is_verified, sort_by, order } = parsed;
+      const { paginate, page, limit, search, role, is_verified, is_archived, sort_by, order } =
+        parsed;
 
-      const filters: SQL[] = [isNull(Accounts.deleted_at), isNull(PersonalDetails.deleted_at)];
+      const filters: SQL[] = [
+        is_archived ? isNotNull(Accounts.deleted_at) : isNull(Accounts.deleted_at),
+      ];
 
       if (search) {
         const term = `%${search}%`;
@@ -313,7 +354,7 @@ export class UserService implements IUserService {
             },
             roles: sql<GetUser["roles"]>`
               COALESCE(
-                JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL),
+                JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL AND ${AccountRoles.deleted_at} IS NULL AND ${Roles.deleted_at} IS NULL),
                 '[]'
               )
             `,
@@ -367,8 +408,21 @@ export class UserService implements IUserService {
     });
   }
 
-  createUser(info: CreateUser, client: DbClient = db): ResultAsync<GetUser, AppError> {
+  createUser(
+    info: CreateUser,
+    client: DbClient = db,
+    actorRole?: SystemRole,
+  ): ResultAsync<GetUser, AppError> {
     return ValidateSchema(CreateUserSchema, info).asyncAndThen((parsedInfo) => {
+      if (
+        (parsedInfo.role === "ADMIN" || parsedInfo.role === "SYS_ADMIN") &&
+        actorRole !== "SYS_ADMIN"
+      ) {
+        return errAsync(
+          new AppError(403, "Only System Administrators can provision administrative accounts."),
+        );
+      }
+
       let plainPassword = info.account.password;
       if (!plainPassword || plainPassword.trim().length === 0) {
         plainPassword = this.generatePassword();
@@ -410,25 +464,23 @@ export class UserService implements IUserService {
           .returning();
 
         if (!userDetails) {
-          throw new AppError(
-            500,
-            "Failed to create personal details record while registering user. User account was not created.",
-          );
+          throw new AppError(500, "Failed to create personal details record.");
         }
 
         const hash = bcrypt.hashSync(plainPassword, 10);
-        const accountDetails: IAccountInsert = {
-          ...parsedInfo.account,
-          password: hash,
-          personal_details_id: userDetails.id,
-        };
 
-        const [userAccount] = await tx.insert(Accounts).values(accountDetails).returning();
+        const [userAccount] = await tx
+          .insert(Accounts)
+          .values({
+            email: parsedInfo.account.email,
+            password: hash,
+            personal_details_id: userDetails.id,
+            is_verified: parsedInfo.account.is_verified ?? false,
+          })
+          .returning();
+
         if (!userAccount) {
-          throw new AppError(
-            500,
-            "Failed to create account record while registering user. Personal details record was rolled back.",
-          );
+          throw new AppError(500, "Failed to create account record.");
         }
 
         const [systemRole] = await tx
@@ -437,23 +489,12 @@ export class UserService implements IUserService {
           .where(eq(Roles.system_role, parsedInfo.role));
 
         if (!systemRole) {
-          throw new AppError(
-            400,
-            "Given role has not been found. Changes during account creation were rolled back.",
-          );
+          throw new AppError(400, `System role "${parsedInfo.role}" not found.`);
         }
 
-        const [userRole] = await tx
+        await tx
           .insert(AccountRoles)
-          .values({ account_id: userAccount.id, role_id: systemRole.id })
-          .returning();
-
-        if (!userRole) {
-          throw new AppError(
-            400,
-            "Failed to map account record to a role. Changes during account creation were rolled back.",
-          );
-        }
+          .values({ account_id: userAccount.id, role_id: systemRole.id });
 
         const { password: _password, ...filteredAccount } = userAccount;
 
@@ -463,12 +504,7 @@ export class UserService implements IUserService {
           roles: [systemRole.system_role],
         };
       }).andThen((newUser) => {
-        const fullName = this.formatFullName({
-          first_name: newUser.details.first_name,
-          last_name: newUser.details.last_name,
-          middle_name: newUser.details.middle_name,
-          suffix: newUser.details.suffix,
-        });
+        const fullName = this.formatFullName(newUser.details);
 
         const emailPayload: WelcomeEmailOpts = {
           recipientName: fullName,
@@ -481,7 +517,7 @@ export class UserService implements IUserService {
           .sendEmail({
             to: newUser.account.email,
             options: {
-              subject: "PIT-FES Account Creation Notice",
+              subject: "PIT-FES Account Credentials Notice",
               text: WelcomeTextTemplate(emailPayload),
               html: WelcomeEmailTemplate(emailPayload),
             },
@@ -495,7 +531,12 @@ export class UserService implements IUserService {
     });
   }
 
-  updateUser(id: number, info: UpdateUser, client: DbClient = db): ResultAsync<GetUser, AppError> {
+  updateUser(
+    id: number,
+    info: UpdateUser,
+    client: DbClient = db,
+    actorRole?: SystemRole,
+  ): ResultAsync<GetUser, AppError> {
     return ValidateSchema(UpdateUserSchema, info).asyncAndThen((parsed) => {
       const hasAccountInfo = Boolean(parsed.account && Object.keys(parsed.account).length > 0);
       const hasDetailsInfo = Boolean(parsed.details && Object.keys(parsed.details).length > 0);
@@ -505,15 +546,24 @@ export class UserService implements IUserService {
         return errAsync(new AppError(400, "No update parameters were provided."));
       }
 
+      if (
+        parsed.role &&
+        (parsed.role === "ADMIN" || parsed.role === "SYS_ADMIN") &&
+        actorRole !== "SYS_ADMIN"
+      ) {
+        return errAsync(
+          new AppError(403, "Only System Administrators can grant administrative roles."),
+        );
+      }
+
       const updatedFieldsList: UpdateEmailOpts["updatedFields"] = [];
-      let rawNewPassword: string | undefined = undefined;
 
       return WithTransaction(client, async (tx) => {
         const existing = await this.getUserById(id, tx);
         if (existing.isErr()) throw existing.error;
         const current = existing.value;
 
-        // ── 1. Track & Update Personal Details ──
+        // 1. Details
         if (hasDetailsInfo && parsed.details) {
           const d = parsed.details;
 
@@ -524,7 +574,6 @@ export class UserService implements IUserService {
               newValue: d.first_name,
             });
           }
-
           if (d.last_name && d.last_name !== current.details.last_name) {
             updatedFieldsList.push({
               label: "Last Name",
@@ -532,23 +581,6 @@ export class UserService implements IUserService {
               newValue: d.last_name,
             });
           }
-
-          if (d.middle_name !== undefined && d.middle_name !== current.details.middle_name) {
-            updatedFieldsList.push({
-              label: "Middle Name",
-              oldValue: current.details.middle_name || "None",
-              newValue: d.middle_name || "None",
-            });
-          }
-
-          if (d.suffix !== undefined && d.suffix !== current.details.suffix) {
-            updatedFieldsList.push({
-              label: "Suffix",
-              oldValue: current.details.suffix || "None",
-              newValue: d.suffix || "None",
-            });
-          }
-
           if (d.institutional_id && d.institutional_id !== current.details.institutional_id) {
             const [idConflict] = await tx
               .select({ id: PersonalDetails.id })
@@ -581,6 +613,7 @@ export class UserService implements IUserService {
             .where(eq(PersonalDetails.id, current.details.id));
         }
 
+        // 2. Account
         if (hasAccountInfo && parsed.account) {
           const a = parsed.account;
           const accountUpdateData: Record<string, any> = { ...a };
@@ -608,13 +641,11 @@ export class UserService implements IUserService {
           }
 
           if (a.password) {
-            rawNewPassword = a.password;
             accountUpdateData.password = bcrypt.hashSync(a.password, 10);
-
             updatedFieldsList.push({
               label: "Password",
               oldValue: "••••••••",
-              newValue: rawNewPassword,
+              newValue: "•••••••• (Updated)",
             });
           }
 
@@ -624,10 +655,10 @@ export class UserService implements IUserService {
             .where(eq(Accounts.id, current.account.id));
         }
 
-        // ── 3. Track & Update Role Assignment ──
+        // 3. Role
         if (hasRoleInfo && parsed.role) {
-          const hasRole = current.roles.includes(parsed.role);
-          if (!hasRole) {
+          const hasTargetRole = current.roles.includes(parsed.role);
+          if (!hasTargetRole) {
             const grantRes = await this.grantRole(id, parsed.role, tx);
             if (grantRes.isErr()) throw grantRes.error;
 
@@ -648,14 +679,7 @@ export class UserService implements IUserService {
           return okAsync(updatedUser);
         }
 
-        const fullName = this.formatFullName({
-          first_name: updatedUser.details.first_name,
-          last_name: updatedUser.details.last_name,
-          middle_name: updatedUser.details.middle_name ?? null,
-          suffix: updatedUser.details.suffix ?? null,
-        });
-        const recipientEmail = updatedUser.account.email;
-
+        const fullName = this.formatFullName(updatedUser.details);
         const emailPayload: UpdateEmailOpts = {
           recipientName: fullName,
           updatedFields: updatedFieldsList,
@@ -664,7 +688,7 @@ export class UserService implements IUserService {
 
         return this.emailService
           .sendEmail({
-            to: recipientEmail,
+            to: updatedUser.account.email,
             options: {
               subject: "PIT-FES Account Information Updated",
               text: UpdateTextTemplate(emailPayload),
@@ -709,7 +733,7 @@ export class UserService implements IUserService {
 
   restoreUser(id: number, client: DbClient = db): ResultAsync<GetUser, AppError> {
     return WithTransaction(client, async (tx) => {
-      const existing = await this.getUserById(id, tx);
+      const existing = await this.getUserById(id, tx, true);
       if (existing.isErr()) throw existing.error;
       const current = existing.value;
 
@@ -803,17 +827,10 @@ export class UserService implements IUserService {
             .set({ deleted_at: null })
             .where(eq(AccountRoles.id, existingMapping.id));
         } else {
-          const [created] = await tx
-            .insert(AccountRoles)
-            .values({
-              account_id: accountId,
-              role_id: systemRole.id,
-            })
-            .returning();
-
-          if (!created) {
-            throw new AppError(500, `Failed to grant role "${role}".`);
-          }
+          await tx.insert(AccountRoles).values({
+            account_id: accountId,
+            role_id: systemRole.id,
+          });
         }
 
         return undefined;
@@ -846,7 +863,11 @@ export class UserService implements IUserService {
     });
   }
 
-  hasRole(accountId: number, role: SystemRole, client: DbClient = db) {
+  hasRole(
+    accountId: number,
+    role: SystemRole,
+    client: DbClient = db,
+  ): ResultAsync<boolean, AppError> {
     return WithTransaction(client, async (tx) => {
       const userRecord = await this.getUserById(accountId, tx);
       if (userRecord.isErr()) throw userRecord.error;
@@ -855,9 +876,194 @@ export class UserService implements IUserService {
     });
   }
 
-  private generatePassword(length: number = 12) {
-    const minLength = Math.max(8, length);
+  manageRoles(
+    accountId: number,
+    roles: SystemRole[],
+    client: DbClient = db,
+    actorRole?: SystemRole,
+  ): ResultAsync<GetUser, AppError> {
+    return ValidateSchema(ManageUserRolesSchema, { roles }).asyncAndThen((parsed) => {
+      if (
+        (parsed.roles.includes("ADMIN") || parsed.roles.includes("SYS_ADMIN")) &&
+        actorRole !== "SYS_ADMIN"
+      ) {
+        return errAsync(
+          new AppError(403, "Only System Administrators can grant administrative roles."),
+        );
+      }
 
+      return WithTransaction(client, async (tx) => {
+        const user = await this.getUserById(accountId, tx);
+        if (user.isErr()) throw user.error;
+
+        const systemRoles = await tx
+          .select()
+          .from(Roles)
+          .where(and(inArray(Roles.system_role, parsed.roles), isNull(Roles.deleted_at)));
+
+        if (systemRoles.length !== parsed.roles.length) {
+          throw new AppError(400, "One or more specified roles do not exist.");
+        }
+
+        const roleIdMap = new Map(systemRoles.map((r) => [r.system_role, r.id]));
+
+        // Soft-delete current active roles not in new set
+        await tx
+          .update(AccountRoles)
+          .set({ deleted_at: new Date() })
+          .where(and(eq(AccountRoles.account_id, accountId), isNull(AccountRoles.deleted_at)));
+
+        // Assign new role mappings
+        for (const roleName of parsed.roles) {
+          const roleId = roleIdMap.get(roleName)!;
+
+          const [existing] = await tx
+            .select()
+            .from(AccountRoles)
+            .where(and(eq(AccountRoles.account_id, accountId), eq(AccountRoles.role_id, roleId)));
+
+          if (existing) {
+            await tx
+              .update(AccountRoles)
+              .set({ deleted_at: null })
+              .where(eq(AccountRoles.id, existing.id));
+          } else {
+            await tx.insert(AccountRoles).values({
+              account_id: accountId,
+              role_id: roleId,
+            });
+          }
+        }
+
+        const updatedUser = await this.getUserById(accountId, tx);
+        if (updatedUser.isErr()) throw updatedUser.error;
+
+        return updatedUser.value;
+      });
+    });
+  }
+
+  resetUserPassword(
+    accountId: number,
+    client: DbClient = db,
+  ): ResultAsync<{ temporaryPassword: string }, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const user = await this.getUserById(accountId, tx);
+      if (user.isErr()) throw user.error;
+      const targetUser = user.value;
+
+      const temporaryPassword = this.generatePassword(12);
+      const hash = bcrypt.hashSync(temporaryPassword, 10);
+
+      await tx
+        .update(Accounts)
+        .set({ password: hash, is_verified: false, updated_at: new Date() })
+        .where(eq(Accounts.id, accountId));
+
+      return { targetUser, temporaryPassword };
+    }).andThen(({ targetUser, temporaryPassword }) => {
+      const fullName = this.formatFullName(targetUser.details);
+
+      const emailPayload: WelcomeEmailOpts = {
+        recipientName: fullName,
+        email: targetUser.account.email,
+        generatedPassword: temporaryPassword,
+        url: env.CLIENT_URL,
+      };
+
+      return this.emailService
+        .sendEmail({
+          to: targetUser.account.email,
+          options: {
+            subject: "PIT-FES Password Reset Notice",
+            text: WelcomeTextTemplate(emailPayload),
+            html: WelcomeEmailTemplate(emailPayload),
+          },
+        })
+        .map(() => ({ temporaryPassword }))
+        .orElse((err) => {
+          console.warn("⚠️ Password reset email delivery failed:", err.message);
+          return okAsync({ temporaryPassword });
+        });
+    });
+  }
+
+  changePassword(
+    accountId: number,
+    payload: ChangePassword,
+    client: DbClient = db,
+    isSelfService = false,
+  ): ResultAsync<void, AppError> {
+    return ValidateSchema(ChangePasswordSchema, payload).asyncAndThen((parsed) => {
+      return WithTransaction(client, async (tx) => {
+        const [account] = await tx
+          .select()
+          .from(Accounts)
+          .where(and(eq(Accounts.id, accountId), isNull(Accounts.deleted_at)));
+
+        if (!account) throw new AppError(404, "User account not found.");
+
+        if (isSelfService) {
+          if (!parsed.current_password) {
+            throw new AppError(400, "Current password is required to change your password.");
+          }
+
+          const isMatch = bcrypt.compareSync(parsed.current_password, account.password);
+          if (!isMatch) {
+            throw new AppError(400, "Incorrect current password provided.");
+          }
+        }
+
+        const newHash = bcrypt.hashSync(parsed.new_password, 10);
+
+        await tx
+          .update(Accounts)
+          .set({ password: newHash, is_verified: true, updated_at: new Date() })
+          .where(eq(Accounts.id, accountId));
+
+        return undefined;
+      });
+    });
+  }
+
+  resendWelcomeEmail(accountId: number, client: DbClient = db): ResultAsync<void, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const user = await this.getUserById(accountId, tx);
+      if (user.isErr()) throw user.error;
+      const targetUser = user.value;
+
+      const temporaryPassword = this.generatePassword(12);
+      const hash = bcrypt.hashSync(temporaryPassword, 10);
+
+      await tx
+        .update(Accounts)
+        .set({ password: hash, is_verified: false, updated_at: new Date() })
+        .where(eq(Accounts.id, accountId));
+
+      return { targetUser, temporaryPassword };
+    }).andThen(({ targetUser, temporaryPassword }) => {
+      const fullName = this.formatFullName(targetUser.details);
+
+      const emailPayload: WelcomeEmailOpts = {
+        recipientName: fullName,
+        email: targetUser.account.email,
+        generatedPassword: temporaryPassword,
+        url: env.CLIENT_URL,
+      };
+
+      return this.emailService.sendEmail({
+        to: targetUser.account.email,
+        options: {
+          subject: "PIT-FES Account Credentials",
+          text: WelcomeTextTemplate(emailPayload),
+          html: WelcomeEmailTemplate(emailPayload),
+        },
+      });
+    });
+  }
+
+  private generatePassword(length = 12): string {
+    const minLength = Math.max(8, length);
     const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     const lowercase = "abcdefghijklmnopqrstuvwxyz";
     const numbers = "0123456789";
@@ -877,31 +1083,28 @@ export class UserService implements IUserService {
 
     for (let i = passwordArray.length - 1; i > 0; i--) {
       const j = crypto.randomInt(0, i + 1);
-      const charI = passwordArray[i]!;
-      const charJ = passwordArray[j]!;
-      passwordArray[i] = charJ;
-      passwordArray[j] = charI;
+      const temp = passwordArray[i]!;
+      passwordArray[i] = passwordArray[j]!;
+      passwordArray[j] = temp;
     }
 
     return passwordArray.join("");
   }
 
-  private formatFullName = (
+  private formatFullName(
     person?: {
-      first_name?: string | null;
-      last_name?: string | null;
-      middle_name?: string | null;
-      suffix?: string | null;
+      first_name?: string | null | undefined;
+      last_name?: string | null | undefined;
+      middle_name?: string | null | undefined;
+      suffix?: string | null | undefined;
     } | null,
-  ) => {
+  ): string {
     if (!person) return "";
-
-    const isValid = (val?: string | null): val is string => Boolean(val && val.trim().length > 0);
-
+    const isValid = (val?: string | null | undefined): val is string =>
+      Boolean(val && val.trim().length > 0);
     const { last_name, first_name, middle_name, suffix } = person;
 
     if (!isValid(last_name) && !isValid(first_name)) return "";
-
     const validLastName = isValid(last_name) ? last_name.trim() : "";
     const validFirstName = isValid(first_name) ? first_name.trim() : "";
 
@@ -914,7 +1117,7 @@ export class UserService implements IUserService {
     const extraFormatted = extraParts.length > 0 ? ` ${extraParts.join(" ")}` : "";
 
     return `${baseName}${extraFormatted}`;
-  };
+  }
 
   private async checkUserDependencies(accountId: number, tx: PgTransaction): Promise<void> {
     const [
@@ -969,7 +1172,7 @@ export class UserService implements IUserService {
       if (offeringCount > 0)
         reasons.push(`assigned Faculty to ${offeringCount} course offering(s)`);
       if (classStudentCount > 0 || studentClassCount > 0)
-        reasons.push(`enrolled in active academic class(es)`);
+        reasons.push(`enrolled in academic class(es)`);
 
       throw new AppError(
         409,

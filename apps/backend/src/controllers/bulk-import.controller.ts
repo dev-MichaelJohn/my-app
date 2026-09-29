@@ -39,6 +39,9 @@ export class BulkImportController {
           case "classes":
             return this.bulkImportService.importClasses(csvContent);
 
+          case "users":
+            return this.bulkImportService.importUsers(csvContent);
+
           default:
             return errAsync(new AppError(400, `Unknown import entity "${normalizedEntity}".`));
         }
@@ -95,6 +98,16 @@ export class BulkImportController {
       this.bulkImportService.importClasses(csv).map((data) => ({
         status: 200,
         message: "Academic classes bulk imported successfully.",
+        data,
+      })),
+    );
+  });
+
+  importUsers = runAsync((req) => {
+    return this.getCsvContent(req).andThen((csv) =>
+      this.bulkImportService.importUsers(csv).map((data) => ({
+        status: 200,
+        message: "User accounts bulk imported successfully.",
         data,
       })),
     );

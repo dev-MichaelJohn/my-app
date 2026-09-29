@@ -1,6 +1,8 @@
 import { runAsync } from "@/libs/express-adapter.lib.js";
 import { ValidateSchema } from "@/libs/result.lib.js";
+import { AppError } from "@/libs/error.lib.js";
 import { UserService, type IUserService } from "@/services/user.service.js";
+import { errAsync } from "neverthrow";
 import z from "zod";
 
 export class UserController {
@@ -8,7 +10,7 @@ export class UserController {
 
   private idSchema = z.coerce.number().int().positive("Invalid User ID provided.");
 
-  getUserById = runAsync((req, _res) => {
+  getUserById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((userId) => {
       return this.userService.getUserById(userId).map((data) => ({
         status: 200,
@@ -18,7 +20,7 @@ export class UserController {
     });
   });
 
-  getUsers = runAsync((req, _res) => {
+  getUsers = runAsync((req) => {
     return this.userService.getUsers(req.query).map((data) => ({
       status: 200,
       message: "Users list retrieved successfully.",
@@ -26,40 +28,89 @@ export class UserController {
     }));
   });
 
-  createUser = runAsync((req, _res) => {
-    return this.userService.createUser(req.body).map((data) => ({
+  createUser = runAsync((req) => {
+    const actorRole = req.user?.roles?.[0];
+    return this.userService.createUser(req.body, undefined, actorRole).map((data) => ({
       status: 201,
-      message: "User created successfully.",
+      message: "User account created successfully.",
       data,
     }));
   });
 
-  updateUser = runAsync((req, _res) => {
+  updateUser = runAsync((req) => {
+    const actorRole = req.user?.roles?.[0];
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((userId) => {
-      return this.userService.updateUser(userId, req.body).map((data) => ({
+      return this.userService.updateUser(userId, req.body, undefined, actorRole).map((data) => ({
         status: 200,
-        message: "User updated successfully.",
+        message: "User account updated successfully.",
         data,
       }));
     });
   });
 
-  deleteUser = runAsync((req, _res) => {
+  deleteUser = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((userId) => {
       return this.userService.deleteUser(userId).map(() => ({
         status: 200,
-        message: "User deleted successfully.",
+        message: "User account archived successfully.",
         data: null,
       }));
     });
   });
 
-  restoreUser = runAsync((req, _res) => {
+  restoreUser = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((userId) => {
       return this.userService.restoreUser(userId).map((data) => ({
         status: 200,
-        message: "User restored successfully.",
+        message: "User account restored successfully.",
         data,
+      }));
+    });
+  });
+
+  manageRoles = runAsync((req) => {
+    const actorRole = req.user?.roles?.[0];
+    return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((userId) => {
+      return this.userService
+        .manageRoles(userId, req.body.roles, undefined, actorRole)
+        .map((data) => ({
+          status: 200,
+          message: "User roles updated successfully.",
+          data,
+        }));
+    });
+  });
+
+  resetUserPassword = runAsync((req) => {
+    return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((userId) => {
+      return this.userService.resetUserPassword(userId).map((data) => ({
+        status: 200,
+        message: "Password reset. Temporary password sent to user's email.",
+        data,
+      }));
+    });
+  });
+
+  changePassword = runAsync((req) => {
+    if (!req.user) return errAsync(new AppError(401, "Authentication required."));
+    const isSelfService = req.params.id ? Number(req.params.id) === req.user.account.id : true;
+    const targetUserId = req.params.id ? Number(req.params.id) : req.user.account.id;
+
+    return this.userService
+      .changePassword(targetUserId, req.body, undefined, isSelfService)
+      .map(() => ({
+        status: 200,
+        message: "Password updated successfully.",
+        data: null,
+      }));
+  });
+
+  resendWelcomeEmail = runAsync((req) => {
+    return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((userId) => {
+      return this.userService.resendWelcomeEmail(userId).map(() => ({
+        status: 200,
+        message: "Account credentials re-sent successfully.",
+        data: null,
       }));
     });
   });

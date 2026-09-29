@@ -3,7 +3,7 @@ import { createInsertSchema, createSelectSchema, createUpdateSchema } from "driz
 import z from "zod";
 
 const emailField = (schema: z.ZodString) =>
-  schema.trim().toLowerCase().email("Invalid email address format.");
+  schema.trim().toLowerCase().pipe(z.email("Invalid email address format."));
 
 const passwordField = (schema: z.ZodString) =>
   schema
@@ -140,6 +140,31 @@ export const UpdateUserSchema = z.object({
   role: z.enum(SystemRoles.enumValues).optional(),
 });
 
+export const ChangePasswordSchema = z.object({
+  current_password: z.string().min(1, "Current password is required.").optional(),
+  new_password: z
+    .string()
+    .trim()
+    .min(8, "Password must be at least 8 characters long.")
+    .max(72, "Password cannot exceed 72 characters.")
+    .refine((v) => /[A-Z]/.test(v), {
+      message: "Password must have at least one uppercase letter.",
+    })
+    .refine((v) => /[a-z]/.test(v), {
+      message: "Password must have at least one lowercase letter.",
+    })
+    .refine((v) => /[0-9]/.test(v), {
+      message: "Password must have at least one number character.",
+    })
+    .refine((v) => /[!@#$%^&*_-]/.test(v), {
+      message: 'Password must have at least one special character ("!@#$%^&*_-").',
+    }),
+});
+
+export const ManageUserRolesSchema = z.object({
+  roles: z.array(z.enum(SystemRoles.enumValues)).min(1, "At least one role must be assigned."),
+});
+
 export const SystemRoleSchema = z.enum(SystemRoles.enumValues);
 
 export type LoginAccount = z.infer<typeof LoginAccountSchema>;
@@ -147,4 +172,6 @@ export type GetUser = z.infer<typeof GetUserSchema>;
 export type UserQuery = z.infer<typeof UserQuerySchema>;
 export type CreateUser = z.infer<typeof CreateUserSchema>;
 export type UpdateUser = z.infer<typeof UpdateUserSchema>;
+export type ChangePassword = z.infer<typeof ChangePasswordSchema>;
+export type ManageUserRoles = z.infer<typeof ManageUserRolesSchema>;
 export type SystemRole = z.infer<typeof SystemRoleSchema>;

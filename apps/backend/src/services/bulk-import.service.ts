@@ -12,6 +12,8 @@ import {
   PersonalDetails,
   ProgramChairs,
   Programs,
+  Roles,
+  AccountRoles,
 } from "@my-app/shared";
 import { AppError } from "@/libs/error.lib.js";
 import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
@@ -21,8 +23,11 @@ import {
   CourseCsvRowSchema,
   CurriculumCsvRowSchema,
   ClassCsvRowSchema,
+  UserCsvRowSchema,
   type ImportSummary,
 } from "@my-app/shared";
+import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
 
 export interface IBulkImportService {
   importColleges(csvContent: string, client?: DbClient): ResultAsync<ImportSummary, AppError>;
@@ -30,9 +35,11 @@ export interface IBulkImportService {
   importCourses(csvContent: string, client?: DbClient): ResultAsync<ImportSummary, AppError>;
   importCurriculums(csvContent: string, client?: DbClient): ResultAsync<ImportSummary, AppError>;
   importClasses(csvContent: string, client?: DbClient): ResultAsync<ImportSummary, AppError>;
+  importUsers(csvContent: string, client?: DbClient): ResultAsync<ImportSummary, AppError>;
 }
 
-export class BulkImportService {
+export class BulkImportService implements IBulkImportService {
+  // ── Existing Imports (Colleges, Programs, Courses, Curriculums, Classes) ──
   importColleges(csvContent: string, client: DbClient = db): ResultAsync<ImportSummary, AppError> {
     return WithTransaction(client, async (tx) => {
       const parsed = Papa.parse<Record<string, string>>(csvContent, {
@@ -40,7 +47,6 @@ export class BulkImportService {
         skipEmptyLines: true,
       });
       const rows = parsed.data;
-
       const summary: ImportSummary = {
         entity: "Colleges",
         totalRows: rows.length,
@@ -69,13 +75,12 @@ export class BulkImportService {
           summary.errors.push({
             row: rowNum,
             identifier: rows[i]?.initialism || `Row ${rowNum}`,
-            reason: validation.error.issues[0]?.message || "Invalid row format.",
+            reason: validation.error.issues[0]?.message || "Invalid format.",
           });
           continue;
         }
 
         const data = validation.data;
-
         if (codeSet.has(data.initialism)) {
           summary.failed++;
           summary.errors.push({
@@ -85,13 +90,12 @@ export class BulkImportService {
           });
           continue;
         }
-
         if (nameSet.has(data.name.toLowerCase())) {
           summary.failed++;
           summary.errors.push({
             row: rowNum,
             identifier: data.name,
-            reason: `College with name "${data.name}" already exists.`,
+            reason: `College name "${data.name}" already exists.`,
           });
           continue;
         }
@@ -104,7 +108,7 @@ export class BulkImportService {
             summary.errors.push({
               row: rowNum,
               identifier: data.initialism,
-              reason: `Dean with ID "${data.dean_institutional_id}" was not found.`,
+              reason: `Dean with ID "${data.dean_institutional_id}" not found.`,
             });
             continue;
           }
@@ -134,7 +138,6 @@ export class BulkImportService {
         skipEmptyLines: true,
       });
       const rows = parsed.data;
-
       const summary: ImportSummary = {
         entity: "Programs",
         totalRows: rows.length,
@@ -168,20 +171,19 @@ export class BulkImportService {
           summary.errors.push({
             row: rowNum,
             identifier: rows[i]?.initialism || `Row ${rowNum}`,
-            reason: validation.error.issues[0]?.message || "Invalid row format.",
+            reason: validation.error.issues[0]?.message || "Invalid format.",
           });
           continue;
         }
 
         const data = validation.data;
         const collegeId = collegeMap.get(data.college_code.toUpperCase());
-
         if (!collegeId) {
           summary.failed++;
           summary.errors.push({
             row: rowNum,
             identifier: data.initialism,
-            reason: `Parent college code "${data.college_code}" does not exist.`,
+            reason: `College code "${data.college_code}" does not exist.`,
           });
           continue;
         }
@@ -215,7 +217,7 @@ export class BulkImportService {
             summary.errors.push({
               row: rowNum,
               identifier: data.initialism,
-              reason: `Chair with ID "${data.chair_institutional_id}" was not found.`,
+              reason: `Chair with ID "${data.chair_institutional_id}" not found.`,
             });
             continue;
           }
@@ -247,7 +249,6 @@ export class BulkImportService {
         skipEmptyLines: true,
       });
       const rows = parsed.data;
-
       const summary: ImportSummary = {
         entity: "Courses",
         totalRows: rows.length,
@@ -276,20 +277,19 @@ export class BulkImportService {
           summary.errors.push({
             row: rowNum,
             identifier: rows[i]?.initialism || `Row ${rowNum}`,
-            reason: validation.error.issues[0]?.message || "Invalid row format.",
+            reason: validation.error.issues[0]?.message || "Invalid format.",
           });
           continue;
         }
 
         const data = validation.data;
         const programId = programMap.get(data.program_code.toUpperCase());
-
         if (!programId) {
           summary.failed++;
           summary.errors.push({
             row: rowNum,
             identifier: data.initialism,
-            reason: `Degree program code "${data.program_code}" does not exist.`,
+            reason: `Program code "${data.program_code}" not found.`,
           });
           continue;
         }
@@ -306,7 +306,6 @@ export class BulkImportService {
           });
           continue;
         }
-
         if (courseNameSet.has(nameKey)) {
           summary.failed++;
           summary.errors.push({
@@ -320,7 +319,6 @@ export class BulkImportService {
         await tx
           .insert(Courses)
           .values({ program_id: programId, name: data.name, initialism: data.initialism });
-
         courseCodeSet.add(codeKey);
         courseNameSet.add(nameKey);
         summary.successful++;
@@ -340,7 +338,6 @@ export class BulkImportService {
         skipEmptyLines: true,
       });
       const rows = parsed.data;
-
       const summary: ImportSummary = {
         entity: "Curriculums",
         totalRows: rows.length,
@@ -374,7 +371,7 @@ export class BulkImportService {
           summary.errors.push({
             row: rowNum,
             identifier: rows[i]?.course_code || `Row ${rowNum}`,
-            reason: validation.error.issues[0]?.message || "Invalid row format.",
+            reason: validation.error.issues[0]?.message || "Invalid format.",
           });
           continue;
         }
@@ -392,7 +389,6 @@ export class BulkImportService {
           });
           continue;
         }
-
         if (!courseId) {
           summary.failed++;
           summary.errors.push({
@@ -409,7 +405,7 @@ export class BulkImportService {
           summary.errors.push({
             row: rowNum,
             identifier: data.course_code,
-            reason: `Course is already mapped to ${data.program_code} for Year ${data.year_level}, ${data.semester_term} term.`,
+            reason: `Course is already mapped for Year ${data.year_level}, ${data.semester_term} term.`,
           });
           continue;
         }
@@ -420,7 +416,6 @@ export class BulkImportService {
           year_level: data.year_level,
           semester_term: data.semester_term,
         });
-
         slotSet.add(slotKey);
         summary.successful++;
       }
@@ -436,7 +431,6 @@ export class BulkImportService {
         skipEmptyLines: true,
       });
       const rows = parsed.data;
-
       const summary: ImportSummary = {
         entity: "Classes",
         totalRows: rows.length,
@@ -462,14 +456,13 @@ export class BulkImportService {
           summary.errors.push({
             row: rowNum,
             identifier: rows[i]?.program_code || `Row ${rowNum}`,
-            reason: validation.error.issues[0]?.message || "Invalid row format.",
+            reason: validation.error.issues[0]?.message || "Invalid format.",
           });
           continue;
         }
 
         const data = validation.data;
         const programId = programMap.get(data.program_code.toUpperCase());
-
         if (!programId) {
           summary.failed++;
           summary.errors.push({
@@ -486,22 +479,144 @@ export class BulkImportService {
           summary.errors.push({
             row: rowNum,
             identifier: `${data.program_code} ${data.year_level}-${data.section}`,
-            reason: `Class section "${data.program_code} ${data.year_level}-${data.section}" already exists.`,
+            reason: `Class section already exists.`,
           });
           continue;
         }
 
-        await tx.insert(Classes).values({
-          program_id: programId,
-          year_level: data.year_level,
-          section: data.section,
-        });
-
+        await tx
+          .insert(Classes)
+          .values({ program_id: programId, year_level: data.year_level, section: data.section });
         classSlotSet.add(classKey);
         summary.successful++;
       }
 
       return summary;
     });
+  }
+
+  // ── 🚀 User Accounts Bulk CSV Import ──
+  importUsers(csvContent: string, client: DbClient = db): ResultAsync<ImportSummary, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const parsed = Papa.parse<Record<string, string>>(csvContent, {
+        header: true,
+        skipEmptyLines: true,
+      });
+      const rows = parsed.data;
+      const summary: ImportSummary = {
+        entity: "Users",
+        totalRows: rows.length,
+        successful: 0,
+        failed: 0,
+        errors: [],
+      };
+
+      const existingEmails = await tx
+        .select({ email: Accounts.email })
+        .from(Accounts)
+        .where(isNull(Accounts.deleted_at));
+      const emailSet = new Set(existingEmails.map((a) => a.email.toLowerCase()));
+
+      const existingIds = await tx
+        .select({ instId: PersonalDetails.institutional_id })
+        .from(PersonalDetails)
+        .where(isNull(PersonalDetails.deleted_at));
+      const idSet = new Set(existingIds.map((p) => p.instId));
+
+      const roles = await tx.select().from(Roles).where(isNull(Roles.deleted_at));
+      const roleMap = new Map(roles.map((r) => [r.system_role, r.id]));
+
+      for (let i = 0; i < rows.length; i++) {
+        const rowNum = i + 2;
+        const validation = UserCsvRowSchema.safeParse(rows[i]);
+
+        if (!validation.success) {
+          summary.failed++;
+          summary.errors.push({
+            row: rowNum,
+            identifier: rows[i]?.institutional_id || rows[i]?.email || `Row ${rowNum}`,
+            reason: validation.error.issues[0]?.message || "Invalid row format.",
+          });
+          continue;
+        }
+
+        const data = validation.data;
+
+        if (idSet.has(data.institutional_id)) {
+          summary.failed++;
+          summary.errors.push({
+            row: rowNum,
+            identifier: data.institutional_id,
+            reason: `Institutional ID "${data.institutional_id}" is already registered.`,
+          });
+          continue;
+        }
+
+        if (emailSet.has(data.email)) {
+          summary.failed++;
+          summary.errors.push({
+            row: rowNum,
+            identifier: data.email,
+            reason: `Email address "${data.email}" is already in use.`,
+          });
+          continue;
+        }
+
+        const roleId = roleMap.get(data.role);
+        if (!roleId) {
+          summary.failed++;
+          summary.errors.push({
+            row: rowNum,
+            identifier: data.institutional_id,
+            reason: `System role "${data.role}" is invalid.`,
+          });
+          continue;
+        }
+
+        // Generate temporary password
+        const generatedPassword = this.generateTemporaryPassword();
+        const passwordHash = bcrypt.hashSync(generatedPassword, 10);
+
+        // 1. Insert Personal Details
+        const [details] = await tx
+          .insert(PersonalDetails)
+          .values({
+            institutional_id: data.institutional_id,
+            first_name: data.first_name,
+            last_name: data.last_name,
+            middle_name: data.middle_name || null,
+            suffix: data.suffix || null,
+          })
+          .returning();
+
+        // 2. Insert Account
+        const [account] = await tx
+          .insert(Accounts)
+          .values({
+            personal_details_id: details!.id,
+            email: data.email,
+            password: passwordHash,
+            is_verified: false,
+          })
+          .returning();
+
+        // 3. Map Role
+        await tx.insert(AccountRoles).values({
+          account_id: account!.id,
+          role_id: roleId,
+        });
+
+        idSet.add(data.institutional_id);
+        emailSet.add(data.email);
+        summary.successful++;
+      }
+
+      return summary;
+    });
+  }
+
+  private generateTemporaryPassword(): string {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*";
+    return Array.from({ length: 12 }, () => chars[crypto.randomInt(0, chars.length)]).join("");
   }
 }
