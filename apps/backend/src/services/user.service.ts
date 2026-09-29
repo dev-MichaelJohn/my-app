@@ -411,8 +411,7 @@ export class UserService implements IUserService {
       // If actorUser is provided via HTTP, enforce that only SYS_ADMIN can provision ADMIN/SYS_ADMIN
       if (
         (parsedInfo.role === "ADMIN" || parsedInfo.role === "SYS_ADMIN") &&
-        actorUser &&
-        !isSysAdmin
+        (!actorUser || !isSysAdmin)
       ) {
         return errAsync(
           new AppError(403, "Only System Administrators can provision administrative accounts."),
@@ -559,29 +558,22 @@ export class UserService implements IUserService {
         const target = existing.value;
         const targetRoles = toRolesArray(target.roles);
 
-        // Security check 1: Protect SYS_ADMIN
         if (targetRoles.includes("SYS_ADMIN") && !isSysAdmin) {
           throw new AppError(
             403,
-            "You do not have permission to modify a System Administrator account.",
+            "Only System Administrators can modify a System Administrator account.",
           );
         }
-
-        // Security check 2: Admins cannot edit other Admins
         if (targetRoles.includes("ADMIN") && !isSysAdmin && !isSelf) {
-          throw new AppError(
-            403,
-            "Administrators cannot modify other Administrator accounts. Only a System Administrator can manage administrative accounts.",
-          );
+          throw new AppError(403, "Only System Administrators can modify Administrator accounts.");
         }
-
-        // Security check 3: Only SYS_ADMIN can promote to ADMIN/SYS_ADMIN
+        // Prevent non-SYS_ADMIN from promoting any account to ADMIN or SYS_ADMIN
         if (
           parsed.role &&
           (parsed.role === "ADMIN" || parsed.role === "SYS_ADMIN") &&
           !isSysAdmin
         ) {
-          throw new AppError(403, "Only System Administrators can grant administrative roles.");
+          throw new AppError(403, "Only System Administrators can assign administrative roles.");
         }
 
         // Security check 4: Protect Active Office Holders from Demotion
@@ -763,12 +755,8 @@ export class UserService implements IUserService {
       if (targetRoles.includes("SYS_ADMIN")) {
         throw new AppError(403, "System Administrator accounts cannot be archived.");
       }
-
       if (targetRoles.includes("ADMIN") && !isSysAdmin) {
-        throw new AppError(
-          403,
-          "Administrators cannot archive other Administrator accounts. Only a System Administrator can manage administrative accounts.",
-        );
+        throw new AppError(403, "Only System Administrators can archive Administrator accounts.");
       }
 
       await this.checkUserDependencies(id, tx);
@@ -1010,20 +998,12 @@ export class UserService implements IUserService {
         const target = user.value;
         const targetRoles = toRolesArray(target.roles);
 
-        if (targetRoles.includes("SYS_ADMIN") && !isSysAdmin) {
+        if ((targetRoles.includes("ADMIN") || targetRoles.includes("SYS_ADMIN")) && !isSysAdmin) {
           throw new AppError(
             403,
-            "Only System Administrators can modify roles of a System Administrator.",
+            "Only System Administrators can manage roles for administrative accounts.",
           );
         }
-
-        if (targetRoles.includes("ADMIN") && !isSysAdmin) {
-          throw new AppError(
-            403,
-            "Administrators cannot modify roles for other Administrator accounts.",
-          );
-        }
-
         if ((parsed.roles.includes("ADMIN") || parsed.roles.includes("SYS_ADMIN")) && !isSysAdmin) {
           throw new AppError(403, "Only System Administrators can grant administrative roles.");
         }
