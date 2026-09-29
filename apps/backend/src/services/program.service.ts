@@ -332,7 +332,7 @@ export class ProgramService implements IProgramService {
   ): ResultAsync<GetProgram, AppError> {
     return ValidateSchema(UpdateProgramSchema, programInfo).asyncAndThen(({ program, chair }) => {
       const hasProgramInfo = Boolean(program && Object.keys(program).length > 0);
-      const hasChairInfo = Boolean(chair && Object.keys(chair).length > 0);
+      const hasChairInfo = chair !== undefined;
 
       if (!hasProgramInfo && !hasChairInfo)
         return errAsync(new AppError(400, "No update parameters were provided."));
@@ -361,44 +361,13 @@ export class ProgramService implements IProgramService {
           updatedProgramRecord = updated;
         }
 
-        if (hasChairInfo && chair) {
-          const isSameChair = this.sameChairInfo(chair, existingProgram);
-
-          if (!isSameChair) {
-            let account_id: number;
-
-            if (chair.type === "existing") {
-              await this.validChairCandidate(chair.account_id, tx);
-              account_id = chair.account_id;
-
-              const userRecord = await this.userService.getUserById(account_id, tx);
-              if (userRecord.isErr()) throw userRecord.error;
-              finalChairUser = userRecord.value;
-            } else {
-              const newChairInfo: CreateUser = { ...chair.info, role: "FACULTY" };
-              const userRecord = await this.userService.createUser(newChairInfo, tx);
-              if (userRecord.isErr()) throw userRecord.error;
-
-              finalChairUser = userRecord.value;
-              account_id = finalChairUser.account.id;
-            }
-
+        if (hasChairInfo) {
+          if (chair === null) {
+            // 1. Vacate active chair assignment in DB first
             if (existingProgram.chair) {
               const oldChairId = existingProgram.chair.account.id;
 
-              const hasOtherChairs = await this.collegeService.hasProgramChairRecords(
-                oldChairId,
-                tx,
-                existingProgram.program.id,
-              );
-              const hasDeanships = await this.collegeService.hasDeanships(oldChairId, tx);
-
-              if (!hasOtherChairs && !hasDeanships) {
-                const revokeRes = await this.userService.revokeRole(oldChairId, "SUPERVISOR", tx);
-                if (revokeRes.isErr()) throw revokeRes.error;
-              }
-
-              const [deleteChairRecord] = await tx
+              await tx
                 .update(ProgramChairs)
                 .set({ deleted_at: new Date() })
                 .where(
@@ -407,27 +376,86 @@ export class ProgramService implements IProgramService {
                     eq(ProgramChairs.program_id, existingProgram.program.id),
                     isNull(ProgramChairs.deleted_at),
                   ),
-                )
+                );
+
+              // 2. Only revoke SUPERVISOR if they have no other offices
+              const hasOtherChairs = await this.collegeService.hasProgramChairRecords(
+                oldChairId,
+                tx,
+              );
+              const hasDeanships = await this.collegeService.hasDeanships(oldChairId, tx);
+
+              if (!hasOtherChairs && !hasDeanships) {
+                const revokeRes = await this.userService.revokeRole(oldChairId, "SUPERVISOR", tx);
+                if (revokeRes.isErr()) throw revokeRes.error;
+              }
+
+              finalChairUser = null;
+            }
+          } else {
+            const isSameChair = this.sameChairInfo(chair, existingProgram);
+
+            if (!isSameChair) {
+              let account_id: number;
+
+              if (chair.type === "existing") {
+                await this.validChairCandidate(chair.account_id, tx);
+                account_id = chair.account_id;
+
+                const userRecord = await this.userService.getUserById(account_id, tx);
+                if (userRecord.isErr()) throw userRecord.error;
+                finalChairUser = userRecord.value;
+              } else {
+                const newChairInfo: CreateUser = { ...chair.info, role: "FACULTY" };
+                const userRecord = await this.userService.createUser(newChairInfo, tx);
+                if (userRecord.isErr()) throw userRecord.error;
+
+                finalChairUser = userRecord.value;
+                account_id = finalChairUser.account.id;
+              }
+
+              // Vacate old chair
+              if (existingProgram.chair) {
+                const oldChairId = existingProgram.chair.account.id;
+
+                await tx
+                  .update(ProgramChairs)
+                  .set({ deleted_at: new Date() })
+                  .where(
+                    and(
+                      eq(ProgramChairs.chair_id, oldChairId),
+                      eq(ProgramChairs.program_id, existingProgram.program.id),
+                      isNull(ProgramChairs.deleted_at),
+                    ),
+                  );
+
+                const hasOtherChairs = await this.collegeService.hasProgramChairRecords(
+                  oldChairId,
+                  tx,
+                );
+                const hasDeanships = await this.collegeService.hasDeanships(oldChairId, tx);
+
+                if (!hasOtherChairs && !hasDeanships) {
+                  const revokeRes = await this.userService.revokeRole(oldChairId, "SUPERVISOR", tx);
+                  if (revokeRes.isErr()) throw revokeRes.error;
+                }
+              }
+
+              // Assign new chair
+              const grantRes = await this.userService.grantRole(account_id, "SUPERVISOR", tx);
+              if (grantRes.isErr()) throw grantRes.error;
+
+              const [newChairRecord] = await tx
+                .insert(ProgramChairs)
+                .values({
+                  chair_id: account_id,
+                  program_id: existingProgram.program.id,
+                })
                 .returning();
 
-              if (!deleteChairRecord) {
-                throw new AppError(500, "Failed to remove previous chair assignment.");
+              if (!newChairRecord) {
+                throw new AppError(500, "Failed to assign new chair to program.");
               }
-            }
-
-            const grantRes = await this.userService.grantRole(account_id, "SUPERVISOR", tx);
-            if (grantRes.isErr()) throw grantRes.error;
-
-            const [newChairRecord] = await tx
-              .insert(ProgramChairs)
-              .values({
-                chair_id: account_id,
-                program_id: existingProgram.program.id,
-              })
-              .returning();
-
-            if (!newChairRecord) {
-              throw new AppError(500, "Failed to assign new chair to program.");
             }
           }
         }
@@ -462,7 +490,7 @@ export class ProgramService implements IProgramService {
             ),
           );
 
-        const hasOtherChairs = await this.collegeService.hasProgramChairRecords(chairId, tx, id);
+        const hasOtherChairs = await this.collegeService.hasProgramChairRecords(chairId, tx);
         const hasDeanships = await this.collegeService.hasDeanships(chairId, tx);
 
         if (!hasOtherChairs && !hasDeanships) {

@@ -21,6 +21,7 @@ import {
   Trash2,
   RotateCcw,
   UserCheck,
+  UserX,
   ShieldAlert,
   BookOpen,
   Layers,
@@ -34,6 +35,7 @@ interface ProgramTableViewProps {
   collegesMap: Map<number, GetCollege>;
   isArchivedView: boolean;
   onEdit: (program: GetProgram) => void;
+  onUnassignChair: (program: GetProgram) => void;
   onDelete: (program: GetProgram) => void;
   onRestore: (program: GetProgram) => void;
 }
@@ -43,6 +45,7 @@ export function ProgramTableView({
   collegesMap,
   isArchivedView,
   onEdit,
+  onUnassignChair,
   onDelete,
   onRestore,
 }: ProgramTableViewProps) {
@@ -127,7 +130,7 @@ export function ProgramTableView({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                       align="end"
-                      className="w-40 border-border bg-popover text-popover-foreground"
+                      className="w-44 border-border bg-popover text-popover-foreground"
                     >
                       {!isArchivedView ? (
                         <>
@@ -161,6 +164,15 @@ export function ProgramTableView({
                             <Edit className="w-4 h-4 text-muted-foreground" />
                             <span>Edit</span>
                           </DropdownMenuItem>
+                          {item.chair && (
+                            <DropdownMenuItem
+                              onClick={() => onUnassignChair(item)}
+                              className="gap-2 text-amber-600 dark:text-amber-400 focus:bg-amber-500/10 cursor-pointer font-medium"
+                            >
+                              <UserX className="w-4 h-4" />
+                              <span>Unassign Chair</span>
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuSeparator className="bg-border" />
                           <DropdownMenuItem
                             onClick={() => onDelete(item)}

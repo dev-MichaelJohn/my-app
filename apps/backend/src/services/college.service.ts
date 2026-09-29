@@ -320,7 +320,7 @@ export class CollegeService implements ICollegeService {
   ): ResultAsync<GetCollege, AppError> {
     return ValidateSchema(UpdateCollegeSchema, collegeInfo).asyncAndThen(({ college, dean }) => {
       const hasCollegeInfo = Boolean(college && Object.keys(college).length > 0);
-      const hasDeanInfo = Boolean(dean && Object.keys(dean).length > 0);
+      const hasDeanInfo = dean !== undefined;
 
       if (!hasCollegeInfo && !hasDeanInfo) {
         return errAsync(new AppError(400, "No update parameters were provided."));
@@ -345,44 +345,13 @@ export class CollegeService implements ICollegeService {
           updatedCollegeRecord = updated;
         }
 
-        if (hasDeanInfo && dean) {
-          const isSameDean = this.sameDeanInfo(dean, existingCollege);
-
-          if (!isSameDean) {
-            let account_id: number;
-
-            if (dean.type === "existing") {
-              await this.validDeanCandidate(dean.account_id, tx);
-              account_id = dean.account_id;
-
-              const userRecord = await this.userService.getUserById(account_id, tx);
-              if (userRecord.isErr()) throw userRecord.error;
-              finalDeanUser = userRecord.value;
-            } else {
-              const newDeanInfo: CreateUser = { ...dean.info, role: "FACULTY" };
-              const userRecord = await this.userService.createUser(newDeanInfo, tx);
-              if (userRecord.isErr()) throw userRecord.error;
-
-              finalDeanUser = userRecord.value;
-              account_id = finalDeanUser.account.id;
-            }
-
+        if (hasDeanInfo) {
+          if (dean === null) {
+            // 1. Vacate the active Dean assignment in DB first
             if (existingCollege.dean) {
               const oldDeanId = existingCollege.dean.account.id;
 
-              const hasOtherDeanships = await this.hasDeanships(
-                oldDeanId,
-                tx,
-                existingCollege.college.id,
-              );
-              const hasProgramChair = await this.hasProgramChairRecords(oldDeanId, tx);
-
-              if (!hasOtherDeanships && !hasProgramChair) {
-                const revokeRes = await this.userService.revokeRole(oldDeanId, "SUPERVISOR", tx);
-                if (revokeRes.isErr()) throw revokeRes.error;
-              }
-
-              const [deletedDeanRecord] = await tx
+              await tx
                 .update(CollegeDeans)
                 .set({ deleted_at: new Date() })
                 .where(
@@ -391,25 +360,79 @@ export class CollegeService implements ICollegeService {
                     eq(CollegeDeans.college_id, existingCollege.college.id),
                     isNull(CollegeDeans.deleted_at),
                   ),
-                )
+                );
+
+              // 2. Only revoke SUPERVISOR if they have no other active offices
+              const hasOtherDeanships = await this.hasDeanships(oldDeanId, tx);
+              const hasProgramChair = await this.hasProgramChairRecords(oldDeanId, tx);
+
+              if (!hasOtherDeanships && !hasProgramChair) {
+                const revokeRes = await this.userService.revokeRole(oldDeanId, "SUPERVISOR", tx);
+                if (revokeRes.isErr()) throw revokeRes.error;
+              }
+
+              finalDeanUser = null;
+            }
+          } else {
+            const isSameDean = this.sameDeanInfo(dean, existingCollege);
+
+            if (!isSameDean) {
+              let account_id: number;
+
+              if (dean.type === "existing") {
+                await this.validDeanCandidate(dean.account_id, tx, existingCollege.college.id);
+                account_id = dean.account_id;
+
+                const userRecord = await this.userService.getUserById(account_id, tx);
+                if (userRecord.isErr()) throw userRecord.error;
+                finalDeanUser = userRecord.value;
+              } else {
+                const newDeanInfo: CreateUser = { ...dean.info, role: "FACULTY" };
+                const userRecord = await this.userService.createUser(newDeanInfo, tx);
+                if (userRecord.isErr()) throw userRecord.error;
+
+                finalDeanUser = userRecord.value;
+                account_id = finalDeanUser.account.id;
+              }
+
+              // Vacate previous dean
+              if (existingCollege.dean) {
+                const oldDeanId = existingCollege.dean.account.id;
+
+                await tx
+                  .update(CollegeDeans)
+                  .set({ deleted_at: new Date() })
+                  .where(
+                    and(
+                      eq(CollegeDeans.dean_id, oldDeanId),
+                      eq(CollegeDeans.college_id, existingCollege.college.id),
+                      isNull(CollegeDeans.deleted_at),
+                    ),
+                  );
+
+                const hasOtherDeanships = await this.hasDeanships(oldDeanId, tx);
+                const hasProgramChair = await this.hasProgramChairRecords(oldDeanId, tx);
+
+                if (!hasOtherDeanships && !hasProgramChair) {
+                  const revokeRes = await this.userService.revokeRole(oldDeanId, "SUPERVISOR", tx);
+                  if (revokeRes.isErr()) throw revokeRes.error;
+                }
+              }
+
+              // Assign new dean
+              const grantRes = await this.userService.grantRole(account_id, "SUPERVISOR", tx);
+              if (grantRes.isErr()) throw grantRes.error;
+
+              const [newDeanRecord] = await tx
+                .insert(CollegeDeans)
+                .values({
+                  dean_id: account_id,
+                  college_id: existingCollege.college.id,
+                })
                 .returning();
 
-              if (!deletedDeanRecord)
-                throw new AppError(500, "Failed to remove previous dean assignment.");
+              if (!newDeanRecord) throw new AppError(500, "Failed to assign new dean to college.");
             }
-
-            const grantRes = await this.userService.grantRole(account_id, "SUPERVISOR", tx);
-            if (grantRes.isErr()) throw grantRes.error;
-
-            const [newDeanRecord] = await tx
-              .insert(CollegeDeans)
-              .values({
-                dean_id: account_id,
-                college_id: existingCollege.college.id,
-              })
-              .returning();
-
-            if (!newDeanRecord) throw new AppError(500, "Failed to assign new dean to college.");
           }
         }
 
@@ -440,39 +463,26 @@ export class CollegeService implements ICollegeService {
         );
 
       if (existingCollege.dean) {
-        const hasOtherDeanships = await this.hasDeanships(
-          existingCollege.dean.account.id,
-          tx,
-          existingCollege.college.id,
-        );
-        const hasProgramChair = await this.hasProgramChairRecords(
-          existingCollege.dean.account.id,
-          tx,
-        );
+        const deanId = existingCollege.dean.account.id;
 
-        if (!hasOtherDeanships && !hasProgramChair) {
-          const revokeRes = await this.userService.revokeRole(
-            existingCollege.dean.account.id,
-            "SUPERVISOR",
-            tx,
-          );
-          if (revokeRes.isErr()) throw revokeRes.error;
-        }
-
-        const [deletedDeanRecord] = await tx
+        await tx
           .update(CollegeDeans)
           .set({ deleted_at: new Date() })
           .where(
             and(
-              eq(CollegeDeans.dean_id, existingCollege.dean.account.id),
+              eq(CollegeDeans.dean_id, deanId),
               eq(CollegeDeans.college_id, existingCollege.college.id),
               isNull(CollegeDeans.deleted_at),
             ),
-          )
-          .returning();
+          );
 
-        if (!deletedDeanRecord)
-          throw new AppError(500, "Failed to remove previous dean assignment.");
+        const hasOtherDeanships = await this.hasDeanships(deanId, tx);
+        const hasProgramChair = await this.hasProgramChairRecords(deanId, tx);
+
+        if (!hasOtherDeanships && !hasProgramChair) {
+          const revokeRes = await this.userService.revokeRole(deanId, "SUPERVISOR", tx);
+          if (revokeRes.isErr()) throw revokeRes.error;
+        }
       }
 
       const [deletedCollege] = await tx
@@ -492,7 +502,7 @@ export class CollegeService implements ICollegeService {
       const current = existing.value;
 
       if (!current.college.deleted_at) {
-        throw new AppError(400, "This program is already active and not archived.");
+        throw new AppError(400, "This college is already active and not archived.");
       }
 
       const [conflict] = await tx
@@ -555,7 +565,7 @@ export class CollegeService implements ICollegeService {
 
     const hasDeanships = await this.hasDeanships(accountId, tx, excludeCollegeId);
     if (hasDeanships)
-      throw new AppError(409, "This account is already assigned as the dean of a college.");
+      throw new AppError(409, "This account is already assigned as the dean of another college.");
   }
 
   async hasDeanships(accountId: number, tx: PgTransaction, excludeCollegeId?: number) {
@@ -589,8 +599,7 @@ export class CollegeService implements ICollegeService {
   }
 
   private sameDeanInfo(info: CreateCollegeDean, existingCollege: GetCollege) {
-    if (!info) throw new AppError(400, "Dean information must not be empty.");
-
+    if (!info) return false;
     if (!existingCollege.dean) return false;
 
     if (info.type === "existing") return info.account_id === existingCollege.dean.account.id;

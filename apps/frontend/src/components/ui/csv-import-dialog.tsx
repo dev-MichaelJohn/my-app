@@ -15,7 +15,13 @@ import { Upload, Download, FileSpreadsheet, AlertCircle, Trash2 } from "lucide-r
 import { http, type ApiError } from "@/lib/api.lib";
 import type { ImportSummary } from "@my-app/shared";
 
-export type ImportEntityType = "colleges" | "programs" | "courses" | "curriculums" | "classes";
+export type ImportEntityType =
+  | "colleges"
+  | "programs"
+  | "courses"
+  | "curriculums"
+  | "classes"
+  | "users";
 
 const SAMPLE_CSV_DATA: Record<ImportEntityType, string> = {
   colleges: `name,initialism,dean_institutional_id
@@ -42,6 +48,12 @@ BSIT,I,A
 BSIT,I,B
 BSIT,II,A
 BSME,I,A`,
+
+  users: `institutional_id,email,first_name,last_name,middle_name,suffix,role
+26-1042-001,juan.delacruz@pit.edu.ph,Juan,Dela Cruz,Santos,,STUDENT
+26-1042-002,maria.clara@pit.edu.ph,Maria,Clara,Reyes,,STUDENT
+04-0204-33,robert.tan@pit.edu.ph,Robert,Tan,Lee,Jr.,FACULTY
+04-0204-45,elena.gomez@pit.edu.ph,Elena,Gomez,Flores,,SUPERVISOR`,
 };
 
 interface CsvImportDialogProps {
@@ -62,7 +74,6 @@ export function CsvImportDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[580px] max-h-[90vh] overflow-y-auto border-border bg-card text-card-foreground">
-        {/* 🚀 Key remounts clean state naturally whenever the dialog opens/closes */}
         {open && (
           <CsvImportDialogContent
             key={open ? "open" : "closed"}
@@ -77,7 +88,6 @@ export function CsvImportDialog({
   );
 }
 
-// ── Inner Content (Discards state on unmount) ──
 function CsvImportDialogContent({
   entity,
   entityTitle,
@@ -94,7 +104,6 @@ function CsvImportDialogContent({
   const [isUploading, setIsUploading] = useState(false);
   const [importResult, setImportResult] = useState<ImportSummary | null>(null);
 
-  // 1. Download Sample CSV
   const handleDownloadTemplate = () => {
     const csvContent = SAMPLE_CSV_DATA[entity];
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -107,7 +116,6 @@ function CsvImportDialogContent({
     document.body.removeChild(link);
   };
 
-  // 2. Parse & Preview CSV
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
@@ -123,14 +131,12 @@ function CsvImportDialogContent({
     });
   };
 
-  // Clear chosen file
   const handleClearFile = () => {
     setFile(null);
     setPreviewRows([]);
     setImportResult(null);
   };
 
-  // 3. Upload to Backend
   const handleUpload = async () => {
     if (!file) return;
 
@@ -148,7 +154,7 @@ function CsvImportDialogContent({
         if (summary.failed === 0) {
           toast.success(`Successfully imported ${summary.successful} ${entityTitle}.`);
           onSuccess();
-          onClose(); // Auto-close on complete success
+          onClose();
         } else {
           toast.warning(`Imported ${summary.successful} items with ${summary.failed} errors.`);
           onSuccess();
@@ -168,16 +174,15 @@ function CsvImportDialogContent({
           <span>Bulk Import {entityTitle} via CSV</span>
         </DialogTitle>
         <DialogDescription className="text-sm text-muted-foreground">
-          Upload a CSV with human-readable initialisms and codes. No database IDs required.
+          Upload a standard CSV file to provision accounts or records in bulk.
         </DialogDescription>
       </DialogHeader>
 
       <div className="space-y-4 py-2">
-        {/* Download Sample Banner */}
         <div className="flex items-center justify-between p-3 rounded-lg bg-muted/60 border border-border text-xs">
           <div>
-            <p className="font-semibold text-foreground">Need the correct column format?</p>
-            <p className="text-muted-foreground">Download our pre-formatted sample template.</p>
+            <p className="font-semibold text-foreground">Need the template format?</p>
+            <p className="text-muted-foreground">Download our pre-formatted sample CSV file.</p>
           </div>
           <Button
             type="button"
@@ -191,7 +196,6 @@ function CsvImportDialogContent({
           </Button>
         </div>
 
-        {/* File Upload Dropzone */}
         {!file ? (
           <div className="border-2 border-dashed border-border hover:border-primary/50 transition p-6 rounded-xl text-center bg-muted/20 space-y-2">
             <Upload className="w-8 h-8 text-muted-foreground mx-auto" />
@@ -214,7 +218,6 @@ function CsvImportDialogContent({
             />
           </div>
         ) : (
-          /* File Selected Card */
           <div className="space-y-3">
             <div className="flex items-center justify-between p-3 border border-border rounded-lg bg-card text-xs">
               <div className="flex items-center gap-2.5 truncate">
@@ -238,7 +241,6 @@ function CsvImportDialogContent({
               </Button>
             </div>
 
-            {/* Top 5 Rows Preview */}
             {previewRows.length > 0 && (
               <div className="border border-border rounded-lg overflow-x-auto bg-muted/30 p-2 text-[11px] font-mono">
                 <table className="w-full text-left">
@@ -268,7 +270,6 @@ function CsvImportDialogContent({
           </div>
         )}
 
-        {/* Error Summary Report */}
         {importResult && importResult.failed > 0 && (
           <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs space-y-2">
             <div className="flex items-center gap-1.5 text-destructive font-bold">

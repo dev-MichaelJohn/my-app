@@ -15,6 +15,7 @@ import {
   RotateCcw,
   Building2,
   UserCheck,
+  UserX,
   ShieldAlert,
   GraduationCap,
 } from "lucide-react";
@@ -25,6 +26,7 @@ interface CollegeGridViewProps {
   colleges: GetCollege[];
   isArchivedView: boolean;
   onEdit: (college: GetCollege) => void;
+  onUnassignDean: (college: GetCollege) => void;
   onDelete: (college: GetCollege) => void;
   onRestore: (college: GetCollege) => void;
 }
@@ -33,6 +35,7 @@ export function CollegeGridView({
   colleges,
   isArchivedView,
   onEdit,
+  onUnassignDean,
   onDelete,
   onRestore,
 }: CollegeGridViewProps) {
@@ -74,7 +77,7 @@ export function CollegeGridView({
                   <MoreVertical className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-36 border-border bg-popover">
+              <DropdownMenuContent align="end" className="w-44 border-border bg-popover">
                 {!isArchivedView ? (
                   <>
                     <DropdownMenuItem
@@ -88,6 +91,15 @@ export function CollegeGridView({
                       <Edit className="w-4 h-4" />
                       <span>Edit</span>
                     </DropdownMenuItem>
+                    {item.dean && (
+                      <DropdownMenuItem
+                        onClick={() => onUnassignDean(item)}
+                        className="gap-2 text-amber-600 dark:text-amber-400 focus:bg-amber-500/10 cursor-pointer font-medium"
+                      >
+                        <UserX className="w-4 h-4" />
+                        <span>Unassign Dean</span>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator className="bg-border" />
                     <DropdownMenuItem
                       onClick={() => onDelete(item)}
@@ -115,11 +127,22 @@ export function CollegeGridView({
               {item.college.name}
             </h3>
 
-            {/* Assigned Dean Box */}
+            {/* Assigned Dean Box with Quick Unassign Button */}
             <div className="p-3 bg-muted/40 border border-border/60 rounded-lg">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                Appointed Dean
-              </p>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Appointed Dean
+                </p>
+                {!isArchivedView && item.dean && (
+                  <button
+                    type="button"
+                    onClick={() => onUnassignDean(item)}
+                    className="text-[11px] font-semibold text-destructive hover:underline"
+                  >
+                    Unassign
+                  </button>
+                )}
+              </div>
               {item.dean ? (
                 <div className="flex items-center gap-2">
                   <UserCheck className="w-4 h-4 text-primary shrink-0" />
@@ -138,17 +161,15 @@ export function CollegeGridView({
             </div>
 
             {!isArchivedView && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(`/admin/programs?college_id=${item.college.id}`)}
-                  className="w-full text-xs gap-2 h-8 border-border bg-card hover:bg-muted text-foreground"
-                >
-                  <GraduationCap className="w-3.5 h-3.5 text-primary" />
-                  <span>View Programs</span>
-                </Button>
-              </>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(`/admin/programs?college_id=${item.college.id}`)}
+                className="w-full text-xs gap-2 h-8 border-border bg-card hover:bg-muted text-foreground"
+              >
+                <GraduationCap className="w-3.5 h-3.5 text-primary" />
+                <span>View Programs</span>
+              </Button>
             )}
           </CardContent>
 

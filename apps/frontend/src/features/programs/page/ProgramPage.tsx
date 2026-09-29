@@ -23,7 +23,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { usePrograms, useDeleteProgram, useRestoreProgram } from "../hooks/usePrograms";
+import {
+  usePrograms,
+  useDeleteProgram,
+  useRestoreProgram,
+  useUpdateProgram,
+} from "../hooks/usePrograms";
 import { useColleges } from "@/features/colleges/hooks/useColleges";
 import { ProgramTableView } from "../components/ProgramTableView";
 import { ProgramGridView } from "../components/ProgramGridView";
@@ -80,6 +85,7 @@ export default function ProgramsPage() {
     order: "desc",
   });
 
+  const updateMutation = useUpdateProgram();
   const deleteMutation = useDeleteProgram();
   const restoreMutation = useRestoreProgram();
 
@@ -101,6 +107,7 @@ export default function ProgramsPage() {
   const [programToEdit, setProgramToEdit] = useState<GetProgram | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<GetProgram | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<GetProgram | null>(null);
+  const [unassignChairTarget, setUnassignChairTarget] = useState<GetProgram | null>(null);
 
   const handleArchiveConfirm = async () => {
     if (!archiveTarget) return;
@@ -126,6 +133,21 @@ export default function ProgramsPage() {
     }
   };
 
+  const handleUnassignChairConfirm = async () => {
+    if (!unassignChairTarget) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: unassignChairTarget.program.id,
+        info: { chair: null },
+      });
+      toast.success(`Program chair unassigned from ${unassignChairTarget.program.initialism}.`);
+      setUnassignChairTarget(null);
+    } catch (err) {
+      const apiErr = err as ApiError;
+      toast.error(apiErr.message || "Failed to unassign chair.");
+    }
+  };
+
   const handleCollegeChange = (val: string | null) => {
     const newCollegeId = !val || val === "all" ? undefined : Number(val);
 
@@ -135,7 +157,6 @@ export default function ProgramsPage() {
       page: 1,
     }));
 
-    // Update browser URL bar cleanly
     if (newCollegeId) {
       setSearchParams({ college_id: String(newCollegeId) });
     } else {
@@ -156,9 +177,7 @@ export default function ProgramsPage() {
         <div className="flex gap-2 items-center">
           <Button
             variant="outline"
-            onClick={() => {
-              setImportOpen(true);
-            }}
+            onClick={() => setImportOpen(true)}
             className="gap-2 h-9 text-xs border-border shadow-2xs"
           >
             <Upload className="w-4 h-4" />
@@ -322,6 +341,7 @@ export default function ProgramsPage() {
               setProgramToEdit(item);
               setFormOpen(true);
             }}
+            onUnassignChair={(item) => setUnassignChairTarget(item)}
             onDelete={(item) => setArchiveTarget(item)}
             onRestore={(item) => setRestoreTarget(item)}
           />
@@ -334,12 +354,14 @@ export default function ProgramsPage() {
               setProgramToEdit(item);
               setFormOpen(true);
             }}
+            onUnassignChair={(item) => setUnassignChairTarget(item)}
             onDelete={(item) => setArchiveTarget(item)}
             onRestore={(item) => setRestoreTarget(item)}
           />
         )}
       </div>
 
+      {/* Pagination Footer */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-4 text-xs text-muted-foreground">
         <div>
           {query.paginate && pagination ? (
@@ -420,6 +442,28 @@ export default function ProgramsPage() {
         colleges={collegesList}
       />
 
+      {/* Unassign Chair Modal */}
+      <ConfirmActionDialog
+        open={Boolean(unassignChairTarget)}
+        onOpenChange={(open) => !open && setUnassignChairTarget(null)}
+        title={`Unassign Program Chair from ${unassignChairTarget?.program.initialism}?`}
+        description={
+          <span>
+            Are you sure you want to unassign{" "}
+            <strong>
+              {unassignChairTarget?.chair?.details.first_name}{" "}
+              {unassignChairTarget?.chair?.details.last_name}
+            </strong>{" "}
+            as the Chair of <strong>{unassignChairTarget?.program.name}</strong>?
+          </span>
+        }
+        confirmLabel="Unassign Chair"
+        variant="destructive"
+        isLoading={updateMutation.isPending}
+        onConfirm={handleUnassignChairConfirm}
+      />
+
+      {/* Archive Modal */}
       <ConfirmActionDialog
         open={Boolean(archiveTarget)}
         onOpenChange={(open) => !open && setArchiveTarget(null)}
@@ -439,6 +483,7 @@ export default function ProgramsPage() {
         onConfirm={handleArchiveConfirm}
       />
 
+      {/* Restore Modal */}
       <ConfirmActionDialog
         open={Boolean(restoreTarget)}
         onOpenChange={(open) => !open && setRestoreTarget(null)}

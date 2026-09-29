@@ -1,9 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { UserAPI } from "../api/user.api";
+import { userApi } from "../api/user.api";
 import { toQuery } from "@/lib/query.lib";
-import type { CreateUser, UpdateUser } from "@my-app/shared";
-
-export const userApi = new UserAPI();
+import type { ChangePassword, CreateUser, SystemRole, UpdateUser } from "@my-app/shared";
 
 export const USER_KEYS = {
   all: ["users"] as const,
@@ -22,7 +20,7 @@ export const useUsers = (query?: unknown) => {
   });
 };
 
-export const useUser = (id: number, enabled: boolean = true) => {
+export const useUser = (id: number, enabled = true) => {
   return useQuery({
     queryKey: USER_KEYS.detail(id),
     queryFn: () => toQuery(userApi.getUser(id)),
@@ -33,7 +31,6 @@ export const useUser = (id: number, enabled: boolean = true) => {
 
 export const useCreateUser = () => {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: (newUser: CreateUser) => toQuery(userApi.createUser(newUser)),
     onSuccess: () => {
@@ -44,7 +41,6 @@ export const useCreateUser = () => {
 
 export const useUpdateUser = () => {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: UpdateUser }) =>
       toQuery(userApi.updateUser(id, data)),
@@ -57,7 +53,6 @@ export const useUpdateUser = () => {
 
 export const useDeleteUser = () => {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: (id: number) => toQuery(userApi.deleteUser(id)),
     onSuccess: () => {
@@ -68,11 +63,45 @@ export const useDeleteUser = () => {
 
 export const useRestoreUser = () => {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: (id: number) => toQuery(userApi.restoreUser(id)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: USER_KEYS.all });
     },
+  });
+};
+
+export const useManageRoles = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, roles }: { id: number; roles: SystemRole[] }) =>
+      toQuery(userApi.manageRoles(id, roles)),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: USER_KEYS.all });
+      queryClient.invalidateQueries({ queryKey: USER_KEYS.detail(id) });
+    },
+  });
+};
+
+export const useResetPassword = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => toQuery(userApi.resetPassword(id)),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: USER_KEYS.detail(id) });
+    },
+  });
+};
+
+export const useChangePassword = () => {
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: ChangePassword }) =>
+      toQuery(userApi.changePassword(id, payload)),
+  });
+};
+
+export const useResendWelcomeEmail = () => {
+  return useMutation({
+    mutationFn: (id: number) => toQuery(userApi.resendWelcomeEmail(id)),
   });
 };

@@ -15,6 +15,7 @@ import {
   RotateCcw,
   GraduationCap,
   UserCheck,
+  UserX,
   ShieldAlert,
   BookOpen,
   Layers,
@@ -28,6 +29,7 @@ interface ProgramGridViewProps {
   collegesMap: Map<number, GetCollege>;
   isArchivedView: boolean;
   onEdit: (program: GetProgram) => void;
+  onUnassignChair: (program: GetProgram) => void;
   onDelete: (program: GetProgram) => void;
   onRestore: (program: GetProgram) => void;
 }
@@ -37,6 +39,7 @@ export function ProgramGridView({
   collegesMap,
   isArchivedView,
   onEdit,
+  onUnassignChair,
   onDelete,
   onRestore,
 }: ProgramGridViewProps) {
@@ -86,7 +89,7 @@ export function ProgramGridView({
                     <MoreVertical className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-36 border-border bg-popover">
+                <DropdownMenuContent align="end" className="w-44 border-border bg-popover">
                   {!isArchivedView ? (
                     <>
                       <DropdownMenuItem
@@ -117,6 +120,15 @@ export function ProgramGridView({
                         <Edit className="w-4 h-4" />
                         <span>Edit</span>
                       </DropdownMenuItem>
+                      {item.chair && (
+                        <DropdownMenuItem
+                          onClick={() => onUnassignChair(item)}
+                          className="gap-2 text-amber-600 dark:text-amber-400 focus:bg-amber-500/10 cursor-pointer font-medium"
+                        >
+                          <UserX className="w-4 h-4" />
+                          <span>Unassign Chair</span>
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuSeparator className="bg-border" />
                       <DropdownMenuItem
                         onClick={() => onDelete(item)}
@@ -144,11 +156,22 @@ export function ProgramGridView({
                 {item.program.name}
               </h3>
 
-              {/* Program Chair Box */}
+              {/* Program Chair Box with Quick Unassign Button */}
               <div className="p-3 bg-muted/40 border border-border/60 rounded-lg">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                  Program Chair
-                </p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Program Chair
+                  </p>
+                  {!isArchivedView && item.chair && (
+                    <button
+                      type="button"
+                      onClick={() => onUnassignChair(item)}
+                      className="text-[11px] font-semibold text-destructive hover:underline"
+                    >
+                      Unassign
+                    </button>
+                  )}
+                </div>
                 {item.chair ? (
                   <div className="flex items-center gap-2">
                     <UserCheck className="w-4 h-4 text-primary shrink-0" />
@@ -167,35 +190,32 @@ export function ProgramGridView({
               </div>
 
               {!isArchivedView && (
-                <>
+                <div className="grid grid-cols-3 gap-1 pt-1">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => navigate(`/admin/courses?program_id=${item.program.id}`)}
-                    className="w-full text-xs gap-2 h-8 border-border bg-card hover:bg-muted text-foreground"
+                    className="text-[11px] px-2 h-7 border-border bg-card hover:bg-muted text-foreground"
                   >
-                    <BookOpen className="w-3.5 h-3.5 text-primary" />
-                    <span>View Courses</span>
+                    <BookOpen className="w-3 h-3 text-primary mr-1" /> Courses
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => navigate(`/admin/curriculums?program_id=${item.program.id}`)}
-                    className="w-full text-xs gap-2 h-8 border-border bg-card hover:bg-muted text-foreground"
+                    className="text-[11px] px-2 h-7 border-border bg-card hover:bg-muted text-foreground"
                   >
-                    <Layers className="w-3.5 h-3.5 text-primary" />
-                    <span>View Curriculums</span>
+                    <Layers className="w-3 h-3 text-primary mr-1" /> Syllabus
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => navigate(`/admin/classes?program_id=${item.program.id}`)}
-                    className="w-full text-xs gap-2 h-8 border-border bg-card hover:bg-muted text-foreground"
+                    className="text-[11px] px-2 h-7 border-border bg-card hover:bg-muted text-foreground"
                   >
-                    <School className="w-3.5 h-3.5 text-primary" />
-                    <span>View Classes</span>
+                    <School className="w-3 h-3 text-primary mr-1" /> Classes
                   </Button>
-                </>
+                </div>
               )}
             </CardContent>
 

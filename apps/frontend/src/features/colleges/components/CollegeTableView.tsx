@@ -21,6 +21,7 @@ import {
   Trash2,
   RotateCcw,
   UserCheck,
+  UserX,
   ShieldAlert,
   GraduationCap,
 } from "lucide-react";
@@ -31,6 +32,7 @@ interface CollegeTableViewProps {
   colleges: GetCollege[];
   isArchivedView: boolean;
   onEdit: (college: GetCollege) => void;
+  onUnassignDean: (college: GetCollege) => void;
   onDelete: (college: GetCollege) => void;
   onRestore: (college: GetCollege) => void;
 }
@@ -39,6 +41,7 @@ export function CollegeTableView({
   colleges,
   isArchivedView,
   onEdit,
+  onUnassignDean,
   onDelete,
   onRestore,
 }: CollegeTableViewProps) {
@@ -105,7 +108,7 @@ export function CollegeTableView({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     align="end"
-                    className="w-40 border-border bg-popover text-popover-foreground"
+                    className="w-44 border-border bg-popover text-popover-foreground"
                   >
                     {!isArchivedView ? (
                       <>
@@ -123,6 +126,15 @@ export function CollegeTableView({
                           <Edit className="w-4 h-4 text-muted-foreground" />
                           <span>Edit</span>
                         </DropdownMenuItem>
+                        {item.dean && (
+                          <DropdownMenuItem
+                            onClick={() => onUnassignDean(item)}
+                            className="gap-2 text-amber-600 dark:text-amber-400 focus:bg-amber-500/10 cursor-pointer font-medium"
+                          >
+                            <UserX className="w-4 h-4" />
+                            <span>Unassign Dean</span>
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator className="bg-border" />
                         <DropdownMenuItem
                           onClick={() => onDelete(item)}

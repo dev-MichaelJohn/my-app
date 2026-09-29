@@ -27,6 +27,8 @@ import {
   CourseOfferings,
   ClassStudents,
   StudentClasses,
+  Colleges,
+  Programs,
   type ChangePassword,
 } from "@my-app/shared";
 import {
@@ -57,6 +59,21 @@ import {
 } from "@/libs/email.lib.js";
 import env from "@/configs/env.config.js";
 
+// Helper to guarantee roles is always a valid JavaScript array
+const toRolesArray = (roles: unknown): SystemRole[] => {
+  if (Array.isArray(roles)) return roles as SystemRole[];
+  if (typeof roles === "string") {
+    try {
+      const parsed = JSON.parse(roles);
+      if (Array.isArray(parsed)) return parsed as SystemRole[];
+    } catch {
+      // Handles raw string role, e.g. "SYS_ADMIN" or "FACULTY"
+      return [roles as SystemRole];
+    }
+  }
+  return [];
+};
+
 export interface IUserService {
   getUserById(
     id: number,
@@ -69,16 +86,16 @@ export interface IUserService {
   createUser(
     info: CreateUser,
     client?: DbClient,
-    actorRole?: SystemRole,
+    actorUser?: GetUser,
   ): ResultAsync<GetUser, AppError>;
   updateUser(
     id: number,
     info: UpdateUser,
     client?: DbClient,
-    actorRole?: SystemRole,
+    actorUser?: GetUser,
   ): ResultAsync<GetUser, AppError>;
-  deleteUser(id: number, client?: DbClient): ResultAsync<void, AppError>;
-  restoreUser(id: number, client?: DbClient): ResultAsync<GetUser, AppError>;
+  deleteUser(id: number, client?: DbClient, actorUser?: GetUser): ResultAsync<void, AppError>;
+  restoreUser(id: number, client?: DbClient, actorUser?: GetUser): ResultAsync<GetUser, AppError>;
   grantRole(accountId: number, role: SystemRole, client?: DbClient): ResultAsync<void, AppError>;
   revokeRole(accountId: number, role: SystemRole, client?: DbClient): ResultAsync<void, AppError>;
   hasRole(accountId: number, role: SystemRole, client?: DbClient): ResultAsync<boolean, AppError>;
@@ -86,11 +103,12 @@ export interface IUserService {
     accountId: number,
     roles: SystemRole[],
     client?: DbClient,
-    actorRole?: SystemRole,
+    actorUser?: GetUser,
   ): ResultAsync<GetUser, AppError>;
   resetUserPassword(
     accountId: number,
     client?: DbClient,
+    actorUser?: GetUser,
   ): ResultAsync<{ temporaryPassword: string }, AppError>;
   changePassword(
     accountId: number,
@@ -98,11 +116,77 @@ export interface IUserService {
     client?: DbClient,
     isSelfService?: boolean,
   ): ResultAsync<void, AppError>;
-  resendWelcomeEmail(accountId: number, client?: DbClient): ResultAsync<void, AppError>;
+  resendWelcomeEmail(
+    accountId: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+  ): ResultAsync<void, AppError>;
 }
 
 export class UserService implements IUserService {
   constructor(private emailService: IEmailService = new EmailService()) {}
+
+  private selectFields = {
+    account: {
+      id: Accounts.id,
+      personal_details_id: Accounts.personal_details_id,
+      email: Accounts.email,
+      is_verified: Accounts.is_verified,
+      deleted_at: Accounts.deleted_at,
+      created_at: Accounts.created_at,
+      updated_at: Accounts.updated_at,
+    },
+    details: {
+      id: PersonalDetails.id,
+      institutional_id: PersonalDetails.institutional_id,
+      first_name: PersonalDetails.first_name,
+      last_name: PersonalDetails.last_name,
+      middle_name: PersonalDetails.middle_name,
+      suffix: PersonalDetails.suffix,
+      deleted_at: PersonalDetails.deleted_at,
+      created_at: PersonalDetails.created_at,
+      updated_at: PersonalDetails.updated_at,
+    },
+    roles: sql<GetUser["roles"]>`
+      COALESCE(
+        (
+          SELECT JSON_AGG(${Roles.system_role}::text)
+          FROM ${AccountRoles}
+          INNER JOIN ${Roles} ON ${AccountRoles.role_id} = ${Roles.id}
+          WHERE ${AccountRoles.account_id} = ${Accounts.id}
+            AND ${AccountRoles.deleted_at} IS NULL
+            AND ${Roles.deleted_at} IS NULL
+        ),
+        '[]'::json
+      )
+    `,
+    offices: sql<GetUser["offices"]>`
+      JSON_BUILD_OBJECT(
+        'deanships', COALESCE(
+          (
+            SELECT JSON_AGG(JSON_BUILD_OBJECT('id', ${Colleges.id}, 'name', ${Colleges.name}, 'initialism', ${Colleges.initialism}))
+            FROM ${CollegeDeans}
+            INNER JOIN ${Colleges} ON ${CollegeDeans.college_id} = ${Colleges.id}
+            WHERE ${CollegeDeans.dean_id} = ${Accounts.id}
+              AND ${CollegeDeans.deleted_at} IS NULL
+              AND ${Colleges.deleted_at} IS NULL
+          ),
+          '[]'::json
+        ),
+        'chairships', COALESCE(
+          (
+            SELECT JSON_AGG(JSON_BUILD_OBJECT('id', ${Programs.id}, 'name', ${Programs.name}, 'initialism', ${Programs.initialism}))
+            FROM ${ProgramChairs}
+            INNER JOIN ${Programs} ON ${ProgramChairs.program_id} = ${Programs.id}
+            WHERE ${ProgramChairs.chair_id} = ${Accounts.id}
+              AND ${ProgramChairs.deleted_at} IS NULL
+              AND ${Programs.deleted_at} IS NULL
+          ),
+          '[]'::json
+        )
+      )
+    `,
+  };
 
   getUserById(
     id: number,
@@ -111,45 +195,19 @@ export class UserService implements IUserService {
   ): ResultAsync<GetUser, AppError> {
     return WithTransaction(client, async (tx) => {
       const [user] = await tx
-        .select({
-          account: {
-            id: Accounts.id,
-            personal_details_id: Accounts.personal_details_id,
-            email: Accounts.email,
-            is_verified: Accounts.is_verified,
-            deleted_at: Accounts.deleted_at,
-            created_at: Accounts.created_at,
-            updated_at: Accounts.updated_at,
-          },
-          details: {
-            id: PersonalDetails.id,
-            institutional_id: PersonalDetails.institutional_id,
-            first_name: PersonalDetails.first_name,
-            last_name: PersonalDetails.last_name,
-            middle_name: PersonalDetails.middle_name,
-            suffix: PersonalDetails.suffix,
-            deleted_at: PersonalDetails.deleted_at,
-            created_at: PersonalDetails.created_at,
-            updated_at: PersonalDetails.updated_at,
-          },
-          roles: sql<GetUser["roles"]>`
-            COALESCE(
-              JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL AND ${AccountRoles.deleted_at} IS NULL AND ${Roles.deleted_at} IS NULL),
-              '[]'
-            )
-          `,
-        })
+        .select(this.selectFields)
         .from(Accounts)
         .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
-        .leftJoin(
-          AccountRoles,
-          and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
-        )
-        .leftJoin(Roles, and(eq(AccountRoles.role_id, Roles.id), isNull(Roles.deleted_at)))
         .where(and(eq(Accounts.id, id), includeArchived ? undefined : isNull(Accounts.deleted_at)))
         .groupBy(Accounts.id, PersonalDetails.id);
 
-      return user ?? null;
+      if (!user) return null;
+
+      return {
+        ...user,
+        roles: toRolesArray(user.roles),
+        offices: user.offices || { deanships: [], chairships: [] },
+      };
     }).andThen((user) => {
       return user ? okAsync(user) : errAsync(new AppError(404, "User account was not found."));
     });
@@ -158,45 +216,19 @@ export class UserService implements IUserService {
   getUserByEmail(email: string, client: DbClient = db): ResultAsync<GetUser, AppError> {
     return WithTransaction(client, async (tx) => {
       const [user] = await tx
-        .select({
-          account: {
-            id: Accounts.id,
-            personal_details_id: Accounts.personal_details_id,
-            email: Accounts.email,
-            is_verified: Accounts.is_verified,
-            deleted_at: Accounts.deleted_at,
-            created_at: Accounts.created_at,
-            updated_at: Accounts.updated_at,
-          },
-          details: {
-            id: PersonalDetails.id,
-            institutional_id: PersonalDetails.institutional_id,
-            first_name: PersonalDetails.first_name,
-            last_name: PersonalDetails.last_name,
-            middle_name: PersonalDetails.middle_name,
-            suffix: PersonalDetails.suffix,
-            deleted_at: PersonalDetails.deleted_at,
-            created_at: PersonalDetails.created_at,
-            updated_at: PersonalDetails.updated_at,
-          },
-          roles: sql<GetUser["roles"]>`
-            COALESCE(
-              JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL AND ${AccountRoles.deleted_at} IS NULL AND ${Roles.deleted_at} IS NULL),
-              '[]'
-            )
-          `,
-        })
+        .select(this.selectFields)
         .from(Accounts)
         .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
-        .leftJoin(
-          AccountRoles,
-          and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
-        )
-        .leftJoin(Roles, and(eq(AccountRoles.role_id, Roles.id), isNull(Roles.deleted_at)))
         .where(and(eq(Accounts.email, email), isNull(Accounts.deleted_at)))
         .groupBy(Accounts.id, PersonalDetails.id);
 
-      return user ?? null;
+      if (!user) return null;
+
+      return {
+        ...user,
+        roles: toRolesArray(user.roles),
+        offices: user.offices || { deanships: [], chairships: [] },
+      };
     }).andThen((user) => {
       return user ? okAsync(user) : errAsync(new AppError(404, "User account was not found."));
     });
@@ -211,33 +243,11 @@ export class UserService implements IUserService {
         return WithTransaction(client, async (tx) => {
           const [user] = await tx
             .select({
+              ...this.selectFields,
               account: {
-                id: Accounts.id,
-                personal_details_id: Accounts.personal_details_id,
-                email: Accounts.email,
+                ...this.selectFields.account,
                 password: Accounts.password,
-                is_verified: Accounts.is_verified,
-                deleted_at: Accounts.deleted_at,
-                created_at: Accounts.created_at,
-                updated_at: Accounts.updated_at,
               },
-              details: {
-                id: PersonalDetails.id,
-                institutional_id: PersonalDetails.institutional_id,
-                first_name: PersonalDetails.first_name,
-                last_name: PersonalDetails.last_name,
-                middle_name: PersonalDetails.middle_name,
-                suffix: PersonalDetails.suffix,
-                deleted_at: PersonalDetails.deleted_at,
-                created_at: PersonalDetails.created_at,
-                updated_at: PersonalDetails.updated_at,
-              },
-              roles: sql<GetUser["roles"]>`
-                COALESCE(
-                  JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL AND ${AccountRoles.deleted_at} IS NULL AND ${Roles.deleted_at} IS NULL),
-                  '[]'
-                )
-              `,
             })
             .from(PersonalDetails)
             .innerJoin(
@@ -247,11 +257,6 @@ export class UserService implements IUserService {
                 isNull(Accounts.deleted_at),
               ),
             )
-            .leftJoin(
-              AccountRoles,
-              and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
-            )
-            .leftJoin(Roles, and(eq(AccountRoles.role_id, Roles.id), isNull(Roles.deleted_at)))
             .where(
               and(
                 eq(PersonalDetails.institutional_id, parsed.institutional_id),
@@ -279,7 +284,8 @@ export class UserService implements IUserService {
             const authenticatedUser: GetUser = {
               account: accountWithoutPassword,
               details: user.details,
-              roles: user.roles,
+              roles: toRolesArray(user.roles),
+              offices: user.offices || { deanships: [], chairships: [] },
             };
 
             return okAsync(authenticatedUser);
@@ -314,7 +320,18 @@ export class UserService implements IUserService {
       }
 
       if (is_verified !== undefined) filters.push(eq(Accounts.is_verified, is_verified));
-      if (role) filters.push(and(eq(Roles.system_role, role), isNull(AccountRoles.deleted_at))!);
+      if (role) {
+        filters.push(
+          sql`EXISTS (
+            SELECT 1 FROM ${AccountRoles}
+            INNER JOIN ${Roles} ON ${AccountRoles.role_id} = ${Roles.id}
+            WHERE ${AccountRoles.account_id} = ${Accounts.id}
+              AND ${Roles.system_role} = ${role}
+              AND ${AccountRoles.deleted_at} IS NULL
+              AND ${Roles.deleted_at} IS NULL
+          )`,
+        );
+      }
 
       const whereCondition = and(...filters);
 
@@ -331,48 +348,21 @@ export class UserService implements IUserService {
 
       return WithTransaction(client, async (tx) => {
         const baseQuery = tx
-          .select({
-            account: {
-              id: Accounts.id,
-              personal_details_id: Accounts.personal_details_id,
-              email: Accounts.email,
-              is_verified: Accounts.is_verified,
-              deleted_at: Accounts.deleted_at,
-              created_at: Accounts.created_at,
-              updated_at: Accounts.updated_at,
-            },
-            details: {
-              id: PersonalDetails.id,
-              institutional_id: PersonalDetails.institutional_id,
-              first_name: PersonalDetails.first_name,
-              last_name: PersonalDetails.last_name,
-              middle_name: PersonalDetails.middle_name,
-              suffix: PersonalDetails.suffix,
-              deleted_at: PersonalDetails.deleted_at,
-              created_at: PersonalDetails.created_at,
-              updated_at: PersonalDetails.updated_at,
-            },
-            roles: sql<GetUser["roles"]>`
-              COALESCE(
-                JSON_AGG(${Roles.system_role}) FILTER (WHERE ${Roles.id} IS NOT NULL AND ${AccountRoles.deleted_at} IS NULL AND ${Roles.deleted_at} IS NULL),
-                '[]'
-              )
-            `,
-          })
+          .select(this.selectFields)
           .from(Accounts)
           .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
-          .leftJoin(
-            AccountRoles,
-            and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
-          )
-          .leftJoin(Roles, and(eq(AccountRoles.role_id, Roles.id), isNull(Roles.deleted_at)))
           .where(whereCondition)
           .groupBy(Accounts.id, PersonalDetails.id)
           .orderBy(orderByClause)
           .$dynamic();
 
         if (!paginate) {
-          const users = await baseQuery;
+          const rawUsers = await baseQuery;
+          const users = rawUsers.map((u) => ({
+            ...u,
+            roles: toRolesArray(u.roles),
+            offices: u.offices || { deanships: [], chairships: [] },
+          }));
           return createPaginatedData({
             data: users,
             currentPage: 1,
@@ -388,15 +378,16 @@ export class UserService implements IUserService {
           .select({ total: countDistinct(Accounts.id) })
           .from(Accounts)
           .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
-          .leftJoin(
-            AccountRoles,
-            and(eq(Accounts.id, AccountRoles.account_id), isNull(AccountRoles.deleted_at)),
-          )
-          .leftJoin(Roles, and(eq(AccountRoles.role_id, Roles.id), isNull(Roles.deleted_at)))
           .where(whereCondition);
 
-        const [users, countResult] = await Promise.all([paginatedQuery, countQuery]);
+        const [rawUsers, countResult] = await Promise.all([paginatedQuery, countQuery]);
         const totalItems = countResult[0]?.total ?? 0;
+
+        const users = rawUsers.map((u) => ({
+          ...u,
+          roles: toRolesArray(u.roles),
+          offices: u.offices || { deanships: [], chairships: [] },
+        }));
 
         return createPaginatedData({
           data: users,
@@ -411,12 +402,17 @@ export class UserService implements IUserService {
   createUser(
     info: CreateUser,
     client: DbClient = db,
-    actorRole?: SystemRole,
+    actorUser?: GetUser,
   ): ResultAsync<GetUser, AppError> {
     return ValidateSchema(CreateUserSchema, info).asyncAndThen((parsedInfo) => {
+      const actorRoles = toRolesArray(actorUser?.roles);
+      const isSysAdmin = actorRoles.includes("SYS_ADMIN");
+
+      // If actorUser is provided via HTTP, enforce that only SYS_ADMIN can provision ADMIN/SYS_ADMIN
       if (
         (parsedInfo.role === "ADMIN" || parsedInfo.role === "SYS_ADMIN") &&
-        actorRole !== "SYS_ADMIN"
+        actorUser &&
+        !isSysAdmin
       ) {
         return errAsync(
           new AppError(403, "Only System Administrators can provision administrative accounts."),
@@ -475,7 +471,7 @@ export class UserService implements IUserService {
             email: parsedInfo.account.email,
             password: hash,
             personal_details_id: userDetails.id,
-            is_verified: parsedInfo.account.is_verified ?? false,
+            is_verified: false,
           })
           .returning();
 
@@ -502,6 +498,7 @@ export class UserService implements IUserService {
           account: filteredAccount,
           details: userDetails,
           roles: [systemRole.system_role],
+          offices: { deanships: [], chairships: [] },
         };
       }).andThen((newUser) => {
         const fullName = this.formatFullName(newUser.details);
@@ -535,7 +532,7 @@ export class UserService implements IUserService {
     id: number,
     info: UpdateUser,
     client: DbClient = db,
-    actorRole?: SystemRole,
+    actorUser?: GetUser,
   ): ResultAsync<GetUser, AppError> {
     return ValidateSchema(UpdateUserSchema, info).asyncAndThen((parsed) => {
       const hasAccountInfo = Boolean(parsed.account && Object.keys(parsed.account).length > 0);
@@ -546,48 +543,95 @@ export class UserService implements IUserService {
         return errAsync(new AppError(400, "No update parameters were provided."));
       }
 
-      if (
-        parsed.role &&
-        (parsed.role === "ADMIN" || parsed.role === "SYS_ADMIN") &&
-        actorRole !== "SYS_ADMIN"
-      ) {
-        return errAsync(
-          new AppError(403, "Only System Administrators can grant administrative roles."),
-        );
-      }
+      const actorRoles = actorUser
+        ? typeof actorUser === "object" && "roles" in actorUser
+          ? toRolesArray(actorUser.roles)
+          : toRolesArray(actorUser)
+        : [];
+      const isSysAdmin = actorRoles.includes("SYS_ADMIN");
+      const isSelf = typeof actorUser === "object" && actorUser?.account?.id === id;
 
       const updatedFieldsList: UpdateEmailOpts["updatedFields"] = [];
 
       return WithTransaction(client, async (tx) => {
         const existing = await this.getUserById(id, tx);
         if (existing.isErr()) throw existing.error;
-        const current = existing.value;
+        const target = existing.value;
+        const targetRoles = toRolesArray(target.roles);
+
+        // Security check 1: Protect SYS_ADMIN
+        if (targetRoles.includes("SYS_ADMIN") && !isSysAdmin) {
+          throw new AppError(
+            403,
+            "You do not have permission to modify a System Administrator account.",
+          );
+        }
+
+        // Security check 2: Admins cannot edit other Admins
+        if (targetRoles.includes("ADMIN") && !isSysAdmin && !isSelf) {
+          throw new AppError(
+            403,
+            "Administrators cannot modify other Administrator accounts. Only a System Administrator can manage administrative accounts.",
+          );
+        }
+
+        // Security check 3: Only SYS_ADMIN can promote to ADMIN/SYS_ADMIN
+        if (
+          parsed.role &&
+          (parsed.role === "ADMIN" || parsed.role === "SYS_ADMIN") &&
+          !isSysAdmin
+        ) {
+          throw new AppError(403, "Only System Administrators can grant administrative roles.");
+        }
+
+        // Security check 4: Protect Active Office Holders from Demotion
+        if (hasRoleInfo && parsed.role) {
+          const deanships = target.offices?.deanships ?? [];
+          const chairships = target.offices?.chairships ?? [];
+          const isHoldingOffice = deanships.length > 0 || chairships.length > 0;
+
+          if (isHoldingOffice && parsed.role !== "SUPERVISOR") {
+            const deanStr = deanships.map((d) => d.initialism).join(", ");
+            const chairStr = chairships.map((c) => c.initialism).join(", ");
+            const officeDetails = [
+              deanStr ? `Dean of (${deanStr})` : null,
+              chairStr ? `Chair of (${chairStr})` : null,
+            ]
+              .filter(Boolean)
+              .join(" and ");
+
+            throw new AppError(
+              409,
+              `Cannot change primary role: User currently holds office as ${officeDetails}. The office must be vacated or reassigned before modifying their supervisory status.`,
+            );
+          }
+        }
 
         // 1. Details
         if (hasDetailsInfo && parsed.details) {
           const d = parsed.details;
 
-          if (d.first_name && d.first_name !== current.details.first_name) {
+          if (d.first_name && d.first_name !== target.details.first_name) {
             updatedFieldsList.push({
               label: "First Name",
-              oldValue: current.details.first_name,
+              oldValue: target.details.first_name,
               newValue: d.first_name,
             });
           }
-          if (d.last_name && d.last_name !== current.details.last_name) {
+          if (d.last_name && d.last_name !== target.details.last_name) {
             updatedFieldsList.push({
               label: "Last Name",
-              oldValue: current.details.last_name,
+              oldValue: target.details.last_name,
               newValue: d.last_name,
             });
           }
-          if (d.institutional_id && d.institutional_id !== current.details.institutional_id) {
+          if (d.institutional_id && d.institutional_id !== target.details.institutional_id) {
             const [idConflict] = await tx
               .select({ id: PersonalDetails.id })
               .from(PersonalDetails)
               .where(
                 and(
-                  ne(PersonalDetails.id, current.details.id),
+                  ne(PersonalDetails.id, target.details.id),
                   eq(PersonalDetails.institutional_id, d.institutional_id),
                   isNull(PersonalDetails.deleted_at),
                 ),
@@ -602,7 +646,7 @@ export class UserService implements IUserService {
 
             updatedFieldsList.push({
               label: "Institutional ID",
-              oldValue: current.details.institutional_id,
+              oldValue: target.details.institutional_id,
               newValue: d.institutional_id,
             });
           }
@@ -610,7 +654,7 @@ export class UserService implements IUserService {
           await tx
             .update(PersonalDetails)
             .set(parsed.details)
-            .where(eq(PersonalDetails.id, current.details.id));
+            .where(eq(PersonalDetails.id, target.details.id));
         }
 
         // 2. Account
@@ -618,7 +662,7 @@ export class UserService implements IUserService {
           const a = parsed.account;
           const accountUpdateData: Record<string, any> = { ...a };
 
-          if (a.email && a.email !== current.account.email) {
+          if (a.email && a.email !== target.account.email) {
             const [emailConflict] = await tx
               .select({ id: Accounts.id })
               .from(Accounts)
@@ -635,7 +679,7 @@ export class UserService implements IUserService {
 
             updatedFieldsList.push({
               label: "Email Address",
-              oldValue: current.account.email,
+              oldValue: target.account.email,
               newValue: a.email,
             });
           }
@@ -652,19 +696,19 @@ export class UserService implements IUserService {
           await tx
             .update(Accounts)
             .set(accountUpdateData)
-            .where(eq(Accounts.id, current.account.id));
+            .where(eq(Accounts.id, target.account.id));
         }
 
         // 3. Role
         if (hasRoleInfo && parsed.role) {
-          const hasTargetRole = current.roles.includes(parsed.role);
+          const hasTargetRole = targetRoles.includes(parsed.role);
           if (!hasTargetRole) {
             const grantRes = await this.grantRole(id, parsed.role, tx);
             if (grantRes.isErr()) throw grantRes.error;
 
             updatedFieldsList.push({
               label: "Assigned Role",
-              oldValue: current.roles.join(", ") || "None",
+              oldValue: targetRoles.join(", ") || "None",
               newValue: parsed.role,
             });
           }
@@ -704,11 +748,28 @@ export class UserService implements IUserService {
     });
   }
 
-  deleteUser(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteUser(id: number, client: DbClient = db, actorUser?: GetUser): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
+      if (actorUser && actorUser.account?.id === id) {
+        throw new AppError(403, "You cannot archive your own account.");
+      }
+
       const existing = await this.getUserById(id, tx);
       if (existing.isErr()) throw existing.error;
-      const current = existing.value;
+      const target = existing.value;
+      const targetRoles = toRolesArray(target.roles);
+      const isSysAdmin = Boolean(toRolesArray(actorUser?.roles).includes("SYS_ADMIN"));
+
+      if (targetRoles.includes("SYS_ADMIN")) {
+        throw new AppError(403, "System Administrator accounts cannot be archived.");
+      }
+
+      if (targetRoles.includes("ADMIN") && !isSysAdmin) {
+        throw new AppError(
+          403,
+          "Administrators cannot archive other Administrator accounts. Only a System Administrator can manage administrative accounts.",
+        );
+      }
 
       await this.checkUserDependencies(id, tx);
 
@@ -722,7 +783,7 @@ export class UserService implements IUserService {
       await tx
         .update(PersonalDetails)
         .set({ deleted_at: deleteTime })
-        .where(and(eq(PersonalDetails.id, current.details.id), isNull(PersonalDetails.deleted_at)));
+        .where(and(eq(PersonalDetails.id, target.details.id), isNull(PersonalDetails.deleted_at)));
 
       await tx
         .update(AccountRoles)
@@ -731,13 +792,24 @@ export class UserService implements IUserService {
     });
   }
 
-  restoreUser(id: number, client: DbClient = db): ResultAsync<GetUser, AppError> {
+  restoreUser(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+  ): ResultAsync<GetUser, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getUserById(id, tx, true);
       if (existing.isErr()) throw existing.error;
-      const current = existing.value;
+      const target = existing.value;
+      const targetRoles = toRolesArray(target.roles);
 
-      if (!current.account.deleted_at) {
+      const isSysAdmin = Boolean(toRolesArray(actorUser?.roles).includes("SYS_ADMIN"));
+
+      if ((targetRoles.includes("ADMIN") || targetRoles.includes("SYS_ADMIN")) && !isSysAdmin) {
+        throw new AppError(403, "Only System Administrators can restore administrative accounts.");
+      }
+
+      if (!target.account.deleted_at) {
         throw new AppError(400, "This user account is already active and not archived.");
       }
 
@@ -747,7 +819,7 @@ export class UserService implements IUserService {
         .where(
           and(
             ne(Accounts.id, id),
-            eq(Accounts.email, current.account.email),
+            eq(Accounts.email, target.account.email),
             isNull(Accounts.deleted_at),
           ),
         );
@@ -755,7 +827,7 @@ export class UserService implements IUserService {
       if (emailConflict) {
         throw new AppError(
           409,
-          `Cannot restore: Email "${current.account.email}" has been taken by another active account.`,
+          `Cannot restore: Email "${target.account.email}" has been taken by another active account.`,
         );
       }
 
@@ -764,8 +836,8 @@ export class UserService implements IUserService {
         .from(PersonalDetails)
         .where(
           and(
-            ne(PersonalDetails.id, current.details.id),
-            eq(PersonalDetails.institutional_id, current.details.institutional_id),
+            ne(PersonalDetails.id, target.details.id),
+            eq(PersonalDetails.institutional_id, target.details.institutional_id),
             isNull(PersonalDetails.deleted_at),
           ),
         );
@@ -773,7 +845,7 @@ export class UserService implements IUserService {
       if (idConflict) {
         throw new AppError(
           409,
-          `Cannot restore: Institutional ID "${current.details.institutional_id}" is currently in use.`,
+          `Cannot restore: Institutional ID "${target.details.institutional_id}" is currently in use.`,
         );
       }
 
@@ -781,7 +853,7 @@ export class UserService implements IUserService {
       await tx
         .update(PersonalDetails)
         .set({ deleted_at: null })
-        .where(eq(PersonalDetails.id, current.details.id));
+        .where(eq(PersonalDetails.id, target.details.id));
       await tx
         .update(AccountRoles)
         .set({ deleted_at: null })
@@ -805,6 +877,27 @@ export class UserService implements IUserService {
       }
 
       return WithTransaction(client, async (tx) => {
+        if (role === "STUDENT") {
+          const user = await this.getUserById(accountId, tx);
+          if (user.isErr()) throw user.error;
+          const currentRoles = toRolesArray(user.value.roles);
+          const otherRoles = currentRoles.filter((r) => r !== "STUDENT");
+          if (otherRoles.length > 0) {
+            throw new AppError(
+              400,
+              "Cannot grant STUDENT role: Account already has employee or administrative roles.",
+            );
+          }
+        } else {
+          const hasStudentRole = await this.hasRole(accountId, "STUDENT", tx);
+          if (hasStudentRole.isOk() && hasStudentRole.value) {
+            throw new AppError(
+              400,
+              `Cannot grant ${role} role: Account is designated as a STUDENT.`,
+            );
+          }
+        }
+
         const [systemRole] = await tx
           .select()
           .from(Roles)
@@ -844,8 +937,33 @@ export class UserService implements IUserService {
     client: DbClient = db,
   ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
-      const [systemRole] = await tx.select().from(Roles).where(eq(Roles.system_role, role));
+      if (role === "SUPERVISOR") {
+        const user = await this.getUserById(accountId, tx);
+        if (user.isErr()) throw user.error;
+        const current = user.value;
 
+        const deanships = current.offices?.deanships ?? [];
+        const chairships = current.offices?.chairships ?? [];
+        const isHoldingOffice = deanships.length > 0 || chairships.length > 0;
+
+        if (isHoldingOffice) {
+          const deanStr = deanships.map((d) => d.initialism).join(", ");
+          const chairStr = chairships.map((c) => c.initialism).join(", ");
+          const officeDetails = [
+            deanStr ? `Dean of (${deanStr})` : null,
+            chairStr ? `Chair of (${chairStr})` : null,
+          ]
+            .filter(Boolean)
+            .join(" and ");
+
+          throw new AppError(
+            409,
+            `Cannot revoke SUPERVISOR role: User is currently an active ${officeDetails}. The office must be vacated or reassigned first.`,
+          );
+        }
+      }
+
+      const [systemRole] = await tx.select().from(Roles).where(eq(Roles.system_role, role));
       if (!systemRole) return undefined;
 
       await tx
@@ -872,7 +990,8 @@ export class UserService implements IUserService {
       const userRecord = await this.getUserById(accountId, tx);
       if (userRecord.isErr()) throw userRecord.error;
 
-      return userRecord.value.roles.includes(role);
+      const roles = toRolesArray(userRecord.value.roles);
+      return roles.includes(role);
     });
   }
 
@@ -880,21 +999,54 @@ export class UserService implements IUserService {
     accountId: number,
     roles: SystemRole[],
     client: DbClient = db,
-    actorRole?: SystemRole,
+    actorUser?: GetUser,
   ): ResultAsync<GetUser, AppError> {
     return ValidateSchema(ManageUserRolesSchema, { roles }).asyncAndThen((parsed) => {
-      if (
-        (parsed.roles.includes("ADMIN") || parsed.roles.includes("SYS_ADMIN")) &&
-        actorRole !== "SYS_ADMIN"
-      ) {
-        return errAsync(
-          new AppError(403, "Only System Administrators can grant administrative roles."),
-        );
-      }
+      const isSysAdmin = Boolean(toRolesArray(actorUser?.roles).includes("SYS_ADMIN"));
 
       return WithTransaction(client, async (tx) => {
         const user = await this.getUserById(accountId, tx);
         if (user.isErr()) throw user.error;
+        const target = user.value;
+        const targetRoles = toRolesArray(target.roles);
+
+        if (targetRoles.includes("SYS_ADMIN") && !isSysAdmin) {
+          throw new AppError(
+            403,
+            "Only System Administrators can modify roles of a System Administrator.",
+          );
+        }
+
+        if (targetRoles.includes("ADMIN") && !isSysAdmin) {
+          throw new AppError(
+            403,
+            "Administrators cannot modify roles for other Administrator accounts.",
+          );
+        }
+
+        if ((parsed.roles.includes("ADMIN") || parsed.roles.includes("SYS_ADMIN")) && !isSysAdmin) {
+          throw new AppError(403, "Only System Administrators can grant administrative roles.");
+        }
+
+        const deanships = target.offices?.deanships ?? [];
+        const chairships = target.offices?.chairships ?? [];
+        const isHoldingOffice = deanships.length > 0 || chairships.length > 0;
+
+        if (isHoldingOffice && !parsed.roles.includes("SUPERVISOR")) {
+          const deanStr = deanships.map((d) => d.initialism).join(", ");
+          const chairStr = chairships.map((c) => c.initialism).join(", ");
+          const officeDetails = [
+            deanStr ? `Dean of (${deanStr})` : null,
+            chairStr ? `Chair of (${chairStr})` : null,
+          ]
+            .filter(Boolean)
+            .join(" and ");
+
+          throw new AppError(
+            409,
+            `Cannot remove SUPERVISOR role: User is currently an active ${officeDetails}. The office must be vacated or reassigned first.`,
+          );
+        }
 
         const systemRoles = await tx
           .select()
@@ -907,13 +1059,11 @@ export class UserService implements IUserService {
 
         const roleIdMap = new Map(systemRoles.map((r) => [r.system_role, r.id]));
 
-        // Soft-delete current active roles not in new set
         await tx
           .update(AccountRoles)
           .set({ deleted_at: new Date() })
           .where(and(eq(AccountRoles.account_id, accountId), isNull(AccountRoles.deleted_at)));
 
-        // Assign new role mappings
         for (const roleName of parsed.roles) {
           const roleId = roleIdMap.get(roleName)!;
 
@@ -946,11 +1096,30 @@ export class UserService implements IUserService {
   resetUserPassword(
     accountId: number,
     client: DbClient = db,
+    actorUser?: GetUser,
   ): ResultAsync<{ temporaryPassword: string }, AppError> {
     return WithTransaction(client, async (tx) => {
       const user = await this.getUserById(accountId, tx);
       if (user.isErr()) throw user.error;
       const targetUser = user.value;
+      const targetRoles = toRolesArray(targetUser.roles);
+
+      const isSysAdmin = Boolean(toRolesArray(actorUser?.roles).includes("SYS_ADMIN"));
+      const isSelf = actorUser?.account?.id === accountId;
+
+      if (targetRoles.includes("SYS_ADMIN") && !isSysAdmin) {
+        throw new AppError(
+          403,
+          "You do not have permission to reset a System Administrator's password.",
+        );
+      }
+
+      if (targetRoles.includes("ADMIN") && !isSysAdmin && !isSelf) {
+        throw new AppError(
+          403,
+          "Administrators cannot reset passwords for other Administrator accounts.",
+        );
+      }
 
       const temporaryPassword = this.generatePassword(12);
       const hash = bcrypt.hashSync(temporaryPassword, 10);
@@ -1026,11 +1195,33 @@ export class UserService implements IUserService {
     });
   }
 
-  resendWelcomeEmail(accountId: number, client: DbClient = db): ResultAsync<void, AppError> {
+  resendWelcomeEmail(
+    accountId: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const user = await this.getUserById(accountId, tx);
       if (user.isErr()) throw user.error;
       const targetUser = user.value;
+      const targetRoles = toRolesArray(targetUser.roles);
+
+      const isSysAdmin = Boolean(toRolesArray(actorUser?.roles).includes("SYS_ADMIN"));
+      const isSelf = actorUser?.account?.id === accountId;
+
+      if (targetRoles.includes("SYS_ADMIN") && !isSysAdmin) {
+        throw new AppError(
+          403,
+          "You do not have permission to resend credentials for a System Administrator.",
+        );
+      }
+
+      if (targetRoles.includes("ADMIN") && !isSysAdmin && !isSelf) {
+        throw new AppError(
+          403,
+          "Administrators cannot resend credentials for other Administrator accounts.",
+        );
+      }
 
       const temporaryPassword = this.generatePassword(12);
       const hash = bcrypt.hashSync(temporaryPassword, 10);
@@ -1092,12 +1283,15 @@ export class UserService implements IUserService {
   }
 
   private formatFullName(
-    person?: {
-      first_name?: string | null | undefined;
-      last_name?: string | null | undefined;
-      middle_name?: string | null | undefined;
-      suffix?: string | null | undefined;
-    } | null,
+    person?:
+      | {
+          first_name?: string | null | undefined;
+          last_name?: string | null | undefined;
+          middle_name?: string | null | undefined;
+          suffix?: string | null | undefined;
+        }
+      | null
+      | undefined,
   ): string {
     if (!person) return "";
     const isValid = (val?: string | null | undefined): val is string =>

@@ -5,25 +5,29 @@ import z from "zod";
 const emailField = (schema: z.ZodString) =>
   schema.trim().toLowerCase().pipe(z.email("Invalid email address format."));
 
-const passwordField = (schema: z.ZodString) =>
-  schema
-    .trim()
-    .min(8, "Password must be at least 8 characters long.")
-    .max(72, "Password cannot exceed 72 characters.")
-    .refine((v) => /[A-Z]/.test(v), {
-      message: "Password must have at least one uppercase letter.",
-    })
-    .refine((v) => /[a-z]/.test(v), {
-      message: "Password must have at least one lowercase letter.",
-    })
-    .refine((v) => /[0-9]/.test(v), {
-      message: "Password must have at least one number character.",
-    })
-    .refine((v) => /[!@#$%^&*_-]/.test(v), {
-      message: 'Password must have at least one special character ("!@#$%^&*_-").',
-    })
-    .nullable()
-    .optional();
+export const OptionalPasswordSchema = z
+  .string()
+  .trim()
+  .optional()
+  .nullable()
+  .refine((v) => !v || v === "" || v.length >= 8, {
+    message: "Password must be at least 8 characters long.",
+  })
+  .refine((v) => !v || v === "" || v.length <= 72, {
+    message: "Password cannot exceed 72 characters.",
+  })
+  .refine((v) => !v || v === "" || /[A-Z]/.test(v), {
+    message: "Password must have at least one uppercase letter.",
+  })
+  .refine((v) => !v || v === "" || /[a-z]/.test(v), {
+    message: "Password must have at least one lowercase letter.",
+  })
+  .refine((v) => !v || v === "" || /[0-9]/.test(v), {
+    message: "Password must have at least one number character.",
+  })
+  .refine((v) => !v || v === "" || /[!@#$%^&*_-]/.test(v), {
+    message: 'Password must have at least one special character ("!@#$%^&*_-").',
+  });
 
 const personalDetailsIdField = (schema: z.ZodNumber) =>
   schema.int("Personal details ID must be an integer.").positive("Invalid personal details ID.");
@@ -40,19 +44,19 @@ const institutionalIdField = (schema: z.ZodString) =>
 
 export const AccountSelect = createSelectSchema(Accounts, {
   email: emailField,
-  password: passwordField,
+  password: () => OptionalPasswordSchema,
   personal_details_id: personalDetailsIdField,
 });
 
 export const AccountInsert = createInsertSchema(Accounts, {
   email: emailField,
-  password: passwordField,
+  password: () => OptionalPasswordSchema,
   personal_details_id: personalDetailsIdField,
 });
 
 export const AccountUpdate = createUpdateSchema(Accounts, {
   email: emailField,
-  password: passwordField,
+  password: () => OptionalPasswordSchema,
   personal_details_id: personalDetailsIdField,
 });
 
@@ -93,10 +97,22 @@ export const LoginAccountSchema = z.object({
   password: z.string().min(1, "Password is required."),
 });
 
+export const OfficeItemSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  initialism: z.string(),
+});
+
 export const GetUserSchema = z.object({
   account: AccountSelect.omit({ password: true }),
   details: PersonalDetailsSelect,
   roles: z.array(z.enum(SystemRoles.enumValues)),
+  offices: z
+    .object({
+      deanships: z.array(OfficeItemSchema).default([]),
+      chairships: z.array(OfficeItemSchema).default([]),
+    })
+    .optional(),
 });
 
 export const UserQuerySchema = z.object({
@@ -129,13 +145,26 @@ export const UserQuerySchema = z.object({
 });
 
 export const CreateUserSchema = z.object({
-  account: AccountInsert.omit({ personal_details_id: true }),
+  account: z.object({
+    email: z.string().trim().toLowerCase().pipe(z.email("Invalid email address format.")),
+    password: OptionalPasswordSchema,
+  }),
   details: PersonalDetailsInsert,
   role: z.enum(SystemRoles.enumValues),
 });
 
 export const UpdateUserSchema = z.object({
-  account: AccountUpdate.optional(),
+  account: z
+    .object({
+      email: z
+        .string()
+        .trim()
+        .toLowerCase()
+        .pipe(z.email("Invalid email address format."))
+        .optional(),
+      password: OptionalPasswordSchema,
+    })
+    .optional(),
   details: PersonalDetailsUpdate.optional(),
   role: z.enum(SystemRoles.enumValues).optional(),
 });
@@ -161,9 +190,23 @@ export const ChangePasswordSchema = z.object({
     }),
 });
 
-export const ManageUserRolesSchema = z.object({
-  roles: z.array(z.enum(SystemRoles.enumValues)).min(1, "At least one role must be assigned."),
-});
+export const ManageUserRolesSchema = z
+  .object({
+    roles: z.array(z.enum(SystemRoles.enumValues)).min(1, "At least one role must be assigned."),
+  })
+  .refine(
+    (data) => {
+      if (data.roles.includes("STUDENT") && data.roles.length > 1) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message:
+        "STUDENT role cannot be combined with faculty, supervisory, or administrative roles.",
+      path: ["roles"],
+    },
+  );
 
 export const SystemRoleSchema = z.enum(SystemRoles.enumValues);
 

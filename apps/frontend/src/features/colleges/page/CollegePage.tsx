@@ -20,6 +20,7 @@ import {
   useColleges,
   useDeleteCollege,
   useRestoreCollege,
+  useUpdateCollege,
 } from "@/features/colleges/hooks/useColleges";
 import { CollegeTableView } from "@/features/colleges/components/CollegeTableView";
 import { CollegeGridView } from "@/features/colleges/components/CollegeGridView";
@@ -68,8 +69,10 @@ export default function CollegesPage() {
   const [collegeToEdit, setCollegeToEdit] = useState<GetCollege | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<GetCollege | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<GetCollege | null>(null);
+  const [unassignDeanTarget, setUnassignDeanTarget] = useState<GetCollege | null>(null);
 
   const { data: response, isLoading, isPlaceholderData } = useColleges(query);
+  const updateMutation = useUpdateCollege();
   const deleteMutation = useDeleteCollege();
   const restoreMutation = useRestoreCollege();
 
@@ -100,6 +103,21 @@ export default function CollegesPage() {
     }
   };
 
+  const handleUnassignDeanConfirm = async () => {
+    if (!unassignDeanTarget) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: unassignDeanTarget.college.id,
+        info: { dean: null },
+      });
+      toast.success(`Dean unassigned from ${unassignDeanTarget.college.initialism}.`);
+      setUnassignDeanTarget(null);
+    } catch (err) {
+      const apiErr = err as ApiError;
+      toast.error(apiErr.message || "Failed to unassign dean.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -113,9 +131,7 @@ export default function CollegesPage() {
         <div className="flex gap-2 items-center">
           <Button
             variant="outline"
-            onClick={() => {
-              setImportOpen(true);
-            }}
+            onClick={() => setImportOpen(true)}
             className="gap-2 h-9 text-xs border-border shadow-2xs"
           >
             <Upload className="w-4 h-4" />
@@ -245,6 +261,7 @@ export default function CollegesPage() {
               setCollegeToEdit(item);
               setFormOpen(true);
             }}
+            onUnassignDean={(item) => setUnassignDeanTarget(item)}
             onDelete={(item) => setArchiveTarget(item)}
             onRestore={(item) => setRestoreTarget(item)}
           />
@@ -256,12 +273,14 @@ export default function CollegesPage() {
               setCollegeToEdit(item);
               setFormOpen(true);
             }}
+            onUnassignDean={(item) => setUnassignDeanTarget(item)}
             onDelete={(item) => setArchiveTarget(item)}
             onRestore={(item) => setRestoreTarget(item)}
           />
         )}
       </div>
 
+      {/* Pagination Footer */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-4 text-xs text-muted-foreground">
         <div>
           {query.paginate && pagination ? (
@@ -279,7 +298,7 @@ export default function CollegesPage() {
           ) : (
             <span>
               Showing all <strong className="text-foreground">{colleges.length}</strong>{" "}
-              {query.is_archived ? "archived" : "active"} college(s) (Unpaginated)
+              {query.is_archived ? "archived" : "active"} college(s)
             </span>
           )}
         </div>
@@ -297,7 +316,6 @@ export default function CollegesPage() {
               className="h-8 w-8 border-border"
               disabled={!pagination.hasPrev}
               onClick={() => setQuery((prev) => ({ ...prev, page: 1 }))}
-              title="First Page"
             >
               <ChevronsLeft className="w-4 h-4" />
             </Button>
@@ -332,7 +350,6 @@ export default function CollegesPage() {
               className="h-8 w-8 border-border"
               disabled={!pagination.hasNext}
               onClick={() => setQuery((prev) => ({ ...prev, page: pagination.totalPage }))}
-              title="Last Page"
             >
               <ChevronsRight className="w-4 h-4" />
             </Button>
@@ -342,6 +359,28 @@ export default function CollegesPage() {
 
       <CollegeFormDialog open={formOpen} onOpenChange={setFormOpen} collegeToEdit={collegeToEdit} />
 
+      {/* Unassign Dean Modal */}
+      <ConfirmActionDialog
+        open={Boolean(unassignDeanTarget)}
+        onOpenChange={(open) => !open && setUnassignDeanTarget(null)}
+        title={`Unassign Dean from ${unassignDeanTarget?.college.initialism}?`}
+        description={
+          <span>
+            Are you sure you want to unassign{" "}
+            <strong>
+              {unassignDeanTarget?.dean?.details.first_name}{" "}
+              {unassignDeanTarget?.dean?.details.last_name}
+            </strong>{" "}
+            as the Dean of <strong>{unassignDeanTarget?.college.name}</strong>?
+          </span>
+        }
+        confirmLabel="Unassign Dean"
+        variant="destructive"
+        isLoading={updateMutation.isPending}
+        onConfirm={handleUnassignDeanConfirm}
+      />
+
+      {/* Archive Modal */}
       <ConfirmActionDialog
         open={Boolean(archiveTarget)}
         onOpenChange={(open) => !open && setArchiveTarget(null)}
@@ -361,6 +400,7 @@ export default function CollegesPage() {
         onConfirm={handleArchiveConfirm}
       />
 
+      {/* Restore Modal */}
       <ConfirmActionDialog
         open={Boolean(restoreTarget)}
         onOpenChange={(open) => !open && setRestoreTarget(null)}
