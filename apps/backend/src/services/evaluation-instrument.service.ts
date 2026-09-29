@@ -55,7 +55,7 @@ export interface IEvaluationInstrumentService {
   ): ResultAsync<GetStudentEvaluationForm, AppError>;
   getStudentForms(
     rawQuery: unknown,
-    client: DbClient,
+    client?: DbClient,
   ): ResultAsync<PaginatedData<IStudentEvalFormSelect[]>, AppError>;
   updateStudentForm(
     id: number,
