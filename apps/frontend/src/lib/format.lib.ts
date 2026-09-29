@@ -65,3 +65,40 @@ export const getScheduleWindowStatus = (openAt: string | Date, closeAt: string |
   }
   return { label: "Closed / Concluded", color: "bg-muted text-muted-foreground border-border" };
 };
+
+export function getDynamicRatingDescriptor(score: number, min: number, max: number): string {
+  // Standard 5-point scale
+  if (min === 1 && max === 5) {
+    const scale5Map: Record<number, string> = {
+      1: "Poor / Needs Improvement",
+      2: "Fair / Basic Compliance",
+      3: "Satisfactory / Proficient",
+      4: "Very Satisfactory / High Quality",
+      5: "Outstanding / Exceptional",
+    };
+    return scale5Map[score] || `Score: ${score}`;
+  }
+
+  // Standard 4-point scale
+  if (min === 1 && max === 4) {
+    const scale4Map: Record<number, string> = {
+      1: "Unsatisfactory / Poor",
+      2: "Developing / Fair",
+      3: "Proficient / Satisfactory",
+      4: "Exemplary / Outstanding",
+    };
+    return scale4Map[score] || `Score: ${score}`;
+  }
+
+  // Dynamic interpolation for any custom range (e.g. 1–10, 1–7)
+  const range = max - min;
+  if (range <= 0) return `Score: ${score}`;
+  const ratio = (score - min) / range;
+
+  if (ratio === 0) return "Lowest / Unsatisfactory";
+  if (ratio <= 0.25) return "Below Average / Basic";
+  if (ratio <= 0.5) return "Average / Moderate";
+  if (ratio <= 0.75) return "Above Average / Proficient";
+  if (ratio < 1.0) return "High / Very Satisfactory";
+  return "Highest / Exceptional";
+}
