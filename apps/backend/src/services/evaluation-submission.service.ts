@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lte, gte } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, gte, ne, isNotNull, desc } from "drizzle-orm";
 import { type ResultAsync } from "neverthrow";
 import db from "@/configs/db.config.js";
 import {
@@ -20,6 +20,7 @@ import {
   SupervisorEvaluationRatings,
   SupervisorEvaluations,
   SupervisorEvaluationSchedules,
+  type TeachingCourseOfferingWithStudents,
 } from "@my-app/shared";
 import { AppError } from "@/libs/error.lib.js";
 import { ValidateSchema } from "@/libs/result.lib.js";
@@ -88,6 +89,12 @@ export interface IEvaluationSubmissionService {
     },
     AppError
   >;
+
+  getFacultyTeachingClasses(
+    facultyAccountId: number,
+    semesterId?: number,
+    client?: DbClient,
+  ): ResultAsync<TeachingCourseOfferingWithStudents[], AppError>;
 }
 
 export class EvaluationSubmissionService implements IEvaluationSubmissionService {
@@ -569,6 +576,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
     return WithTransaction(client, async (tx) => {
       const now = new Date();
 
+      // 1. Check active supervisor evaluation schedule
       const [activeSchedule] = await tx
         .select()
         .from(SupervisorEvaluationSchedules)
@@ -581,10 +589,9 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         )
         .limit(1);
 
-      if (!activeSchedule) {
-        return [];
-      }
+      if (!activeSchedule) return [];
 
+      // 2. Fetch offices held by evaluator
       const [deanships, chairships] = await Promise.all([
         tx
           .select({ collegeId: CollegeDeans.college_id })
@@ -607,6 +614,24 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         return [];
       }
 
+      // 3. Find Program Chair Account IDs under the Dean's colleges
+      let programChairsUnderDean: number[] = [];
+      if (deanCollegeIds.length > 0) {
+        const chairAccounts = await tx
+          .select({ chairId: ProgramChairs.chair_id })
+          .from(ProgramChairs)
+          .innerJoin(Programs, eq(ProgramChairs.program_id, Programs.id))
+          .where(
+            and(
+              inArray(Programs.college_id, deanCollegeIds),
+              isNull(ProgramChairs.deleted_at),
+              isNull(Programs.deleted_at),
+            ),
+          );
+        programChairsUnderDean = chairAccounts.map((c) => c.chairId);
+      }
+
+      // 4. Fetch all active offerings for this semester
       const offerings = await tx
         .select({
           offeringId: CourseOfferings.id,
@@ -652,18 +677,31 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           and(
             eq(CourseOfferings.semester_id, activeSchedule.semester_id),
             isNull(CourseOfferings.deleted_at),
+            ne(CourseOfferings.faculty_id, evaluatorAccountId), // CANNOT rate self
           ),
         );
 
+      // 5. Apply the strict hierarchy:
+      // - If Dean: CAN ONLY rate Program Chairs under their college
+      // - If Chair: CAN ONLY rate faculty teaching subjects under their program
       const scopedOfferings = offerings.filter((o) => {
-        if (deanCollegeIds.includes(o.collegeId)) return true;
-        if (chairProgramIds.includes(o.programId)) return true;
+        // A. Program Chair role: Rates faculty in their program
+        if (chairProgramIds.includes(o.programId)) {
+          return true;
+        }
+
+        // B. College Dean role: Rates ONLY Program Chairs under their college
+        if (
+          deanCollegeIds.includes(o.collegeId) &&
+          programChairsUnderDean.includes(o.facultyAccountId)
+        ) {
+          return true;
+        }
+
         return false;
       });
 
-      if (scopedOfferings.length === 0) {
-        return [];
-      }
+      if (scopedOfferings.length === 0) return [];
 
       const offeringIds = scopedOfferings.map((o) => o.offeringId);
 
@@ -682,9 +720,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
       return scopedOfferings.map((o): EvaluableSupervisorOffering => {
         const ev = evalMap.get(o.offeringId);
-        const hasSubmitted = Boolean(ev && ev.submitted_at !== null);
-        const isDraft = Boolean(ev && ev.submitted_at === null);
-
         return {
           offering: {
             id: o.offeringId,
@@ -735,8 +770,8 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
             updated_at: new Date(),
             deleted_at: null,
           },
-          has_submitted: hasSubmitted,
-          is_draft: isDraft,
+          has_submitted: Boolean(ev && ev.submitted_at !== null),
+          is_draft: Boolean(ev && ev.submitted_at === null),
           submitted_at: ev?.submitted_at ?? null,
           computed_rating: ev?.set_rating ? Number(ev.set_rating) : null,
           evaluation_id: ev?.id ?? null,
@@ -1042,6 +1077,148 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           sentiment_classification: commentSentiment,
         };
       });
+    });
+  }
+
+  getFacultyTeachingClasses(
+    facultyAccountId: number,
+    semesterId?: number,
+    client: DbClient = db,
+  ): ResultAsync<TeachingCourseOfferingWithStudents[], AppError> {
+    return WithTransaction(client, async (tx) => {
+      // 1. Get semester
+      const targetSemesterId =
+        semesterId ??
+        (
+          await tx
+            .select({ id: Semesters.id })
+            .from(Semesters)
+            .where(isNull(Semesters.deleted_at))
+            .orderBy(desc(Semesters.start_date))
+            .limit(1)
+        )[0]?.id;
+
+      if (!targetSemesterId) return [];
+
+      // 2. Fetch offerings taught by this faculty member
+      const offerings = await tx
+        .select({
+          id: CourseOfferings.id,
+          courseName: Courses.name,
+          courseCode: Courses.initialism,
+          yearLevel: Classes.year_level,
+          section: Classes.section,
+          programId: Programs.id,
+          programName: Programs.name,
+          programCode: Programs.initialism,
+          semesterId: Semesters.id,
+          semesterTerm: Semesters.semester_term,
+          schoolYearStart: Semesters.school_year_start,
+          schoolYearEnd: Semesters.school_year_end,
+          startDate: Semesters.start_date,
+          endDate: Semesters.end_date,
+          curriculumId: CourseCurriculums.id,
+        })
+        .from(CourseOfferings)
+        .innerJoin(
+          CourseCurriculums,
+          eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+        )
+        .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+        .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+        .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+        .innerJoin(Semesters, eq(CourseOfferings.semester_id, Semesters.id))
+        .where(
+          and(
+            eq(CourseOfferings.faculty_id, facultyAccountId),
+            eq(CourseOfferings.semester_id, targetSemesterId),
+            isNull(CourseOfferings.deleted_at),
+          ),
+        );
+
+      const results: TeachingCourseOfferingWithStudents[] = [];
+
+      for (const off of offerings) {
+        // Enrolled students in this subject offering
+        const enrolledStudents = await tx
+          .select({
+            studentClassId: StudentClasses.id,
+            accountId: Accounts.id,
+            institutionalId: PersonalDetails.institutional_id,
+            firstName: PersonalDetails.first_name,
+            lastName: PersonalDetails.last_name,
+          })
+          .from(StudentClasses)
+          .innerJoin(Accounts, eq(StudentClasses.student_account_id, Accounts.id))
+          .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
+          .where(
+            and(
+              eq(StudentClasses.course_offering_id, off.id),
+              isNull(StudentClasses.deleted_at),
+              isNull(Accounts.deleted_at),
+            ),
+          );
+
+        const studentClassIds = enrolledStudents.map((s) => s.studentClassId);
+
+        // Fetch submissions for this offering
+        const submissions =
+          studentClassIds.length > 0
+            ? await tx
+                .select({ studentClassId: StudentEvaluations.student_class_id })
+                .from(StudentEvaluations)
+                .where(
+                  and(
+                    inArray(StudentEvaluations.student_class_id, studentClassIds),
+                    isNotNull(StudentEvaluations.submitted_at),
+                  ),
+                )
+            : [];
+
+        const evaluatedSet = new Set(submissions.map((s) => s.studentClassId));
+
+        results.push({
+          offering: {
+            id: off.id,
+            course_curriculum: {
+              id: off.curriculumId,
+              course: { id: 0, name: off.courseName, initialism: off.courseCode },
+            },
+            class: {
+              id: 0,
+              year_level: off.yearLevel,
+              section: off.section,
+              program: { id: off.programId, name: off.programName, initialism: off.programCode },
+            },
+            semester: {
+              id: off.semesterId,
+              semester_term: off.semesterTerm,
+              school_year_start: off.schoolYearStart,
+              school_year_end: off.schoolYearEnd,
+              start_date: off.startDate,
+              end_date: off.endDate,
+              created_at: new Date(),
+              updated_at: new Date(),
+              deleted_at: null,
+            },
+            faculty: null,
+            created_at: new Date(),
+            updated_at: new Date(),
+            deleted_at: null,
+          },
+          totalStudents: enrolledStudents.length,
+          totalEvaluated: evaluatedSet.size,
+          students: enrolledStudents.map((s) => ({
+            student_id: s.accountId,
+            institutional_id: s.institutionalId,
+            first_name: s.firstName,
+            last_name: s.lastName,
+            has_evaluated: evaluatedSet.has(s.studentClassId),
+          })),
+        });
+      }
+
+      return results;
     });
   }
 }

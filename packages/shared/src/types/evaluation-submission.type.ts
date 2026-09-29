@@ -92,3 +92,16 @@ export interface SupervisorEvaluationFormView {
   is_submitted: boolean;
   submitted_at: Date | string | null;
 }
+
+export interface TeachingCourseOfferingWithStudents {
+  offering: GetOffering;
+  totalStudents: number;
+  totalEvaluated: number;
+  students: {
+    student_id: number;
+    institutional_id: string;
+    first_name: string;
+    last_name: string;
+    has_evaluated: boolean; // 🔒 Status only! Anonymity preserved (no score or comment revealed)
+  }[];
+}

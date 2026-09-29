@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { EvaluationSubmissionController } from "@/controllers/evaluation-submission.controller.js";
 import { AuthController } from "@/controllers/auth.controller.js";
 import { evaluationExecutionLimiter } from "@/libs/limiter.lib.js";
-import { RequirePermission } from "@/middlewares/rbac.middleware.js";
+import { RequireAnyPermission, RequirePermission } from "@/middlewares/rbac.middleware.js";
 import { PERMISSIONS } from "@my-app/shared";
 
 const SubmissionRouter: IRouter = Router();
@@ -48,6 +48,12 @@ SubmissionRouter.post(
   "/supervisor/submit",
   RequirePermission(PERMISSIONS.EVALUATION_SUBMIT_SEF),
   controller.submitSupervisorEvaluation,
+);
+
+SubmissionRouter.get(
+  "/faculty/my-classes",
+  RequireAnyPermission(PERMISSIONS.EVALUATION_REPORT_VIEW_SELF, PERMISSIONS.COURSE_OFFERING_READ),
+  controller.getFacultyTeachingClasses,
 );
 
 export default SubmissionRouter;

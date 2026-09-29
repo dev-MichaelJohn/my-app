@@ -88,4 +88,13 @@ export class EvaluationSubmissionController {
         data,
       }));
   });
+
+  getFacultyTeachingClasses = runAsync((req) => {
+    if (!req.user) return errAsync(new AppError(401, "Authentication required."));
+    return this.submissionService.getFacultyTeachingClasses(req.user.account.id).map((data) => ({
+      status: 200,
+      message: "Course-offerings retrieved successfully.",
+      data,
+    }));
+  });
 }
