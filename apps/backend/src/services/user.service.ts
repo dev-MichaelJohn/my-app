@@ -411,7 +411,8 @@ export class UserService implements IUserService {
       // If actorUser is provided via HTTP, enforce that only SYS_ADMIN can provision ADMIN/SYS_ADMIN
       if (
         (parsedInfo.role === "ADMIN" || parsedInfo.role === "SYS_ADMIN") &&
-        (!actorUser || !isSysAdmin)
+        actorUser &&
+        !isSysAdmin
       ) {
         return errAsync(
           new AppError(403, "Only System Administrators can provision administrative accounts."),
