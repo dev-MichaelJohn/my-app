@@ -45,3 +45,23 @@ export const isSemesterOpen = (
   const today = new Date().toISOString().slice(0, 10);
   return today <= semester.end_date;
 };
+
+export const getScheduleWindowStatus = (openAt: string | Date, closeAt: string | Date) => {
+  const now = new Date();
+  const openDate = new Date(openAt);
+  const closeDate = new Date(closeAt);
+
+  if (now >= openDate && now <= closeDate) {
+    return {
+      label: "Open for Submissions",
+      color: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+    };
+  }
+  if (now < openDate) {
+    return {
+      label: "Scheduled / Upcoming",
+      color: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20",
+    };
+  }
+  return { label: "Closed / Concluded", color: "bg-muted text-muted-foreground border-border" };
+};

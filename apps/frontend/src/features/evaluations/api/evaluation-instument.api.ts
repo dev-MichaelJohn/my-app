@@ -1,7 +1,6 @@
 import { http, type ApiError } from "@/lib/api.lib";
 import type { ResultAsync } from "neverthrow";
 import type {
-  EvaluationFormQuery,
   GetStudentEvaluationForm,
   GetSupervisorEvaluationForm,
   IStudentEvalFormInsert,
@@ -15,9 +14,7 @@ import type {
 
 export class EvaluationInstrumentAPI {
   // ── Student Forms (SET) ──
-  getStudentForms(
-    query?: EvaluationFormQuery,
-  ): ResultAsync<PaginatedData<IStudentEvalFormSelect[]>, ApiError> {
+  getStudentForms(query?: unknown): ResultAsync<PaginatedData<IStudentEvalFormSelect[]>, ApiError> {
     return http.get<PaginatedData<IStudentEvalFormSelect[]>>(
       "/evaluation-instruments/student",
       query,
@@ -49,7 +46,7 @@ export class EvaluationInstrumentAPI {
 
   // ── Supervisor Forms (SEF) ──
   getSupervisorForms(
-    query?: EvaluationFormQuery,
+    query?: unknown,
   ): ResultAsync<PaginatedData<ISupervisorEvalFormSelect[]>, ApiError> {
     return http.get<PaginatedData<ISupervisorEvalFormSelect[]>>(
       "/evaluation-instruments/supervisor",

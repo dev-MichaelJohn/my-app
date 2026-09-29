@@ -93,16 +93,16 @@ const NAVIGATION_SECTIONS: NavSection[] = [
     heading: "Evaluation Suite",
     items: [
       {
-        title: "Evaluation Schedules",
-        href: "/admin/evaluation-periods",
-        icon: CalendarDays,
-        permission: PERMISSIONS.EVALUATION_PERIOD_READ,
-      },
-      {
         title: "Evaluation Instruments",
         href: "/admin/evaluation-forms",
         icon: ClipboardList,
         permission: PERMISSIONS.EVALUATION_FORM_READ,
+      },
+      {
+        title: "Evaluation Schedules",
+        href: "/admin/evaluation-periods",
+        icon: CalendarDays,
+        permission: PERMISSIONS.EVALUATION_PERIOD_READ,
       },
       {
         title: "Evaluate Instructors",

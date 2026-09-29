@@ -13,6 +13,7 @@ import ClassStudentPage from "@/features/class-students/page/ClassStudentPage";
 import StudentClassPage from "@/features/student-classes/page/StudentClassPage";
 import EvaluationInstrumentsPage from "@/features/evaluations/page/EvaluationInstrumentsPage";
 import EvaluationFormBuilderPage from "@/features/evaluations/page/EvaluationFormBuilderPage";
+import EvaluationSchedulesPage from "@/features/evaluation-schedules/page/EvaluationSchedulesPage";
 
 export const AppRoutes = createBrowserRouter([
   {
@@ -77,6 +78,10 @@ export const AppRoutes = createBrowserRouter([
           {
             path: "/admin/evaluation-forms/:type/:id/builder",
             element: <EvaluationFormBuilderPage />,
+          },
+          {
+            path: "/admin/evaluation-periods",
+            element: <EvaluationSchedulesPage />,
           },
         ],
       },

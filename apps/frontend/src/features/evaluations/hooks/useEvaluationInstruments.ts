@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tansta
 import { EvaluationInstrumentAPI } from "../api/evaluation-instument.api";
 import { toQuery } from "@/lib/query.lib";
 import type {
-  EvaluationFormQuery,
   IStudentEvalFormInsert,
   IStudentEvalFormUpdate,
   ISupervisorEvalFormInsert,
@@ -18,13 +17,12 @@ export const INSTRUMENT_KEYS = {
   studentDetail: (id: number) => [...INSTRUMENT_KEYS.all, "student", "detail", id] as const,
 
   supervisorLists: () => [...INSTRUMENT_KEYS.all, "supervisor", "list"] as const,
-  supervisorList: (query?: EvaluationFormQuery) =>
-    [...INSTRUMENT_KEYS.supervisorLists(), query] as const,
+  supervisorList: (query?: unknown) => [...INSTRUMENT_KEYS.supervisorLists(), query] as const,
   supervisorDetail: (id: number) => [...INSTRUMENT_KEYS.all, "supervisor", "detail", id] as const,
 };
 
 // ── Student Forms (SET) ──
-export const useStudentForms = (query?: EvaluationFormQuery) => {
+export const useStudentForms = (query?: unknown) => {
   return useQuery({
     queryKey: INSTRUMENT_KEYS.studentList(query),
     queryFn: () => toQuery(instrumentApi.getStudentForms(query)),
@@ -85,7 +83,7 @@ export const useRestoreStudentForm = () => {
 };
 
 // ── Supervisor Forms (SEF) ──
-export const useSupervisorForms = (query?: EvaluationFormQuery) => {
+export const useSupervisorForms = (query?: unknown) => {
   return useQuery({
     queryKey: INSTRUMENT_KEYS.supervisorList(query),
     queryFn: () => toQuery(instrumentApi.getSupervisorForms(query)),

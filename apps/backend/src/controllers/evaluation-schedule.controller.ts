@@ -81,6 +81,16 @@ export class EvaluationScheduleController {
     });
   });
 
+  forceStopStudentSchedule = runAsync((req) => {
+    return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
+      return this.scheduleService.forceStopStudentSchedule(id).map((data) => ({
+        status: 200,
+        message: "Student evaluation window concluded immediately.",
+        data,
+      }));
+    });
+  });
+
   // ── Supervisor Schedule (SEF) Handlers ──
   getSupervisorScheduleById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
@@ -144,6 +154,16 @@ export class EvaluationScheduleController {
       return this.scheduleService.restoreSupervisorSchedule(id).map((data) => ({
         status: 200,
         message: "Supervisor evaluation schedule restored.",
+        data,
+      }));
+    });
+  });
+
+  forceStopSupervisorSchedule = runAsync((req) => {
+    return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
+      return this.scheduleService.forceStopSupervisorSchedule(id).map((data) => ({
+        status: 200,
+        message: "Supervisor evaluation window concluded immediately.",
         data,
       }));
     });

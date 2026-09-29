@@ -14,7 +14,7 @@ import SemesterRouter from "./semester.router.js";
 import BulkImportRouter from "./bulk-import.router.js";
 import InstrumentRouter from "./evaluation-instrument.router.js";
 import BuilderRouter from "./evaluation-builder.router.js";
-import ScheduleRouter from "./evaluation-controller.router.js";
+import ScheduleRouter from "./evaluation-schedule.router.js";
 
 const V1Router: IRouter = Router();
 

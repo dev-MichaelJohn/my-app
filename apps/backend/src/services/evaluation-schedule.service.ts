@@ -63,6 +63,10 @@ export interface IEvaluationScheduleService {
   ): ResultAsync<GetStudentSchedule, AppError>;
   deleteStudentSchedule(id: number, client?: DbClient): ResultAsync<void, AppError>;
   restoreStudentSchedule(id: number, client?: DbClient): ResultAsync<GetStudentSchedule, AppError>;
+  forceStopStudentSchedule(
+    id: number,
+    client?: DbClient,
+  ): ResultAsync<GetStudentSchedule, AppError>;
 
   // Supervisor Schedules (SEF)
   getSupervisorScheduleById(
@@ -89,6 +93,10 @@ export interface IEvaluationScheduleService {
   ): ResultAsync<GetSupervisorSchedule, AppError>;
   deleteSupervisorSchedule(id: number, client?: DbClient): ResultAsync<void, AppError>;
   restoreSupervisorSchedule(
+    id: number,
+    client?: DbClient,
+  ): ResultAsync<GetSupervisorSchedule, AppError>;
+  forceStopSupervisorSchedule(
     id: number,
     client?: DbClient,
   ): ResultAsync<GetSupervisorSchedule, AppError>;
@@ -271,14 +279,12 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
   ): ResultAsync<GetStudentSchedule, AppError> {
     return ValidateSchema(StudentScheduleInsert, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
-        // A. Verify Semester is active
         const [semester] = await tx
           .select({ id: Semesters.id })
           .from(Semesters)
           .where(and(eq(Semesters.id, parsed.semester_id), isNull(Semesters.deleted_at)));
         if (!semester) throw new AppError(404, "Academic semester was not found or is inactive.");
 
-        // B. Verify Form is active
         const [form] = await tx
           .select({ id: StudentEvaluationForms.id })
           .from(StudentEvaluationForms)
@@ -290,7 +296,6 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
           );
         if (!form) throw new AppError(404, "Student evaluation form was not found or is inactive.");
 
-        // C. Check unique constraint (semester_id, form_id)
         const [conflict] = await tx
           .select({ id: StudentEvaluationSchedules.id })
           .from(StudentEvaluationSchedules)
@@ -389,6 +394,44 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
         .returning();
 
       if (!restored) throw new AppError(500, "Failed to restore evaluation schedule.");
+
+      const fullRecord = await this.getStudentScheduleById(id, false, tx);
+      if (fullRecord.isErr()) throw fullRecord.error;
+
+      return fullRecord.value;
+    });
+  }
+
+  forceStopStudentSchedule(
+    id: number,
+    client: DbClient = db,
+  ): ResultAsync<GetStudentSchedule, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const existing = await this.getStudentScheduleById(id, false, tx);
+      if (existing.isErr()) throw existing.error;
+      const current = existing.value;
+
+      const now = new Date();
+      let openAt = new Date(current.open_at);
+      if (openAt >= now) {
+        openAt = new Date(now.getTime() - 1000);
+      }
+
+      const [updated] = await tx
+        .update(StudentEvaluationSchedules)
+        .set({
+          open_at: openAt,
+          close_at: now,
+          updated_at: now,
+        })
+        .where(
+          and(eq(StudentEvaluationSchedules.id, id), isNull(StudentEvaluationSchedules.deleted_at)),
+        )
+        .returning();
+
+      if (!updated) {
+        throw new AppError(500, "Failed to force stop student evaluation schedule.");
+      }
 
       const fullRecord = await this.getStudentScheduleById(id, false, tx);
       if (fullRecord.isErr()) throw fullRecord.error;
@@ -691,6 +734,47 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
         .returning();
 
       if (!restored) throw new AppError(500, "Failed to restore supervisor schedule.");
+
+      const fullRecord = await this.getSupervisorScheduleById(id, false, tx);
+      if (fullRecord.isErr()) throw fullRecord.error;
+
+      return fullRecord.value;
+    });
+  }
+
+  forceStopSupervisorSchedule(
+    id: number,
+    client: DbClient = db,
+  ): ResultAsync<GetSupervisorSchedule, AppError> {
+    return WithTransaction(client, async (tx) => {
+      const existing = await this.getSupervisorScheduleById(id, false, tx);
+      if (existing.isErr()) throw existing.error;
+      const current = existing.value;
+
+      const now = new Date();
+      let openAt = new Date(current.open_at);
+      if (openAt >= now) {
+        openAt = new Date(now.getTime() - 1000);
+      }
+
+      const [updated] = await tx
+        .update(SupervisorEvaluationSchedules)
+        .set({
+          open_at: openAt,
+          close_at: now,
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(SupervisorEvaluationSchedules.id, id),
+            isNull(SupervisorEvaluationSchedules.deleted_at),
+          ),
+        )
+        .returning();
+
+      if (!updated) {
+        throw new AppError(500, "Failed to force stop supervisor evaluation schedule.");
+      }
 
       const fullRecord = await this.getSupervisorScheduleById(id, false, tx);
       if (fullRecord.isErr()) throw fullRecord.error;

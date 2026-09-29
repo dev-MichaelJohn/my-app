@@ -1,4 +1,3 @@
-// apps/backend/src/routers/evaluation-schedule.router.ts
 import { Router, type IRouter } from "express";
 import { EvaluationScheduleController } from "@/controllers/evaluation-schedule.controller.js";
 import { AuthController } from "@/controllers/auth.controller.js";
@@ -24,6 +23,7 @@ ScheduleRouter.post("/student", canManage, controller.createStudentSchedule);
 ScheduleRouter.put("/student/:id", canManage, controller.updateStudentSchedule);
 ScheduleRouter.delete("/student/:id", canManage, controller.deleteStudentSchedule);
 ScheduleRouter.put("/student/:id/restore", canManage, controller.restoreStudentSchedule);
+ScheduleRouter.put("/student/:id/force-stop", canManage, controller.forceStopStudentSchedule);
 
 // ── SEF (Supervisor Evaluation Windows) ──
 ScheduleRouter.get("/supervisor/active", canRead, controller.getActiveSupervisorSchedule);
@@ -33,5 +33,6 @@ ScheduleRouter.post("/supervisor", canManage, controller.createSupervisorSchedul
 ScheduleRouter.put("/supervisor/:id", canManage, controller.updateSupervisorSchedule);
 ScheduleRouter.delete("/supervisor/:id", canManage, controller.deleteSupervisorSchedule);
 ScheduleRouter.put("/supervisor/:id/restore", canManage, controller.restoreSupervisorSchedule);
+ScheduleRouter.put("/supervisor/:id/force-stop", canManage, controller.forceStopSupervisorSchedule);
 
 export default ScheduleRouter;
