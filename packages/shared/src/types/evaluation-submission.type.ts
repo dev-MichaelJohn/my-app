@@ -30,6 +30,27 @@ export const SubmitSupervisorEvaluationSchema = z.object({
 export type SubmitStudentEvaluation = z.infer<typeof SubmitStudentEvaluationSchema>;
 export type SubmitSupervisorEvaluation = z.infer<typeof SubmitSupervisorEvaluationSchema>;
 
+// ── Sentiment Analysis Models ──
+export type SentimentClassification = "POSITIVE" | "NEUTRAL" | "NEGATIVE" | "MIXED";
+
+export interface AspectBreakdown {
+  aspect: "PEDAGOGY" | "PUNCTUALITY" | "GRADING" | "ATTITUDE" | "WORKLOAD";
+  score: number;
+  classification: "POSITIVE" | "NEUTRAL" | "NEGATIVE";
+}
+
+export interface SentimentAnalysisResult {
+  score: number; // Normalized score strictly between -1.00 and 1.00 (fits decimal(5, 2))
+  rawScore: number;
+  comparative: number;
+  classification: SentimentClassification;
+  primaryAspects: AspectBreakdown[];
+  detectedIdioms: string[];
+  positiveWords: string[];
+  negativeWords: string[];
+  summary: string;
+}
+
 // ── Evaluable Item Models ──
 export interface EvaluableStudentSubject {
   student_class_id: number;

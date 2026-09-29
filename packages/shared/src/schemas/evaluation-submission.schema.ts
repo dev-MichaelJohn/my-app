@@ -2,6 +2,7 @@ import {
   decimal,
   index,
   integer,
+  pgEnum,
   pgTable,
   serial,
   text,
@@ -19,6 +20,13 @@ import {
 import { CourseOfferings, StudentClasses } from "./institution.schema.js";
 import { Accounts } from "./auth.schema.js";
 
+export const SentimentClassificationEnum = pgEnum("sentiment_classification", [
+  "POSITIVE",
+  "NEUTRAL",
+  "NEGATIVE",
+  "MIXED",
+]);
+
 export const StudentEvaluations = pgTable(
   "student_evaluations",
   {
@@ -30,13 +38,15 @@ export const StudentEvaluations = pgTable(
       .notNull()
       .references(() => StudentClasses.id),
     comment: text("comment"),
-    comment_score: decimal("comment_score", { precision: 5, scale: 2 }), // Sentiment score (-1.00 to 1.00)
+    comment_score: decimal("comment_score", { precision: 5, scale: 2 }), // Normalized polarity (-1.00 to 1.00)
+    comment_sentiment: SentimentClassificationEnum("comment_sentiment"), // POSITIVE | NEUTRAL | NEGATIVE | MIXED
     set_rating: decimal("set_rating", { precision: 5, scale: 2 }), // Computed Rating Mean
     submitted_at: timestamp("submitted_at"), // NULL = Draft
   },
   (t) => [
     index("idx_student_eval_schedule_id").on(t.schedule_id),
     index("idx_student_eval_student_class_id").on(t.student_class_id),
+    index("idx_student_eval_sentiment").on(t.comment_sentiment),
     uniqueIndex("uidx_unique_student_submission").on(t.schedule_id, t.student_class_id),
   ],
 );
@@ -74,7 +84,8 @@ export const SupervisorEvaluations = pgTable(
       .notNull()
       .references(() => CourseOfferings.id),
     comment: text("comment"),
-    comment_score: decimal("comment_score", { precision: 5, scale: 2 }), // Sentiment score (-1.00 to 1.00)
+    comment_score: decimal("comment_score", { precision: 5, scale: 2 }), // Normalized polarity (-1.00 to 1.00)
+    comment_sentiment: SentimentClassificationEnum("comment_sentiment"), // POSITIVE | NEUTRAL | NEGATIVE | MIXED
     set_rating: decimal("set_rating", { precision: 5, scale: 2 }), // Computed Rating Mean
     submitted_at: timestamp("submitted_at"), // NULL = Draft
   },
@@ -82,6 +93,7 @@ export const SupervisorEvaluations = pgTable(
     index("idx_supervisor_eval_schedule_id").on(t.schedule_id),
     index("idx_supervisor_eval_evaluator_id").on(t.evaluator_id),
     index("idx_supervisor_eval_course_offering_id").on(t.course_offering_id),
+    index("idx_supervisor_eval_sentiment").on(t.comment_sentiment),
     uniqueIndex("uidx_unique_supervisor_submission").on(
       t.schedule_id,
       t.evaluator_id,

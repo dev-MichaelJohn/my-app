@@ -15,6 +15,7 @@ import BulkImportRouter from "./bulk-import.router.js";
 import InstrumentRouter from "./evaluation-instrument.router.js";
 import BuilderRouter from "./evaluation-builder.router.js";
 import ScheduleRouter from "./evaluation-schedule.router.js";
+import SubmissionRouter from "./evaluation-submission.router.js";
 
 const V1Router: IRouter = Router();
 
@@ -38,5 +39,6 @@ V1Router.use("/bulk-import", BulkImportRouter);
 V1Router.use("/evaluation-instruments", InstrumentRouter);
 V1Router.use("/evaluation-builder", BuilderRouter);
 V1Router.use("/evaluation-schedules", ScheduleRouter);
+V1Router.use("/evaluation-submissions", SubmissionRouter);
 
 export default V1Router;
