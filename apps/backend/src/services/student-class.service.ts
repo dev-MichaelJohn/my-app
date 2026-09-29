@@ -248,7 +248,7 @@ export class StudentClassService implements IStudentClassService {
             ilike(StudentDetails.first_name, term),
             ilike(StudentDetails.last_name, term),
             ilike(StudentDetails.institutional_id, term),
-            ilike(StudentAccounts.email, term),
+            ilike(StudentAccounts.email, term), // Fixed: use StudentAccounts instead of Accounts
             ilike(Courses.name, term),
             ilike(Courses.initialism, term),
             ilike(Programs.initialism, term),
@@ -326,11 +326,21 @@ export class StudentClassService implements IStudentClassService {
         const offset = (page - 1) * limit;
         const paginatedDataQuery = baseDataQuery.limit(limit).offset(offset);
 
+        // Include all joined tables referenced by whereCondition
         const countQuery = tx
           .select({ total: countDistinct(StudentClasses.id) })
           .from(StudentClasses)
           .innerJoin(StudentAccounts, eq(StudentClasses.student_account_id, StudentAccounts.id))
+          .innerJoin(StudentDetails, eq(StudentAccounts.personal_details_id, StudentDetails.id))
           .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
+          .innerJoin(
+            CourseCurriculums,
+            eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+          )
+          .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+          .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+          .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+          .innerJoin(Semesters, eq(CourseOfferings.semester_id, Semesters.id))
           .where(whereCondition);
 
         const [results, countResult] = await Promise.all([paginatedDataQuery, countQuery]);

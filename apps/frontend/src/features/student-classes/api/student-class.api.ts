@@ -9,7 +9,7 @@ import type { ResultAsync } from "neverthrow";
 
 export class StudentClassAPI {
   getStudentClasses(rawQuery: unknown): ResultAsync<PaginatedData<GetStudentClass[]>, ApiError> {
-    return http.get<PaginatedData<GetStudentClass[]>>("/student-class", rawQuery);
+    return http.get<PaginatedData<GetStudentClass[]>>("/student-classes", rawQuery);
   }
 
   getStudentClass(id: number): ResultAsync<GetStudentClass, ApiError> {
