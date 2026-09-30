@@ -9,6 +9,7 @@ import {
   SupervisorEvaluationQuestions,
   SupervisorEvaluationMeans,
 } from "../schemas/evaluation-instrument.schema.js";
+import { DEFAULT_FORMULA_ID } from "./evaluation-formula.type.js";
 
 export const StudentEvalFormSelect = createSelectSchema(StudentEvaluationForms);
 
@@ -16,6 +17,7 @@ export const StudentEvalFormInsert = createInsertSchema(StudentEvaluationForms, 
   title: (s) => s.trim().min(3, "Form title must be at least 3 characters."),
   min_rating: (s) => s.int().min(1),
   max_rating: (s) => s.int().min(2),
+  calculation_formula: z.string().default(DEFAULT_FORMULA_ID),
 }).omit({ id: true, created_at: true, updated_at: true, deleted_at: true });
 
 export const StudentEvalFormUpdate = createUpdateSchema(StudentEvaluationForms, {
@@ -56,6 +58,7 @@ export const SupervisorEvalFormInsert = createInsertSchema(SupervisorEvaluationF
   title: (s) => s.trim().min(3, "Form title must be at least 3 characters."),
   min_rating: (s) => s.int().min(1),
   max_rating: (s) => s.int().min(2),
+  calculation_formula: z.string().default(DEFAULT_FORMULA_ID),
 }).omit({ id: true, created_at: true, updated_at: true, deleted_at: true });
 
 export const SupervisorEvalFormUpdate = createUpdateSchema(SupervisorEvaluationForms, {

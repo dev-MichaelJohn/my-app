@@ -14,9 +14,11 @@ import {
   Programs,
   Semesters,
   StudentClasses,
+  StudentEvaluationForms,
   StudentEvaluationRatings,
   StudentEvaluations,
   StudentEvaluationSchedules,
+  SupervisorEvaluationForms,
   SupervisorEvaluationRatings,
   SupervisorEvaluations,
   SupervisorEvaluationSchedules,
@@ -42,6 +44,7 @@ import {
   type SupervisorEvaluationFormView,
 } from "@my-app/shared";
 import { UserService, type IUserService } from "./user.service.js";
+import { getFormulaById } from "@my-app/shared";
 
 export interface IEvaluationSubmissionService {
   // Student (SET)
@@ -511,11 +514,37 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           throw new AppError(409, "You have already submitted an evaluation for this subject.");
         }
 
+        // ══════════════════════════════════════════════════════════════════
+        // 🔌 PLUG-AND-PLAY FORMULA CALCULATION (SET)
+        // ══════════════════════════════════════════════════════════════════
         let computedRating: number | null = null;
         if (data.ratings.length > 0) {
-          const totalRating = data.ratings.reduce((acc, curr) => acc + curr.rating, 0);
-          computedRating = Number((totalRating / data.ratings.length).toFixed(2));
+          // Fetch the template's chosen calculation formula and score bounds
+          const [formRecord] = await tx
+            .select({
+              min_rating: StudentEvaluationForms.min_rating,
+              max_rating: StudentEvaluationForms.max_rating,
+              calculation_formula: StudentEvaluationForms.calculation_formula,
+            })
+            .from(StudentEvaluationForms)
+            .where(eq(StudentEvaluationForms.id, schedule.form_id));
+
+          const formula = getFormulaById(formRecord?.calculation_formula);
+          const totalScore = data.ratings.reduce((acc, curr) => acc + curr.rating, 0);
+          const maxRatingPerQ = formRecord?.max_rating ?? 5;
+          const maxPossibleScore = data.ratings.length * maxRatingPerQ;
+
+          // Runs the plug-and-play formula
+          computedRating = formula.calculate({
+            ratings: data.ratings,
+            totalScore,
+            questionCount: data.ratings.length,
+            maxPossibleScore,
+            minRating: formRecord?.min_rating ?? 1,
+            maxRating: maxRatingPerQ,
+          });
         }
+        // ══════════════════════════════════════════════════════════════════
 
         const sentiment = data.comment ? analyzeCommentSentiment(data.comment) : null;
         const commentScore = sentiment ? sentiment.score : null;
@@ -530,7 +559,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
               comment: data.comment ?? null,
               comment_score: commentScore !== null ? String(commentScore) : null,
               comment_sentiment: commentSentiment,
-              set_rating: computedRating !== null ? String(computedRating) : null,
+              set_rating: computedRating !== null ? String(computedRating) : null, // 👈 Saved in DB
               submitted_at: data.is_draft ? null : now,
             })
             .where(eq(StudentEvaluations.id, existing.id))
@@ -549,7 +578,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
               comment: data.comment ?? null,
               comment_score: commentScore !== null ? String(commentScore) : null,
               comment_sentiment: commentSentiment,
-              set_rating: computedRating !== null ? String(computedRating) : null,
+              set_rating: computedRating !== null ? String(computedRating) : null, // 👈 Saved in DB
               submitted_at: data.is_draft ? null : now,
             })
             .returning({ id: StudentEvaluations.id });
@@ -1030,11 +1059,37 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           );
         }
 
+        // ══════════════════════════════════════════════════════════════════
+        // 🔌 PLUG-AND-PLAY FORMULA CALCULATION (SEF)
+        // ══════════════════════════════════════════════════════════════════
         let computedRating: number | null = null;
         if (data.ratings.length > 0) {
-          const totalRating = data.ratings.reduce((acc, curr) => acc + curr.rating, 0);
-          computedRating = Number((totalRating / data.ratings.length).toFixed(2));
+          // Fetch the template's chosen calculation formula and score bounds
+          const [formRecord] = await tx
+            .select({
+              min_rating: SupervisorEvaluationForms.min_rating,
+              max_rating: SupervisorEvaluationForms.max_rating,
+              calculation_formula: SupervisorEvaluationForms.calculation_formula,
+            })
+            .from(SupervisorEvaluationForms)
+            .where(eq(SupervisorEvaluationForms.id, schedule.form_id));
+
+          const formula = getFormulaById(formRecord?.calculation_formula);
+          const totalScore = data.ratings.reduce((acc, curr) => acc + curr.rating, 0);
+          const maxRatingPerQ = formRecord?.max_rating ?? 5;
+          const maxPossibleScore = data.ratings.length * maxRatingPerQ;
+
+          // Runs the plug-and-play formula
+          computedRating = formula.calculate({
+            ratings: data.ratings,
+            totalScore,
+            questionCount: data.ratings.length,
+            maxPossibleScore,
+            minRating: formRecord?.min_rating ?? 1,
+            maxRating: maxRatingPerQ,
+          });
         }
+        // ══════════════════════════════════════════════════════════════════
 
         const sentiment = data.comment ? analyzeCommentSentiment(data.comment) : null;
         const commentScore = sentiment ? sentiment.score : null;
@@ -1049,7 +1104,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
               comment: data.comment ?? null,
               comment_score: commentScore !== null ? String(commentScore) : null,
               comment_sentiment: commentSentiment,
-              set_rating: computedRating !== null ? String(computedRating) : null,
+              set_rating: computedRating !== null ? String(computedRating) : null, // 👈 Saved in DB
               submitted_at: data.is_draft ? null : now,
             })
             .where(eq(SupervisorEvaluations.id, existing.id))
@@ -1069,7 +1124,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
               comment: data.comment ?? null,
               comment_score: commentScore !== null ? String(commentScore) : null,
               comment_sentiment: commentSentiment,
-              set_rating: computedRating !== null ? String(computedRating) : null,
+              set_rating: computedRating !== null ? String(computedRating) : null, // 👈 Saved in DB
               submitted_at: data.is_draft ? null : now,
             })
             .returning({ id: SupervisorEvaluations.id });

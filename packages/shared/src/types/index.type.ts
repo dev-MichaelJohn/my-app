@@ -17,3 +17,4 @@ export * from "./csv-import.type.js";
 export * from "./evaluation-instrument.type.js";
 export * from "./evaluation-schedule.type.js";
 export * from "./evaluation-submission.type.js";
+export * from "./evaluation-formula.type.js";

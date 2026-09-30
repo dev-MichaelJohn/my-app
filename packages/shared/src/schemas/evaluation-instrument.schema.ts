@@ -20,6 +20,9 @@ export const StudentEvaluationForms = pgTable(
     description: text("description"),
     min_rating: integer("min_rating").notNull().default(1),
     max_rating: integer("max_rating").notNull().default(5),
+    calculation_formula: varchar("calculation_formula", { length: 64 })
+      .notNull()
+      .default("PERCENTAGE_75"),
     created_at: timestamp("created_at").notNull().defaultNow(),
     updated_at: timestamp("updated_at")
       .notNull()
@@ -96,6 +99,9 @@ export const SupervisorEvaluationForms = pgTable(
     description: text("description"),
     min_rating: integer("min_rating").notNull().default(1),
     max_rating: integer("max_rating").notNull().default(5),
+    calculation_formula: varchar("calculation_formula", { length: 64 })
+      .notNull()
+      .default("PERCENTAGE_75"),
     created_at: timestamp("created_at").notNull().defaultNow(),
     updated_at: timestamp("updated_at")
       .notNull()
