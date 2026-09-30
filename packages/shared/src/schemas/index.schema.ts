@@ -3,3 +3,4 @@ export * from "./institution.schema.js";
 export * from "./evaluation-instrument.schema.js";
 export * from "./evaluation-schedule.schema.js";
 export * from "./evaluation-submission.schema.js";
+export * from "./evaluation-report.schema.js";
