@@ -1,10 +1,17 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, SendHorizontal, RefreshCw, Printer, ArrowLeft, Layers } from "lucide-react";
+import { CheckCircle, SendHorizontal, RefreshCw, ArrowLeft, Layers, Download } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { Can } from "@/components/Can";
 import { PERMISSIONS, type AnnexCFacultyReport, type ReportStatus } from "@my-app/shared";
+import { downloadAnnexCPdf, downloadAnnexDPdf } from "../lib/report-export.lib";
 
 interface Props {
   report: AnnexCFacultyReport;
@@ -35,7 +42,7 @@ export function ReportLifecycleBar({
   };
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-muted/30 border border-border rounded-2xl print:hidden">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-muted/30 border border-border rounded-2xl">
       <div className="flex items-center gap-2">
         <Button
           size="sm"
@@ -72,7 +79,7 @@ export function ReportLifecycleBar({
               className="h-8 text-xs gap-1 border-blue-500/30 text-blue-600 hover:bg-blue-50"
             >
               <CheckCircle className="w-3.5 h-3.5" />
-              <span>Finalize Report</span>
+              <span>Finalize</span>
             </Button>
           )}
 
@@ -83,7 +90,7 @@ export function ReportLifecycleBar({
               className="h-8 text-xs gap-1 bg-emerald-600 text-white hover:bg-emerald-700"
             >
               <SendHorizontal className="w-3.5 h-3.5" />
-              <span>Publish to Faculty</span>
+              <span>Publish</span>
             </Button>
           )}
 
@@ -94,7 +101,7 @@ export function ReportLifecycleBar({
               onClick={() => setTargetStatus("DRAFT")}
               className="h-8 text-xs text-muted-foreground hover:text-foreground"
             >
-              Revert to Draft
+              Revert
             </Button>
           )}
         </Can>
@@ -122,14 +129,34 @@ export function ReportLifecycleBar({
           </Button>
         </Can>
 
-        <Button
-          size="sm"
-          onClick={() => window.print()}
-          className="h-8 text-xs gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
-        >
-          <Printer className="w-3.5 h-3.5" />
-          <span>Print</span>
-        </Button>
+        {/* ── Official Download Dropdown ── */}
+        <DropdownMenu>
+          <DropdownMenuTrigger>
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download Documents</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 bg-popover border-border text-xs">
+            <DropdownMenuItem
+              onClick={() => downloadAnnexCPdf(report)}
+              className="cursor-pointer gap-2 py-2"
+            >
+              <span className="font-bold text-primary">Annex C</span>
+              <span>— Official Report (IFER)</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => downloadAnnexDPdf(report)}
+              className="cursor-pointer gap-2 py-2"
+            >
+              <span className="font-bold text-emerald-600">Annex D</span>
+              <span>— Action Plan (FEDAF)</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <ConfirmActionDialog

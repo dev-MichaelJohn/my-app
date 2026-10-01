@@ -25,7 +25,7 @@ export interface FedafPlan {
   faculty_signed_at: string | null;
 }
 
-// ── Analytics Models ──
+// ── Analytics Models (Dynamic Scale Bounds & Length) ──
 export interface CategoryAnalytics {
   categoryId: number;
   categoryName: string;
@@ -34,6 +34,7 @@ export interface CategoryAnalytics {
   totalResponses: number;
   percentageScore: number;
   qualitativeInterpretation: string;
+  maxRating?: number | undefined;
 }
 
 export interface IndicatorAnalytics {
@@ -44,8 +45,10 @@ export interface IndicatorAnalytics {
   indicatorText: string;
   averageRating: number;
   totalResponses: number;
-  ratingDistribution: Record<number, number>; // Count of 1s, 2s, 3s, 4s, 5s
+  ratingDistribution: Record<number, number>; // Dynamic keys from minRating to maxRating
   qualitativeInterpretation: string;
+  minRating?: number | undefined;
+  maxRating?: number | undefined;
   means?: string[] | undefined; // Suggested MOVs for SEF
 }
 
@@ -89,6 +92,8 @@ export interface AnnexCFacultyReport {
   school_year: string;
   overall_set_rating: number;
   overall_sef_rating: number | null;
+  min_rating?: number | null | undefined;
+  max_rating?: number | null | undefined;
   total_students_evaluated: number;
   total_classes: number;
   total_weighted_score: number;

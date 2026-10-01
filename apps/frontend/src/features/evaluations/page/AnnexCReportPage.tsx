@@ -16,9 +16,8 @@ import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { ReportFilters } from "../components/ReportFilters";
 import { ReportTableView } from "../components/ReportTableView";
 import { ReportGridView } from "../components/ReportGridView";
-import { AnnexCDocument } from "../components/AnnexCDocument";
-import { AnnexDDocument } from "../components/AnnexDDocument";
-import { ReportAnalyticsDocument } from "../components/ReportAnalyticsDocument";
+import { ReportAnalyticsCharts } from "../components/ReportAnalyticsCharts";
+import { FedafActionSection } from "../components/FedafActionSection";
 import { ReportLifecycleBar } from "../components/ReportLifecycleBar";
 import { toast } from "sonner";
 import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from "lucide-react";
@@ -31,10 +30,10 @@ export default function AnnexCReportPage() {
   // Metadata queries
   const { data: activeSemester } = useActiveSemester();
   const { data: semestersResponse } = useSemesters({ paginate: false });
-  const semestersList = semestersResponse?.data ?? [];
+  const semestersList = useMemo(() => semestersResponse?.data ?? [], [semestersResponse?.data]);
 
   const { data: collegesResponse } = useColleges({ paginate: false });
-  const collegesList = collegesResponse?.data ?? [];
+  const collegesList = useMemo(() => collegesResponse?.data ?? [], [collegesResponse?.data]);
 
   const { data: programsResponse } = usePrograms({ paginate: false });
   const allProgramsList = useMemo(() => programsResponse?.data ?? [], [programsResponse?.data]);
@@ -78,7 +77,6 @@ export default function AnnexCReportPage() {
   // Selected Report State (Drilldown)
   const [selectedReportId, setSelectedReportId] = useState<number | null>(null);
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
-  const [activeDocTab, setActiveDocTab] = useState<"annex-c" | "analytics" | "annex-d">("annex-c");
 
   // Query for Reports List
   const listQuery: FacultyReportQuery = useMemo(
@@ -134,7 +132,6 @@ export default function AnnexCReportPage() {
   const handleOpenDetail = (report: AnnexCFacultyReport) => {
     setSelectedReportId(report.id);
     setSelectedFacultyId(report.faculty_id);
-    setActiveDocTab("annex-c");
   };
 
   const handleBackToList = () => {
@@ -190,7 +187,7 @@ export default function AnnexCReportPage() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-24">
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* 1. LIST VIEW (Default Landing)                                    */}
+      {/* 1. LIST FIRST VIEW (Default landing with College/Program filter)   */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       {!selectedReportId ? (
         <div className="space-y-6">
@@ -199,8 +196,8 @@ export default function AnnexCReportPage() {
               Faculty Evaluation Reports & Analytics
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Browse consolidated IFER (Annex C), category/indicator analytics, and FEDAF (Annex D)
-              plans by college and program.
+              Browse consolidated teaching performance reports, category charts, and FEDAF plans by
+              college and program.
             </p>
           </div>
 
@@ -313,7 +310,7 @@ export default function AnnexCReportPage() {
         </div>
       ) : (
         /* ══════════════════════════════════════════════════════════════════ */
-        /* 2. REPORT DETAIL VIEW (Drilldown)                                  */
+        /* 2. REPORT DETAIL VIEW (Visual Dashboard + Action Plan + Downloads) */
         /* ══════════════════════════════════════════════════════════════════ */
         <div className="space-y-6">
           {activeReport && (
@@ -327,43 +324,6 @@ export default function AnnexCReportPage() {
             />
           )}
 
-          {/* Document Tabs */}
-          <div className="flex gap-2 border-b border-border pb-1 print:hidden">
-            <button
-              type="button"
-              onClick={() => setActiveDocTab("annex-c")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
-                activeDocTab === "annex-c"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Annex C — Individual Report (IFER)
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveDocTab("analytics")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
-                activeDocTab === "analytics"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Analytics (Per Category & Indicator)
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveDocTab("annex-d")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
-                activeDocTab === "annex-d"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Annex D — Acknowledgment & Plan (FEDAF)
-            </button>
-          </div>
-
           {isLoadingReport ? (
             <div className="py-24 flex justify-center items-center">
               <Spinner size="lg" />
@@ -376,28 +336,50 @@ export default function AnnexCReportPage() {
               </Button>
             </div>
           ) : (
-            <div>
-              <div className={activeDocTab === "annex-c" ? "block" : "hidden print:block"}>
-                <AnnexCDocument report={activeReport} />
+            <div className="space-y-6">
+              {/* Faculty Summary Card */}
+              <div className="p-4 bg-muted/40 border border-border rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-extrabold text-foreground">
+                    {activeReport.faculty_name}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    {activeReport.department_college} • {activeReport.semester_term} (
+                    {activeReport.school_year})
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                      SET Score (Students)
+                    </span>
+                    <span className="text-base font-extrabold font-mono text-primary">
+                      {activeReport.overall_set_rating.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="h-6 w-px bg-border" />
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                      SEF Score (Supervisor)
+                    </span>
+                    <span className="text-base font-extrabold font-mono text-emerald-600 dark:text-emerald-400">
+                      {activeReport.overall_sef_rating !== null
+                        ? activeReport.overall_sef_rating.toFixed(2)
+                        : "N/A"}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div className={activeDocTab === "analytics" ? "block" : "hidden"}>
-                <ReportAnalyticsDocument report={activeReport} />
-              </div>
+              {/* ── Visual Analytics: Pie Chart & Per-Indicator Rating Distribution Bar Graph ── */}
+              <ReportAnalyticsCharts report={activeReport} />
 
-              <div
-                className={
-                  activeDocTab === "annex-d"
-                    ? "block"
-                    : "hidden print:block print:break-before-page"
-                }
-              >
-                <AnnexDDocument
-                  report={activeReport}
-                  currentUser={user}
-                  isPrivileged={Boolean(isPrivileged)}
-                />
-              </div>
+              {/* ── Interactive FEDAF Action Center & Signatures ── */}
+              <FedafActionSection
+                report={activeReport}
+                currentUser={user}
+                isPrivileged={Boolean(isPrivileged)}
+              />
             </div>
           )}
         </div>
