@@ -595,6 +595,13 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           await tx.insert(StudentEvaluationRatings).values(ratingInserts);
         }
 
+        console.log({
+          evaluation_id: evaluationId,
+          rating: computedRating,
+          sentiment_score: commentScore,
+          sentiment_classification: commentSentiment,
+        });
+
         return {
           evaluation_id: evaluationId,
           rating: computedRating,
@@ -1140,6 +1147,13 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           }));
           await tx.insert(SupervisorEvaluationRatings).values(ratingInserts);
         }
+
+        console.log({
+          evaluation_id: evaluationId,
+          rating: computedRating,
+          sentiment_score: commentScore,
+          sentiment_classification: commentSentiment,
+        });
 
         return {
           evaluation_id: evaluationId,

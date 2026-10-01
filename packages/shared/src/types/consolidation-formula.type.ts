@@ -4,6 +4,10 @@ export interface ClassConsolidationInput {
   courseCode: string;
   courseName: string;
   yearSection: string;
+  programId?: number | null | undefined;
+  programCode?: string | null | undefined;
+  collegeId?: number | null | undefined;
+  collegeCode?: string | null | undefined;
   noOfStudents: number;
   averageSetRating: number;
   weightedScore: number;
@@ -25,12 +29,7 @@ export interface ConsolidationFormulaDefinition {
   calculate: ConsolidationCalculator;
 }
 
-/**
- * 🔌 PLUG-AND-PLAY CONSOLIDATION REGISTRY
- * Add any new formula here to make it selectable and computable everywhere!
- */
 export const CONSOLIDATION_FORMULAS: Record<string, ConsolidationFormulaDefinition> = {
-  // ── 1. Standard Annex C Formula ──
   ANNEX_C_WEIGHTED: {
     id: "ANNEX_C_WEIGHTED",
     name: "Annex C: Weighted by Student Population",
@@ -43,7 +42,6 @@ export const CONSOLIDATION_FORMULAS: Record<string, ConsolidationFormulaDefiniti
     },
   },
 
-  // ── 2. Simple Unweighted Class Mean ──
   SIMPLE_CLASS_MEAN: {
     id: "SIMPLE_CLASS_MEAN",
     name: "Simple Unweighted Class Average",

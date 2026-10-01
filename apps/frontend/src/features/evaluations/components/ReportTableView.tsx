@@ -1,0 +1,109 @@
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ChevronRight, FileSpreadsheet } from "lucide-react";
+import type { AnnexCFacultyReport } from "@my-app/shared";
+
+interface Props {
+  reports: AnnexCFacultyReport[];
+  onSelectReport: (report: AnnexCFacultyReport) => void;
+}
+
+export function ReportTableView({ reports, onSelectReport }: Props) {
+  if (reports.length === 0) {
+    return (
+      <div className="text-center py-16 border border-dashed border-border rounded-2xl bg-card">
+        <FileSpreadsheet className="w-10 h-10 text-muted-foreground mx-auto mb-2 opacity-60" />
+        <h3 className="font-semibold text-foreground">No evaluation reports found</h3>
+        <p className="text-xs text-muted-foreground mt-1">
+          Try adjusting the semester, college, or program filters.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-border rounded-2xl bg-card shadow-xs overflow-hidden">
+      <Table>
+        <TableHeader className="bg-muted/40">
+          <TableRow className="border-border hover:bg-transparent">
+            <TableHead className="font-bold">Faculty Member</TableHead>
+            <TableHead className="font-bold">Department / College</TableHead>
+            <TableHead className="text-center font-bold">SET Rating</TableHead>
+            <TableHead className="text-center font-bold">SEF Rating</TableHead>
+            <TableHead className="text-center font-bold">Students / Classes</TableHead>
+            <TableHead className="font-bold">Status</TableHead>
+            <TableHead className="w-[80px] text-right font-bold">Action</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {reports.map((report) => (
+            <TableRow
+              key={report.id}
+              onClick={() => onSelectReport(report)}
+              className="border-border hover:bg-muted/30 transition cursor-pointer"
+            >
+              <TableCell>
+                <p className="font-bold text-sm text-foreground">{report.faculty_name}</p>
+                <p className="text-xs text-muted-foreground">{report.faculty_rank}</p>
+              </TableCell>
+              <TableCell>
+                <span className="text-xs font-medium text-foreground">
+                  {report.department_college}
+                </span>
+                {report.program_code && (
+                  <Badge variant="outline" className="ml-2 font-mono text-[10px]">
+                    {report.program_code}
+                  </Badge>
+                )}
+              </TableCell>
+              <TableCell className="text-center font-mono font-bold text-primary">
+                {report.overall_set_rating.toFixed(2)}
+              </TableCell>
+              <TableCell className="text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                {report.overall_sef_rating !== null ? report.overall_sef_rating.toFixed(2) : "—"}
+              </TableCell>
+              <TableCell className="text-center text-xs font-mono text-muted-foreground">
+                {report.total_students_evaluated} / {report.total_classes}
+              </TableCell>
+              <TableCell>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] uppercase font-bold ${
+                    report.status === "PUBLISHED"
+                      ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
+                      : report.status === "FINALIZED"
+                        ? "border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10"
+                        : "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10"
+                  }`}
+                >
+                  {report.status}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectReport(report);
+                  }}
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}

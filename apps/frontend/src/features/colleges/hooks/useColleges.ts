@@ -1,9 +1,4 @@
-import {
-  ONE_MINUTE,
-  type CollegeQuery,
-  type CreateCollege,
-  type UpdateCollege,
-} from "@my-app/shared";
+import { ONE_MINUTE, type CreateCollege, type UpdateCollege } from "@my-app/shared";
 import { CollegeAPI } from "../api/college.api";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toQuery } from "@/lib/query.lib";
@@ -11,14 +6,14 @@ import { toQuery } from "@/lib/query.lib";
 export const COLLEGE_KEYS = {
   all: ["colleges"] as const,
   lists: () => [...COLLEGE_KEYS.all, "list"] as const,
-  list: (query: CollegeQuery) => [...COLLEGE_KEYS.lists(), query] as const,
+  list: (query: unknown) => [...COLLEGE_KEYS.lists(), query] as const,
   details: () => [...COLLEGE_KEYS.all, "detail"] as const,
   detail: (id: number) => [...COLLEGE_KEYS.details(), id] as const,
 };
 
 const collegeAPI = new CollegeAPI();
 
-export const useColleges = (query: CollegeQuery) => {
+export const useColleges = (query: unknown) => {
   return useQuery({
     queryKey: COLLEGE_KEYS.list(query),
     queryFn: () => toQuery(collegeAPI.getColleges(query)),

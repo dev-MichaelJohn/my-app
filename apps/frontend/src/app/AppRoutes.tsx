@@ -19,6 +19,7 @@ import SupervisorEvaluationPage from "@/features/evaluations/page/SupervisorEval
 import UserPage from "@/features/users/page/UserPage";
 import { PERMISSIONS } from "@my-app/shared";
 import FacultyTeachingPage from "@/features/evaluations/page/FacultyTeachingPage";
+import AnnexCReportPage from "@/features/evaluations/page/AnnexCReportPage";
 
 export const AppRoutes = createBrowserRouter([
   // ── Public / Guest Routes ──
@@ -186,6 +187,22 @@ export const AppRoutes = createBrowserRouter([
               {
                 path: "/evaluations/supervisor",
                 element: <SupervisorEvaluationPage />,
+              },
+            ],
+          },
+          {
+            element: (
+              <PermissionGuard
+                permissions={[
+                  PERMISSIONS.EVALUATION_REPORT_VIEW_ALL,
+                  PERMISSIONS.EVALUATION_REPORT_VIEW_SELF,
+                ]}
+              />
+            ),
+            children: [
+              {
+                path: "/reports/faculty",
+                element: <AnnexCReportPage />,
               },
             ],
           },
