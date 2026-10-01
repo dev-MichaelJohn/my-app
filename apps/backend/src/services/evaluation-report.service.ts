@@ -11,6 +11,7 @@ import {
   Semesters,
   StudentClasses,
   StudentEvaluationCategories,
+  StudentEvaluationForms,
   StudentEvaluationQuestions,
   StudentEvaluationRatings,
   StudentEvaluations,
@@ -587,6 +588,19 @@ export class EvaluationReportService implements IEvaluationReportService {
 
     if (!faculty) throw new AppError(404, "Faculty member was not found.");
 
+    // Dynamic scale bounds from active templates
+    const [setTemplate] = await tx
+      .select({
+        min_rating: StudentEvaluationForms.min_rating,
+        max_rating: StudentEvaluationForms.max_rating,
+      })
+      .from(StudentEvaluationForms)
+      .where(isNull(StudentEvaluationForms.deleted_at))
+      .limit(1);
+
+    const minRating = setTemplate?.min_rating ?? 1;
+    const maxRating = setTemplate?.max_rating ?? 5;
+
     // Offerings anchored: CourseOffering -> CourseCurriculum -> Course -> Program -> College
     const offerings = await tx
       .select({
@@ -757,13 +771,17 @@ export class EvaluationReportService implements IEvaluationReportService {
       }
     }
 
-    // ── Compute Granular Analytics (SET and SEF per-category and per-indicator) ──
+    // ── Compute Granular Analytics (SET and SEF per-category and per-indicator) dynamically ──
     const { setCategories, setIndicators } = await this.computeSetAnalytics(
       allStudentEvaluationIds,
+      minRating,
+      maxRating,
       tx,
     );
     const { sefCategories, sefIndicators } = await this.computeSefAnalytics(
       allSupervisorEvaluationIds,
+      minRating,
+      maxRating,
       tx,
     );
     const analyticsSummary = this.computeAnalyticsSummary(
@@ -855,6 +873,8 @@ export class EvaluationReportService implements IEvaluationReportService {
       faculty.details,
       semester,
       primaryCollegeName,
+      minRating,
+      maxRating,
       primaryOffering?.collegeId ?? null,
       primaryOffering?.collegeCode ?? null,
       primaryOffering?.programId ?? null,
@@ -903,6 +923,17 @@ export class EvaluationReportService implements IEvaluationReportService {
       )
       .limit(1);
 
+    const [setTemplate] = await tx
+      .select({
+        min_rating: StudentEvaluationForms.min_rating,
+        max_rating: StudentEvaluationForms.max_rating,
+      })
+      .from(StudentEvaluationForms)
+      .where(isNull(StudentEvaluationForms.deleted_at))
+      .limit(1);
+
+    const minRating = setTemplate?.min_rating ?? 1;
+    const maxRating = setTemplate?.max_rating ?? 5;
     const departmentCollege = primaryOffering?.collegeName || "Academic Affairs";
 
     return this.formatReportData(
@@ -910,6 +941,8 @@ export class EvaluationReportService implements IEvaluationReportService {
       faculty?.details,
       semester!,
       departmentCollege,
+      minRating,
+      maxRating,
       primaryOffering?.collegeId ?? null,
       primaryOffering?.collegeCode ?? null,
       primaryOffering?.programId ?? null,
@@ -918,9 +951,11 @@ export class EvaluationReportService implements IEvaluationReportService {
     );
   }
 
-  // ── SET Analytics Aggregation ──
+  // ── Dynamic SET Analytics Aggregation ──
   private async computeSetAnalytics(
     studentEvalIds: number[],
+    minRating: number,
+    maxRating: number,
     tx: PgTransaction,
   ): Promise<{ setCategories: CategoryAnalytics[]; setIndicators: IndicatorAnalytics[] }> {
     if (studentEvalIds.length === 0) {
@@ -933,6 +968,7 @@ export class EvaluationReportService implements IEvaluationReportService {
         questionId: StudentEvaluationQuestions.id,
         questionText: StudentEvaluationQuestions.question,
         questionOrder: StudentEvaluationQuestions.order,
+        questionMaxRating: StudentEvaluationQuestions.max_rating,
         categoryId: StudentEvaluationCategories.id,
         categoryName: StudentEvaluationCategories.name,
         categoryOrder: StudentEvaluationCategories.order,
@@ -948,7 +984,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       )
       .where(inArray(StudentEvaluationRatings.evaluation_id, studentEvalIds));
 
-    // Aggregate by question
     const questionMap = new Map<
       number,
       {
@@ -957,12 +992,12 @@ export class EvaluationReportService implements IEvaluationReportService {
         categoryName: string;
         order: number;
         indicatorText: string;
+        maxRating: number;
         ratings: number[];
         dist: Record<number, number>;
       }
     >();
 
-    // Aggregate by category
     const categoryMap = new Map<
       number,
       {
@@ -970,10 +1005,20 @@ export class EvaluationReportService implements IEvaluationReportService {
         categoryName: string;
         order: number;
         ratings: number[];
+        maxRating: number;
       }
     >();
 
+    // Helper to generate dynamic distribution zero-map based on rating bounds
+    const createDistributionMap = (min: number, max: number) => {
+      const d: Record<number, number> = {};
+      for (let i = min; i <= max; i++) d[i] = 0;
+      return d;
+    };
+
     for (const r of ratingRecords) {
+      const qMax = r.questionMaxRating || maxRating;
+
       // Question map
       if (!questionMap.has(r.questionId)) {
         questionMap.set(r.questionId, {
@@ -982,8 +1027,9 @@ export class EvaluationReportService implements IEvaluationReportService {
           categoryName: r.categoryName,
           order: r.questionOrder,
           indicatorText: r.questionText,
+          maxRating: qMax,
           ratings: [],
-          dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+          dist: createDistributionMap(minRating, qMax),
         });
       }
       const qData = questionMap.get(r.questionId)!;
@@ -996,6 +1042,7 @@ export class EvaluationReportService implements IEvaluationReportService {
           categoryId: r.categoryId,
           categoryName: r.categoryName,
           order: r.categoryOrder,
+          maxRating: qMax,
           ratings: [],
         });
       }
@@ -1018,7 +1065,9 @@ export class EvaluationReportService implements IEvaluationReportService {
           averageRating: avg,
           totalResponses: q.ratings.length,
           ratingDistribution: q.dist,
-          qualitativeInterpretation: this.getQualitativeInterpretation(avg),
+          minRating,
+          maxRating: q.maxRating,
+          qualitativeInterpretation: this.getQualitativeInterpretation(avg, minRating, q.maxRating),
         };
       });
 
@@ -1029,7 +1078,7 @@ export class EvaluationReportService implements IEvaluationReportService {
           c.ratings.length > 0
             ? Number((c.ratings.reduce((s, v) => s + v, 0) / c.ratings.length).toFixed(2))
             : 0;
-        const percentage = Number(((avg / 5) * 100).toFixed(2));
+        const percentage = c.maxRating > 0 ? Number(((avg / c.maxRating) * 100).toFixed(2)) : 0;
         return {
           categoryId: c.categoryId,
           categoryName: c.categoryName,
@@ -1037,16 +1086,19 @@ export class EvaluationReportService implements IEvaluationReportService {
           averageRating: avg,
           totalResponses: c.ratings.length,
           percentageScore: percentage,
-          qualitativeInterpretation: this.getQualitativeInterpretation(avg),
+          maxRating: c.maxRating,
+          qualitativeInterpretation: this.getQualitativeInterpretation(avg, minRating, c.maxRating),
         };
       });
 
     return { setCategories, setIndicators };
   }
 
-  // ── SEF Analytics Aggregation ──
+  // ── Dynamic SEF Analytics Aggregation ──
   private async computeSefAnalytics(
     supervisorEvalIds: number[],
+    minRating: number,
+    maxRating: number,
     tx: PgTransaction,
   ): Promise<{ sefCategories: CategoryAnalytics[]; sefIndicators: IndicatorAnalytics[] }> {
     if (supervisorEvalIds.length === 0) {
@@ -1059,6 +1111,7 @@ export class EvaluationReportService implements IEvaluationReportService {
         questionId: SupervisorEvaluationQuestions.id,
         questionText: SupervisorEvaluationQuestions.question,
         questionOrder: SupervisorEvaluationQuestions.order,
+        questionMaxRating: SupervisorEvaluationQuestions.max_rating,
         categoryId: SupervisorEvaluationCategories.id,
         categoryName: SupervisorEvaluationCategories.name,
         categoryOrder: SupervisorEvaluationCategories.order,
@@ -1100,6 +1153,12 @@ export class EvaluationReportService implements IEvaluationReportService {
       meansMap.get(m.questionId)!.push(m.descriptor);
     }
 
+    const createDistributionMap = (min: number, max: number) => {
+      const d: Record<number, number> = {};
+      for (let i = min; i <= max; i++) d[i] = 0;
+      return d;
+    };
+
     const questionMap = new Map<
       number,
       {
@@ -1108,6 +1167,7 @@ export class EvaluationReportService implements IEvaluationReportService {
         categoryName: string;
         order: number;
         indicatorText: string;
+        maxRating: number;
         ratings: number[];
         dist: Record<number, number>;
       }
@@ -1119,11 +1179,14 @@ export class EvaluationReportService implements IEvaluationReportService {
         categoryId: number;
         categoryName: string;
         order: number;
+        maxRating: number;
         ratings: number[];
       }
     >();
 
     for (const r of ratingRecords) {
+      const qMax = r.questionMaxRating || maxRating;
+
       if (!questionMap.has(r.questionId)) {
         questionMap.set(r.questionId, {
           questionId: r.questionId,
@@ -1131,8 +1194,9 @@ export class EvaluationReportService implements IEvaluationReportService {
           categoryName: r.categoryName,
           order: r.questionOrder,
           indicatorText: r.questionText,
+          maxRating: qMax,
           ratings: [],
-          dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+          dist: createDistributionMap(minRating, qMax),
         });
       }
       const qData = questionMap.get(r.questionId)!;
@@ -1144,6 +1208,7 @@ export class EvaluationReportService implements IEvaluationReportService {
           categoryId: r.categoryId,
           categoryName: r.categoryName,
           order: r.categoryOrder,
+          maxRating: qMax,
           ratings: [],
         });
       }
@@ -1167,7 +1232,9 @@ export class EvaluationReportService implements IEvaluationReportService {
           averageRating: avg,
           totalResponses: q.ratings.length,
           ratingDistribution: q.dist,
-          qualitativeInterpretation: this.getQualitativeInterpretation(avg),
+          minRating,
+          maxRating: q.maxRating,
+          qualitativeInterpretation: this.getQualitativeInterpretation(avg, minRating, q.maxRating),
           ...(meansList && meansList.length > 0 ? { means: meansList } : {}),
         };
       });
@@ -1179,7 +1246,7 @@ export class EvaluationReportService implements IEvaluationReportService {
           c.ratings.length > 0
             ? Number((c.ratings.reduce((s, v) => s + v, 0) / c.ratings.length).toFixed(2))
             : 0;
-        const percentage = Number(((avg / 5) * 100).toFixed(2));
+        const percentage = c.maxRating > 0 ? Number(((avg / c.maxRating) * 100).toFixed(2)) : 0;
         return {
           categoryId: c.categoryId,
           categoryName: c.categoryName,
@@ -1187,7 +1254,8 @@ export class EvaluationReportService implements IEvaluationReportService {
           averageRating: avg,
           totalResponses: c.ratings.length,
           percentageScore: percentage,
-          qualitativeInterpretation: this.getQualitativeInterpretation(avg),
+          maxRating: c.maxRating,
+          qualitativeInterpretation: this.getQualitativeInterpretation(avg, minRating, c.maxRating),
         };
       });
 
@@ -1260,12 +1328,17 @@ export class EvaluationReportService implements IEvaluationReportService {
     };
   }
 
-  // ── CHED CMO 19 s. 2025 Qualitative Descriptor ──
-  private getQualitativeInterpretation(rating: number): string {
-    if (rating >= 4.5) return "Always Manifested (Outstanding)";
-    if (rating >= 3.5) return "Often Manifested (Very Satisfactory)";
-    if (rating >= 2.5) return "Sometimes Manifested (Satisfactory)";
-    if (rating >= 1.5) return "Seldom Manifested (Fair)";
+  // ── Dynamic Rating Qualitative Interpretation ──
+  private getQualitativeInterpretation(rating: number, minRating = 1, maxRating = 5): string {
+    const range = maxRating - minRating;
+    if (range <= 0) return `Score: ${rating.toFixed(2)}`;
+
+    const ratio = (rating - minRating) / range;
+
+    if (ratio >= 0.85) return "Always Manifested (Outstanding)";
+    if (ratio >= 0.65) return "Often Manifested (Very Satisfactory)";
+    if (ratio >= 0.45) return "Sometimes Manifested (Satisfactory)";
+    if (ratio >= 0.25) return "Seldom Manifested (Fair)";
     return "Never/Rarely Manifested (Poor)";
   }
 
@@ -1274,6 +1347,8 @@ export class EvaluationReportService implements IEvaluationReportService {
     details: typeof PersonalDetails.$inferSelect | undefined,
     semester: typeof Semesters.$inferSelect,
     departmentCollege: string,
+    minRating = 1,
+    maxRating = 5,
     collegeId?: number | null,
     collegeCode?: string | null,
     programId?: number | null,
@@ -1291,6 +1366,8 @@ export class EvaluationReportService implements IEvaluationReportService {
       faculty_name: facultyName,
       faculty_rank: "Instructor / Faculty Member",
       department_college: departmentCollege,
+      min_rating: minRating,
+      max_rating: maxRating,
       ...(collegeId !== undefined && collegeId !== null ? { college_id: collegeId } : {}),
       ...(departmentCollege ? { college_name: departmentCollege } : {}),
       ...(collegeCode !== undefined && collegeCode !== null ? { college_code: collegeCode } : {}),
