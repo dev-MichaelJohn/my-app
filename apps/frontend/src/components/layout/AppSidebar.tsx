@@ -138,22 +138,6 @@ const NAVIGATION_SECTIONS: NavSection[] = [
           PERMISSIONS.EVALUATION_REPORT_VIEW_SELF,
         ],
       },
-    ],
-  },
-  {
-    heading: "System Administration",
-    items: [
-      {
-        title: "User Accounts",
-        href: "/admin/users",
-        icon: Users,
-        permission: PERMISSIONS.ACCOUNT_READ,
-      },
-    ],
-  },
-  {
-    heading: "Reports & Analytics",
-    items: [
       {
         title: "Analytics & Benchmarks",
         href: "/analytics",
@@ -167,14 +151,16 @@ const NAVIGATION_SECTIONS: NavSection[] = [
           PERMISSIONS.EVALUATION_REPORT_VIEW_SELF,
         ],
       },
+    ],
+  },
+  {
+    heading: "System Administration",
+    items: [
       {
-        title: "IFER & FEDAF Reports",
-        href: "/reports/faculty",
-        icon: FileSpreadsheet,
-        anyPermissions: [
-          PERMISSIONS.EVALUATION_REPORT_VIEW_ALL,
-          PERMISSIONS.EVALUATION_REPORT_VIEW_SELF,
-        ],
+        title: "User Accounts",
+        href: "/admin/users",
+        icon: Users,
+        permission: PERMISSIONS.ACCOUNT_READ,
       },
     ],
   },
