@@ -294,13 +294,21 @@ export function AnnexCDocument({ report }: Props) {
       {/* Document Sign-Off Lines */}
       <div className="grid grid-cols-2 gap-12 pt-8 border-t border-border print:border-black text-xs">
         <div className="space-y-4 text-center">
-          <div className="h-10 border-b border-border print:border-black" />
-          <p className="font-semibold text-foreground print:text-black">Prepared by (Staff)</p>
+          <div className="h-10 border-b border-border flex items-end justify-center pb-1 font-semibold text-foreground print:border-black print:text-black">
+            PIT-FES Designated Evaluation Office
+          </div>
+          <p className="font-semibold text-foreground print:text-black">
+            Prepared by (Designated Office / Staff)
+          </p>
         </div>
         <div className="space-y-4 text-center">
-          <div className="h-10 border-b border-border print:border-black" />
+          <div className="h-10 border-b border-border flex items-end justify-center pb-1 font-semibold text-foreground print:border-black print:text-black">
+            {report.college_name
+              ? `${report.college_name} Dean's Office`
+              : "College Dean / Authorized Official"}
+          </div>
           <p className="font-semibold text-foreground print:text-black">
-            Reviewed by (Authorized Official)
+            Reviewed by (Authorized Official / College Dean)
           </p>
         </div>
       </div>

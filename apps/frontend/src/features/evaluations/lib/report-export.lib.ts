@@ -247,15 +247,15 @@ export function downloadAnnexDPdf(report: AnnexCFacultyReport) {
         </p>
 
         <div class="sign-grid">
-          <div class="sign-card">
-            <strong>SUPERVISOR</strong>
-            <p style="margin: 6px 0 2px 0;">Name: ${plan.supervisor_name || "—"}</p>
-            <p style="margin: 0; color: #666; font-size: 8pt;">Date Signed: ${plan.supervisor_signed_at ? new Date(plan.supervisor_signed_at).toLocaleDateString() : "Pending"}</p>
+          <div>
+            <div style="font-weight: 600; padding-bottom: 4px;">PIT-FES Designated Evaluation Staff</div>
+            <div class="sign-line"></div>
+            Prepared by (Designated Staff)
           </div>
-          <div class="sign-card">
-            <strong>FACULTY MEMBER</strong>
-            <p style="margin: 6px 0 2px 0;">Name: ${report.faculty_name}</p>
-            <p style="margin: 0; color: #666; font-size: 8pt;">Date Signed: ${plan.faculty_signed_at ? new Date(plan.faculty_signed_at).toLocaleDateString() : "Pending"}</p>
+          <div>
+            <div style="font-weight: 600; padding-bottom: 4px;">${report.department_college || "College Dean's Office"}</div>
+            <div class="sign-line"></div>
+            Reviewed by (Authorized Official / College Dean)
           </div>
         </div>
       </body>

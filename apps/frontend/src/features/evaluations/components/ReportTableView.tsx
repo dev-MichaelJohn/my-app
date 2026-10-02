@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, FileSpreadsheet, Sparkles } from "lucide-react";
 import type { AnnexCFacultyReport } from "@my-app/shared";
+import { Can } from "@/components/Can";
 
 interface Props {
   reports: AnnexCFacultyReport[];
@@ -34,16 +35,18 @@ export function ReportTableView({
           faculty teaching in this semester.
         </p>
         {canGenerate && onGenerateClick && (
-          <div className="pt-2">
-            <Button
-              onClick={onGenerateClick}
-              size="sm"
-              className="gap-2 text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Generate Reports for Semester</span>
-            </Button>
-          </div>
+          <Can anyRole={["SYS_ADMIN", "ADMIN"]}>
+            <div className="pt-2">
+              <Button
+                onClick={onGenerateClick}
+                size="sm"
+                className="gap-2 text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Generate Reports for Semester</span>
+              </Button>
+            </div>
+          </Can>
         )}
       </div>
     );

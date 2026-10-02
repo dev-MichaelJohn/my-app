@@ -58,6 +58,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  ne,
   or,
   type SQL,
   sql,
@@ -120,7 +121,7 @@ export class EvaluationReportService implements IEvaluationReportService {
     client: DbClient = db,
   ): ResultAsync<AnnexCFacultyReport, AppError> {
     return WithTransaction(client, async (tx) => {
-      this.enforceReportReadAccess(facultyId, actorUser);
+      this.enforceReportReadAccess(facultyId, semesterId, actorUser, tx);
 
       const actorRoles = actorUser.roles ?? [];
       const isPlainFaculty =
@@ -476,24 +477,73 @@ export class EvaluationReportService implements IEvaluationReportService {
       const chairProgramIds = chairships.map((c) => c.id);
 
       return WithTransaction(client, async (tx) => {
-        // 🧹 Clean up any orphaned 0-class reports that were erroneously generated (e.g. Report #18)
+        // 🧹 Clean up any orphaned 0-class reports
         await tx
           .delete(IndividualFacultyReports)
           .where(eq(IndividualFacultyReports.total_classes, 0));
 
         const filters: SQL[] = [
-          // 🔒 Ensure only reports for faculty with actual teaching classes are ever queried
+          // 🔒 Only show faculty with actual teaching assignments (> 0 classes)
           sql`${IndividualFacultyReports.total_classes} > 0`,
         ];
 
-        // ── 1. Role-Based Scoping ──
+        // ── 1. Role-Based Scoping per CMO 19 s. 2025 ──
         if (isSysAdmin || isAdmin) {
+          // Admins have campus-wide visibility
           if (faculty_id) filters.push(eq(IndividualFacultyReports.faculty_id, faculty_id));
         } else if (isSupervisor) {
-          const officeFilters: SQL[] = [];
+          const supervisorScopeFilters: SQL[] = [];
 
+          // ── A. COLLEGE DEAN: Supervises ONLY Program Chairs under their college ──
+          if (deanCollegeIds.length > 0) {
+            const programsInCollege = await tx
+              .select({
+                programId: Programs.id,
+                chairId: ProgramChairs.chair_id,
+              })
+              .from(Programs)
+              .leftJoin(
+                ProgramChairs,
+                and(eq(Programs.id, ProgramChairs.program_id), isNull(ProgramChairs.deleted_at)),
+              )
+              .where(
+                and(inArray(Programs.college_id, deanCollegeIds), isNull(Programs.deleted_at)),
+              );
+
+            const chairsUnderDean = programsInCollege
+              .map((p) => p.chairId)
+              .filter((id): id is number => typeof id === "number");
+
+            // Dean sees the Program Chairs of their college
+            if (chairsUnderDean.length > 0) {
+              supervisorScopeFilters.push(
+                inArray(IndividualFacultyReports.faculty_id, chairsUnderDean),
+              );
+            }
+
+            // Exception: If a program has a vacant chairship, Dean acts as direct supervisor
+            const vacantProgramIds = programsInCollege
+              .filter((p) => p.chairId === null)
+              .map((p) => p.programId);
+
+            if (vacantProgramIds.length > 0) {
+              supervisorScopeFilters.push(
+                sql`EXISTS (
+                  SELECT 1 FROM ${CourseOfferings}
+                  INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
+                  INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
+                  WHERE ${CourseOfferings.faculty_id} = ${IndividualFacultyReports.faculty_id}
+                    AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
+                    AND ${Courses.program_id} IN ${vacantProgramIds}
+                    AND ${CourseOfferings.deleted_at} IS NULL
+                )`,
+              );
+            }
+          }
+
+          // ── B. PROGRAM CHAIR: Supervises regular faculty teaching in their program (their underlings) ──
           if (chairProgramIds.length > 0) {
-            officeFilters.push(
+            supervisorScopeFilters.push(
               sql`EXISTS (
                 SELECT 1 FROM ${CourseOfferings}
                 INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
@@ -506,28 +556,25 @@ export class EvaluationReportService implements IEvaluationReportService {
             );
           }
 
-          if (deanCollegeIds.length > 0) {
-            officeFilters.push(
-              sql`EXISTS (
-                SELECT 1 FROM ${CourseOfferings}
-                INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
-                INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
-                INNER JOIN ${Programs} ON ${Courses.program_id} = ${Programs.id}
-                WHERE ${CourseOfferings.faculty_id} = ${IndividualFacultyReports.faculty_id}
-                  AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
-                  AND ${Programs.college_id} IN ${deanCollegeIds}
-                  AND ${CourseOfferings.deleted_at} IS NULL
-              )`,
-            );
+          if (supervisorScopeFilters.length > 0) {
+            filters.push(or(...supervisorScopeFilters)!);
+          } else {
+            return createPaginatedData({
+              data: [],
+              currentPage: 1,
+              pageSize: limit,
+              totalItems: 0,
+            });
           }
 
-          officeFilters.push(eq(IndividualFacultyReports.faculty_id, actorUser.account.id));
-          filters.push(or(...officeFilters)!);
+          // 🔒 A supervisor never evaluates themselves in their supervisory list
+          filters.push(ne(IndividualFacultyReports.faculty_id, actorUser.account.id));
 
           if (faculty_id) {
             filters.push(eq(IndividualFacultyReports.faculty_id, faculty_id));
           }
         } else {
+          // Pure Faculty: Only own reports that are published
           filters.push(eq(IndividualFacultyReports.faculty_id, actorUser.account.id));
           filters.push(eq(IndividualFacultyReports.status, "PUBLISHED"));
         }
@@ -548,7 +595,6 @@ export class EvaluationReportService implements IEvaluationReportService {
           );
         }
 
-        // Explicit college/program filter
         if (program_id) {
           filters.push(
             sql`EXISTS (
@@ -1601,18 +1647,108 @@ export class EvaluationReportService implements IEvaluationReportService {
     return curated;
   }
 
-  private enforceReportReadAccess(facultyId: number, actorUser: GetUser): void {
+  private async enforceReportReadAccess(
+    facultyId: number,
+    semesterId: number,
+    actorUser: GetUser,
+    tx: PgTransaction,
+  ): Promise<void> {
     const actorRoles = actorUser.roles ?? [];
     const isSelf = actorUser.account.id === facultyId;
-    const isPrivileged =
-      actorRoles.includes("SYS_ADMIN") ||
-      actorRoles.includes("ADMIN") ||
-      actorRoles.includes("SUPERVISOR");
+    const isSysAdmin = actorRoles.includes("SYS_ADMIN");
+    const isAdmin = actorRoles.includes("ADMIN");
+    const isSupervisor = actorRoles.includes("SUPERVISOR");
 
-    if (!isSelf && !isPrivileged) {
+    if (isSelf || isSysAdmin || isAdmin) return;
+
+    if (!isSupervisor) {
       throw new AppError(
         403,
         "You do not have permission to view other faculty evaluation reports.",
+      );
+    }
+
+    const deanships = actorUser.offices?.deanships || [];
+    const chairships = actorUser.offices?.chairships || [];
+    const deanCollegeIds = deanships.map((d) => d.id);
+    const chairProgramIds = chairships.map((c) => c.id);
+
+    let inScope = false;
+
+    // 1. If Dean, is the target a Program Chair under their college?
+    if (deanCollegeIds.length > 0) {
+      const [chairMatch] = await tx
+        .select({ id: ProgramChairs.id })
+        .from(ProgramChairs)
+        .innerJoin(Programs, eq(ProgramChairs.program_id, Programs.id))
+        .where(
+          and(
+            eq(ProgramChairs.chair_id, facultyId),
+            inArray(Programs.college_id, deanCollegeIds),
+            isNull(ProgramChairs.deleted_at),
+            isNull(Programs.deleted_at),
+          ),
+        );
+
+      if (chairMatch) inScope = true;
+
+      // Or is target teaching in a program with vacant chairship?
+      if (!inScope) {
+        const [vacantMatch] = await tx
+          .select({ id: CourseOfferings.id })
+          .from(CourseOfferings)
+          .innerJoin(
+            CourseCurriculums,
+            eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+          )
+          .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+          .innerJoin(Programs, eq(Courses.program_id, Programs.id))
+          .leftJoin(
+            ProgramChairs,
+            and(eq(Programs.id, ProgramChairs.program_id), isNull(ProgramChairs.deleted_at)),
+          )
+          .where(
+            and(
+              eq(CourseOfferings.faculty_id, facultyId),
+              eq(CourseOfferings.semester_id, semesterId),
+              inArray(Programs.college_id, deanCollegeIds),
+              isNull(ProgramChairs.id),
+              isNull(CourseOfferings.deleted_at),
+            ),
+          )
+          .limit(1);
+
+        if (vacantMatch) inScope = true;
+      }
+    }
+
+    // 2. If Chair, is target teaching courses in their program?
+    if (!inScope && chairProgramIds.length > 0) {
+      const [teachingMatch] = await tx
+        .select({ id: CourseOfferings.id })
+        .from(CourseOfferings)
+        .innerJoin(
+          CourseCurriculums,
+          eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+        )
+        .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+        .where(
+          and(
+            eq(CourseOfferings.faculty_id, facultyId),
+            eq(CourseOfferings.semester_id, semesterId),
+            inArray(Courses.program_id, chairProgramIds),
+            isNull(CourseOfferings.deleted_at),
+          ),
+        )
+        .limit(1);
+
+      if (teachingMatch) inScope = true;
+    }
+
+    if (!inScope) {
+      throw new AppError(
+        403,
+        "Access denied: This faculty member is outside your direct supervisory scope.",
       );
     }
   }

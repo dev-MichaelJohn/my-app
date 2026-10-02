@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle, SendHorizontal, PenTool, Save, Info } from "lucide-react";
+import { CheckCircle, SendHorizontal, PenTool, Save, Info, Clock } from "lucide-react";
 import { useUpdateFedafPlan, useSignFedaf } from "../hooks/useEvaluationSubmissions";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { toast } from "sonner";
@@ -20,8 +20,11 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
   const signFedafMutation = useSignFedaf();
 
   const isOwnReport = report.faculty_id === currentUser?.account.id;
-  const isPlanPublished =
-    report.status === "PUBLISHED" || Boolean(report.fedaf_plan?.supervisor_signed_at);
+  const isSupervisorSigned = Boolean(report.fedaf_plan?.supervisor_signed_at);
+  const isFacultySigned = Boolean(report.fedaf_plan?.faculty_signed_at);
+  const isPlanPublished = report.status === "PUBLISHED" || isSupervisorSigned;
+
+  // Only a supervisor viewing someone else's report can edit the supervisory plan
   const canEditSupervisorPlan = isPrivileged && !isOwnReport;
 
   const [editMode, setEditMode] = useState(false);
@@ -31,7 +34,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
     action_plan: report.fedaf_plan?.action_plan || "",
   });
 
-  // ── Friction Confirmation Dialog States ──
+  // Friction Confirmation Dialog States
   const [confirmSupervisorSignOpen, setConfirmSupervisorSignOpen] = useState(false);
   const [confirmFacultySignOpen, setConfirmFacultySignOpen] = useState(false);
 
@@ -65,6 +68,13 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
       toast.error(err.message || "Failed to sign acknowledgment.");
     }
   };
+
+  // Determine supervisor designation label
+  const supervisorRoleLabel = currentUser?.offices?.chairships?.length
+    ? "Program Chair"
+    : currentUser?.offices?.deanships?.length
+      ? "College Dean"
+      : "Supervisor";
 
   return (
     <Card className="border-border bg-card shadow-xs">
@@ -107,12 +117,12 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
             <span>
               <strong>Personal Teaching Evaluation:</strong> Under CHED CMO 19 s. 2025 Section 9.4,
               your supervisory development plan is formulated by your immediate supervising academic
-              head (Program Chair or VPAA).
+              head (Program Chair or College Dean).
             </span>
           </div>
         )}
 
-        {/* 🔒 IF FACULTY VIEWS BEFORE SUPERVISOR SIGNS/PUBLISHES: HIDE DRAFT PLAN */}
+        {/* 🔒 IF FACULTY VIEWS BEFORE SUPERVISOR SIGNS: HIDE DRAFT PLAN */}
         {isOwnReport && !isPlanPublished ? (
           <div className="p-6 text-center border border-dashed border-border rounded-2xl bg-muted/20 space-y-2">
             <div className="w-10 h-10 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center">
@@ -178,7 +188,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
             </div>
           </div>
         ) : (
-          /* Published Plan (Visible to supervisor, and visible to faculty once published) */
+          /* View Mode */
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="p-3 rounded-xl border border-border/70 bg-muted/20 space-y-1 text-xs">
               <p className="font-bold text-foreground uppercase tracking-wide text-[10px]">
@@ -207,9 +217,9 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
           </div>
         )}
 
-        {/* E-Signature Cards */}
+        {/* ── E-Signature Cards ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-          {/* Supervisor Card */}
+          {/* ── 1. SUPERVISOR CARD (Left) ── */}
           <div className="p-3.5 rounded-xl border border-border bg-muted/30 flex items-center justify-between">
             <div className="space-y-0.5 text-xs">
               <span className="font-bold text-foreground">Supervisor Acknowledgment</span>
@@ -223,7 +233,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
               )}
             </div>
 
-            {report.fedaf_plan?.supervisor_signed_at ? (
+            {isSupervisorSigned ? (
               <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1">
                 <CheckCircle className="w-3 h-3" /> Signed & Published
               </Badge>
@@ -235,44 +245,54 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
                 className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
               >
                 <SendHorizontal className="w-3.5 h-3.5" />
-                <span>Sign & Publish to Faculty</span>
+                <span>Sign as {supervisorRoleLabel} & Publish</span>
               </Button>
             ) : (
               <Badge variant="outline" className="text-muted-foreground text-[10px]">
-                Pending Supervisor
+                Pending Supervisor Signature
               </Badge>
             )}
           </div>
 
-          {/* Faculty Card */}
+          {/* ── 2. FACULTY CARD (Right) ── */}
           <div className="p-3.5 rounded-xl border border-border bg-muted/30 flex items-center justify-between">
             <div className="space-y-0.5 text-xs">
               <span className="font-bold text-foreground">Faculty Member Acknowledgment</span>
               <p className="text-muted-foreground">{report.faculty_name}</p>
               {report.fedaf_plan?.faculty_signed_at && (
                 <p className="text-[10px] text-muted-foreground">
-                  Signed: {new Date(report.fedaf_plan.faculty_signed_at).toLocaleDateString()}
+                  Acknowledged: {new Date(report.fedaf_plan.faculty_signed_at).toLocaleDateString()}
                 </p>
               )}
             </div>
 
-            {report.fedaf_plan?.faculty_signed_at ? (
+            {isFacultySigned ? (
               <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1">
                 <CheckCircle className="w-3 h-3" /> Acknowledged
               </Badge>
-            ) : isOwnReport && isPlanPublished ? (
-              <Button
-                size="sm"
-                onClick={() => setConfirmFacultySignOpen(true)}
-                disabled={signFedafMutation.isPending}
-                className="h-8 text-xs gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 shadow-2xs"
-              >
-                <CheckCircle className="w-3.5 h-3.5" />
-                <span>Sign Acknowledgment</span>
-              </Button>
+            ) : isOwnReport ? (
+              isSupervisorSigned ? (
+                <Button
+                  size="sm"
+                  onClick={() => setConfirmFacultySignOpen(true)}
+                  disabled={signFedafMutation.isPending}
+                  className="h-8 text-xs gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 shadow-2xs"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  <span>Sign Acknowledgment</span>
+                </Button>
+              ) : (
+                <Badge variant="outline" className="text-muted-foreground text-[10px] gap-1">
+                  <Clock className="w-3 h-3 opacity-60" /> Awaiting Supervisor Signature
+                </Badge>
+              )
             ) : (
-              <Badge variant="outline" className="text-muted-foreground text-[10px]">
-                Awaiting Supervisor Signature
+              /* When viewing as Supervisor/Admin, show status badge — NEVER a signature button */
+              <Badge
+                variant="outline"
+                className="text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] gap-1"
+              >
+                <Clock className="w-3 h-3 opacity-60" /> Awaiting Faculty Acknowledgment
               </Badge>
             )}
           </div>
@@ -289,7 +309,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
             Signing certifies that you have formulated and discussed this development plan with{" "}
             <strong>{report.faculty_name}</strong>.
             <span className="block mt-2 font-semibold text-emerald-600 dark:text-emerald-400 text-xs">
-              ✓ This action will automatically publish the report and notify the faculty member to
+              ✓ This action will officially publish the report and notify the faculty member to
               review and sign their acknowledgment.
             </span>
           </span>

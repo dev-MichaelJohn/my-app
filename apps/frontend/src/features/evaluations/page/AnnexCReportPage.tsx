@@ -28,6 +28,7 @@ import {
   type FacultyReportQuery,
   type ReportStatus,
 } from "@my-app/shared";
+import { Badge } from "@/components/ui/badge";
 
 export default function AnnexCReportPage() {
   const { user, hasAnyPermission, isSysAdmin, isAdmin, isSupervisor, isFaculty, isDean, isChair } =
@@ -216,12 +217,33 @@ export default function AnnexCReportPage() {
           {/* 🚀 Header with Generate / Consolidate Action Button */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Faculty Evaluation Reports & Analytics
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                  Faculty Evaluation Reports & Analytics
+                </h1>
+                {isDean && !isSysAdmin && !isAdmin && (
+                  <Badge
+                    variant="outline"
+                    className="border-primary/40 text-primary text-xs font-semibold"
+                  >
+                    Supervising: Program Chairs
+                  </Badge>
+                )}
+                {isChair && !isSysAdmin && !isAdmin && (
+                  <Badge
+                    variant="outline"
+                    className="border-primary/40 text-primary text-xs font-semibold"
+                  >
+                    Supervising: Department Faculty
+                  </Badge>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Browse consolidated teaching performance reports, category charts, and FEDAF plans
-                by college and program.
+                {isDean && !isSysAdmin && !isAdmin
+                  ? "Evaluating performance and FEDAF plans of Program Chairs under your college."
+                  : isChair && !isSysAdmin && !isAdmin
+                    ? "Evaluating performance and FEDAF plans of faculty teaching under your academic program."
+                    : "Browse consolidated teaching performance reports, category charts, and FEDAF plans."}
               </p>
             </div>
 
