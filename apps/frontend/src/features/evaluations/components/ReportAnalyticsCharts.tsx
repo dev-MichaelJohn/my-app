@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   type ChartConfig,
@@ -17,6 +17,13 @@ interface Props {
   report: AnnexCFacultyReport;
 }
 
+// Procedural dynamic palette generator for any number of categories
+function getDynamicCategoryColor(index: number, total: number): string {
+  const safeTotal = Math.max(1, total);
+  const hue = Math.round((index * 360) / safeTotal);
+  return `hsl(${hue}, 70%, 48%)`;
+}
+
 export function ReportAnalyticsCharts({ report }: Props) {
   const [activeTab, setActiveTab] = useState<"SET" | "SEF">("SET");
 
@@ -29,24 +36,30 @@ export function ReportAnalyticsCharts({ report }: Props) {
       lowestIndicators: [],
       categoryComparison: [],
     },
+    min_rating = 1,
+    max_rating = 5,
   } = report;
 
-  // ── Pie Chart Data (SET Categories) ──
-  const pieColors = ["#0284c7", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
+  // ── Dynamic Category Pie Data ──
+  const categoryCount = set_category_analytics.length;
 
-  const categoryPieData = set_category_analytics.map((c, idx) => ({
-    name: c.categoryName,
-    value: c.averageRating,
-    fill: pieColors[idx % pieColors.length], // Recharts uses this directly; Cell is no longer needed
-  }));
+  const categoryPieData = useMemo(() => {
+    return set_category_analytics.map((c, idx) => ({
+      name: c.categoryName,
+      value: c.averageRating,
+      fill: getDynamicCategoryColor(idx, categoryCount),
+    }));
+  }, [set_category_analytics, categoryCount]);
 
-  const pieChartConfig: ChartConfig = set_category_analytics.reduce((acc, curr, idx) => {
-    acc[`cat_${curr.categoryId}`] = {
-      label: curr.categoryName,
-      color: pieColors[idx % pieColors.length],
-    };
-    return acc;
-  }, {} as ChartConfig);
+  const pieChartConfig: ChartConfig = useMemo(() => {
+    return set_category_analytics.reduce((acc, curr, idx) => {
+      acc[`cat_${curr.categoryId}`] = {
+        label: curr.categoryName,
+        color: getDynamicCategoryColor(idx, categoryCount),
+      };
+      return acc;
+    }, {} as ChartConfig);
+  }, [set_category_analytics, categoryCount]);
 
   const displayedIndicators =
     activeTab === "SET" ? set_indicator_analytics : sef_indicator_analytics;
@@ -114,15 +127,15 @@ export function ReportAnalyticsCharts({ report }: Props) {
         </Card>
       </div>
 
-      {/* ── 1. Category Breakdown: Pie Chart ── */}
+      {/* ── 1. Dynamic Category Breakdown: Pie Chart ── */}
       <Card className="border-border bg-card shadow-xs">
         <CardHeader className="pb-2">
           <CardTitle className="text-base font-bold flex items-center gap-2">
             <BarChart2 className="w-4 h-4 text-primary" />
-            <span>Category Performance Distribution (Pie Chart)</span>
+            <span>Category Performance Distribution ({categoryCount} Categories)</span>
           </CardTitle>
           <CardDescription className="text-xs">
-            Proportional mean score performance across CHED evaluation categories.
+            Dynamic mean scores across all evaluated categories.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -140,7 +153,7 @@ export function ReportAnalyticsCharts({ report }: Props) {
                         <ChartTooltipContent
                           formatter={(value, name) => (
                             <span className="font-mono font-bold">
-                              {name}: {Number(value).toFixed(2)} / 5.00
+                              {name}: {Number(value).toFixed(2)}
                             </span>
                           )}
                         />
@@ -162,46 +175,53 @@ export function ReportAnalyticsCharts({ report }: Props) {
               )}
             </div>
 
-            {/* Category Score Badges & Percentages */}
-            <div className="space-y-3">
-              {set_category_analytics.map((cat, idx) => (
-                <div
-                  key={cat.categoryId}
-                  className="p-3 rounded-xl border border-border/70 bg-muted/30 space-y-1.5"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 truncate">
-                      <span
-                        className="w-3 h-3 rounded-full shrink-0"
-                        style={{ backgroundColor: pieColors[idx % pieColors.length] }}
-                      />
-                      <span className="font-bold text-foreground truncate">{cat.categoryName}</span>
+            {/* Dynamic Category Score Badges & Percentages */}
+            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+              {set_category_analytics.map((cat, idx) => {
+                const effectiveCatMax = cat.maxRating || max_rating || 5;
+                const color = getDynamicCategoryColor(idx, categoryCount);
+
+                return (
+                  <div
+                    key={cat.categoryId}
+                    className="p-3 rounded-xl border border-border/70 bg-muted/30 space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 truncate">
+                        <span
+                          className="w-3 h-3 rounded-full shrink-0"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span className="font-bold text-foreground truncate">
+                          {cat.categoryName}
+                        </span>
+                      </div>
+                      <span className="font-mono font-bold text-primary">
+                        {cat.averageRating.toFixed(2)} / {effectiveCatMax.toFixed(2)}
+                      </span>
                     </div>
-                    <span className="font-mono font-bold text-primary">
-                      {cat.averageRating.toFixed(2)} / 5.00
-                    </span>
+                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${Math.min(100, Math.max(0, cat.percentageScore))}%`,
+                          backgroundColor: color,
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+                      <span>{cat.qualitativeInterpretation}</span>
+                      <span className="font-mono">{cat.percentageScore}%</span>
+                    </div>
                   </div>
-                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${cat.percentageScore}%`,
-                        backgroundColor: pieColors[idx % pieColors.length],
-                      }}
-                    />
-                  </div>
-                  <div className="flex justify-between items-center text-[10px] text-muted-foreground">
-                    <span>{cat.qualitativeInterpretation}</span>
-                    <span className="font-mono">{cat.percentageScore}%</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* ── 2. Per-Indicator Rating Distribution (Bar Graph) ── */}
+      {/* ── 2. Dynamic Indicator Rating Distribution (Bar Graph) ── */}
       <Card className="border-border bg-card shadow-xs">
         <CardHeader className="pb-3 border-b border-border">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -210,8 +230,8 @@ export function ReportAnalyticsCharts({ report }: Props) {
                 Per-Indicator Rating Distribution (Bar Graph)
               </CardTitle>
               <CardDescription className="text-xs">
-                Frequency count and visual breakdown for each rating scale level (1 to 5) per
-                benchmark statement.
+                Frequency count and visual breakdown across dynamic scale levels ({min_rating ?? 1}{" "}
+                to {max_rating ?? 5}) per benchmark statement.
               </CardDescription>
             </div>
 
@@ -253,8 +273,15 @@ export function ReportAnalyticsCharts({ report }: Props) {
           ) : (
             displayedIndicators.map((ind, idx) => {
               const totalResponses = ind.totalResponses || 1;
-              const dist = ind.ratingDistribution || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-              const scaleLevels = [1, 2, 3, 4, 5];
+              const indMin = ind.minRating ?? min_rating ?? 1;
+              const indMax = ind.maxRating ?? max_rating ?? 5;
+              const dist = ind.ratingDistribution || {};
+
+              // Dynamically build scale array from actual minRating to maxRating
+              const dynamicScaleLevels: number[] = [];
+              for (let s = indMin; s <= indMax; s++) {
+                dynamicScaleLevels.push(s);
+              }
 
               return (
                 <div
@@ -287,15 +314,16 @@ export function ReportAnalyticsCharts({ report }: Props) {
                     </div>
                   </div>
 
-                  {/* Horizontal Bar Graph: 1 to 5 Rating Breakdown */}
+                  {/* Dynamic Horizontal Bar Graph */}
                   <div className="space-y-1.5 pt-1 border-t border-border/50">
-                    {scaleLevels.map((ratingVal) => {
+                    {dynamicScaleLevels.map((ratingVal) => {
                       const count = dist[ratingVal] || 0;
                       const percentage = Math.round((count / totalResponses) * 100);
+                      const relativeRatio = (ratingVal - indMin) / Math.max(1, indMax - indMin);
 
                       return (
                         <div key={ratingVal} className="flex items-center gap-3 text-xs">
-                          {/* Rating Label (1, 2, 3, 4, 5) */}
+                          {/* Rating Label (Dynamic min to max) */}
                           <div className="w-12 font-mono font-bold text-muted-foreground flex items-center gap-1 shrink-0">
                             <span>{ratingVal}</span>
                             <Star className="w-3 h-3 fill-muted-foreground/30 text-muted-foreground" />
@@ -305,9 +333,9 @@ export function ReportAnalyticsCharts({ report }: Props) {
                           <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all duration-300 ${
-                                ratingVal >= 4
+                                relativeRatio >= 0.75
                                   ? "bg-emerald-500"
-                                  : ratingVal === 3
+                                  : relativeRatio >= 0.5
                                     ? "bg-blue-500"
                                     : "bg-amber-500"
                               }`}

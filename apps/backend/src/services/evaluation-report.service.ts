@@ -212,6 +212,23 @@ export class EvaluationReportService implements IEvaluationReportService {
   ): ResultAsync<AnnexCFacultyReport, AppError> {
     return ValidateSchema(UpdateReportStatusSchema, { status }).asyncAndThen(() => {
       return WithTransaction(client, async (tx) => {
+        const [report] = await tx
+          .select()
+          .from(IndividualFacultyReports)
+          .where(eq(IndividualFacultyReports.id, reportId));
+
+        if (!report) {
+          throw new AppError(404, "Evaluation report not found.");
+        }
+
+        // 🔒 Self-Supervision Rule: Cannot change lifecycle on own report
+        if (report.faculty_id === actorUser.account.id) {
+          throw new AppError(
+            403,
+            "You cannot finalize or publish your own teaching evaluation report. This must be performed by your academic supervisor.",
+          );
+        }
+
         const actorRoles = actorUser.roles ?? [];
         const isPrivileged =
           actorRoles.includes("SYS_ADMIN") ||
@@ -223,15 +240,6 @@ export class EvaluationReportService implements IEvaluationReportService {
             403,
             "You do not have permission to change evaluation report statuses.",
           );
-        }
-
-        const [report] = await tx
-          .select()
-          .from(IndividualFacultyReports)
-          .where(eq(IndividualFacultyReports.id, reportId));
-
-        if (!report) {
-          throw new AppError(404, "Evaluation report not found.");
         }
 
         const [updated] = await tx
@@ -260,15 +268,25 @@ export class EvaluationReportService implements IEvaluationReportService {
 
         if (!report) throw new AppError(404, "Evaluation report not found.");
 
-        const isFacultyOwner = report.faculty_id === actorUser.account.id;
+        // 🔒 Self-Supervision Rule: A Dean or Chair cannot write their own supervisory plan
+        if (report.faculty_id === actorUser.account.id) {
+          throw new AppError(
+            403,
+            "You cannot author the supervisory development plan for your own evaluation report. Your academic supervisor must formulate this plan.",
+          );
+        }
+
         const actorRoles = actorUser.roles ?? [];
         const isSupervisorOrAdmin =
           actorRoles.includes("SUPERVISOR") ||
           actorRoles.includes("ADMIN") ||
           actorRoles.includes("SYS_ADMIN");
 
-        if (!isFacultyOwner && !isSupervisorOrAdmin) {
-          throw new AppError(403, "You do not have permission to modify this development plan.");
+        if (!isSupervisorOrAdmin) {
+          throw new AppError(
+            403,
+            "Only supervisors and academic leaders can update the supervisory development plan.",
+          );
         }
 
         const existingPlan = (report.fedaf_plan as FedafPlan) || {
@@ -312,6 +330,16 @@ export class EvaluationReportService implements IEvaluationReportService {
 
       if (!report) throw new AppError(404, "Evaluation report not found.");
 
+      const isOwnReport = report.faculty_id === actorUser.account.id;
+
+      // 🔒 Self-Supervision Rule: Cannot sign as supervisor on own report
+      if (isOwnReport && signatureRole === "SUPERVISOR") {
+        throw new AppError(
+          403,
+          "You cannot sign as supervisor on your own evaluation report. Your supervising Program Chair or Dean must sign.",
+        );
+      }
+
       const existingPlan = (report.fedaf_plan as FedafPlan) || {
         areas_for_improvement: "",
         proposed_activities: "",
@@ -324,10 +352,10 @@ export class EvaluationReportService implements IEvaluationReportService {
       const now = new Date().toISOString();
 
       if (signatureRole === "FACULTY") {
-        if (report.faculty_id !== actorUser.account.id) {
+        if (!isOwnReport) {
           throw new AppError(
             403,
-            "You can only sign the acknowledgment for your own evaluation report.",
+            "You can only sign the faculty acknowledgment on your own evaluation report.",
           );
         }
         if (report.status !== "PUBLISHED") {
@@ -339,11 +367,12 @@ export class EvaluationReportService implements IEvaluationReportService {
         existingPlan.faculty_signed_at = now;
       } else {
         const actorRoles = actorUser.roles ?? [];
-        if (
-          !actorRoles.includes("SUPERVISOR") &&
-          !actorRoles.includes("ADMIN") &&
-          !actorRoles.includes("SYS_ADMIN")
-        ) {
+        const isAuthorizedSupervisor =
+          actorRoles.includes("SUPERVISOR") ||
+          actorRoles.includes("ADMIN") ||
+          actorRoles.includes("SYS_ADMIN");
+
+        if (!isAuthorizedSupervisor) {
           throw new AppError(403, "Only supervisors and academic leaders can sign as supervisor.");
         }
         existingPlan.supervisor_name = `${actorUser.details.first_name} ${actorUser.details.last_name}`;
@@ -379,21 +408,70 @@ export class EvaluationReportService implements IEvaluationReportService {
       } = parsed;
 
       const actorRoles = actorUser.roles ?? [];
-      const isPrivileged =
-        actorRoles.includes("SYS_ADMIN") ||
-        actorRoles.includes("ADMIN") ||
-        actorRoles.includes("SUPERVISOR");
+      const isSysAdmin = actorRoles.includes("SYS_ADMIN");
+      const isAdmin = actorRoles.includes("ADMIN");
+      const isSupervisor = actorRoles.includes("SUPERVISOR");
+
+      const deanships = actorUser.offices?.deanships || [];
+      const chairships = actorUser.offices?.chairships || [];
+      const deanCollegeIds = deanships.map((d) => d.id);
+      const chairProgramIds = chairships.map((c) => c.id);
 
       return WithTransaction(client, async (tx) => {
         const filters: SQL[] = [];
 
-        if (!isPrivileged) {
+        // ── 1. Role-Based Scoping ──
+        if (isSysAdmin || isAdmin) {
+          // Unrestricted admin view: respects query filters
+          if (faculty_id) filters.push(eq(IndividualFacultyReports.faculty_id, faculty_id));
+        } else if (isSupervisor) {
+          // Scoped to Dean's College or Chair's Program (+ their own report)
+          const officeFilters: SQL[] = [];
+
+          if (chairProgramIds.length > 0) {
+            officeFilters.push(
+              sql`EXISTS (
+                SELECT 1 FROM ${CourseOfferings}
+                INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
+                INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
+                WHERE ${CourseOfferings.faculty_id} = ${IndividualFacultyReports.faculty_id}
+                  AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
+                  AND ${Courses.program_id} IN ${chairProgramIds}
+                  AND ${CourseOfferings.deleted_at} IS NULL
+              )`,
+            );
+          }
+
+          if (deanCollegeIds.length > 0) {
+            officeFilters.push(
+              sql`EXISTS (
+                SELECT 1 FROM ${CourseOfferings}
+                INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
+                INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
+                INNER JOIN ${Programs} ON ${Courses.program_id} = ${Programs.id}
+                WHERE ${CourseOfferings.faculty_id} = ${IndividualFacultyReports.faculty_id}
+                  AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
+                  AND ${Programs.college_id} IN ${deanCollegeIds}
+                  AND ${CourseOfferings.deleted_at} IS NULL
+              )`,
+            );
+          }
+
+          // Always allow the supervisor to see their own report
+          officeFilters.push(eq(IndividualFacultyReports.faculty_id, actorUser.account.id));
+
+          filters.push(or(...officeFilters)!);
+
+          if (faculty_id) {
+            filters.push(eq(IndividualFacultyReports.faculty_id, faculty_id));
+          }
+        } else {
+          // Pure Faculty: Only own reports that are published
           filters.push(eq(IndividualFacultyReports.faculty_id, actorUser.account.id));
           filters.push(eq(IndividualFacultyReports.status, "PUBLISHED"));
-        } else if (faculty_id) {
-          filters.push(eq(IndividualFacultyReports.faculty_id, faculty_id));
         }
 
+        // ── 2. Standard Filters ──
         if (semester_id) filters.push(eq(IndividualFacultyReports.semester_id, semester_id));
         if (status) filters.push(eq(IndividualFacultyReports.status, status));
 
@@ -409,7 +487,7 @@ export class EvaluationReportService implements IEvaluationReportService {
           );
         }
 
-        // Anchor on Course of Course Offering: Course -> Program -> College
+        // Explicit college/program filter
         if (program_id) {
           filters.push(
             sql`EXISTS (
