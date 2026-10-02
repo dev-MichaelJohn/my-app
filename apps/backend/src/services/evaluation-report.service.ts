@@ -1593,13 +1593,18 @@ export class EvaluationReportService implements IEvaluationReportService {
     const isOwnReport = actorUserId === report.faculty_id;
     const isPublished = report.status === "PUBLISHED" || Boolean(rawPlan.supervisor_signed_at);
 
-    // 🔒 Privacy Guard: If faculty member views own report before publish, redact draft action plan
     const sanitizedPlan: FedafPlan = {
       ...rawPlan,
       areas_for_improvement: isOwnReport && !isPublished ? "" : rawPlan.areas_for_improvement,
       proposed_activities: isOwnReport && !isPublished ? "" : rawPlan.proposed_activities,
       action_plan: isOwnReport && !isPublished ? "" : rawPlan.action_plan,
     };
+
+    const rawClassBreakdown = (report.class_breakdown as ClassConsolidationInput[]) || [];
+    const sanitizedClassBreakdown: ClassConsolidationInput[] = rawClassBreakdown.map((c) => ({
+      ...c,
+      noOfStudents: null as any,
+    }));
 
     return {
       id: report.id,
@@ -1625,7 +1630,7 @@ export class EvaluationReportService implements IEvaluationReportService {
       total_classes: report.total_classes,
       total_weighted_score: Number(report.total_weighted_score),
       calculation_formula: report.calculation_formula,
-      class_breakdown: (report.class_breakdown as ClassConsolidationInput[]) || [],
+      class_breakdown: sanitizedClassBreakdown,
       student_comments: (report.student_comments as AnonymousFeedbackComment[]) || [],
       supervisor_comments: (report.supervisor_comments as SupervisorFeedbackComment[]) || [],
       set_category_analytics: (report.set_category_analytics as CategoryAnalytics[]) || [],

@@ -8,7 +8,7 @@ export interface ClassConsolidationInput {
   programCode?: string | null | undefined;
   collegeId?: number | null | undefined;
   collegeCode?: string | null | undefined;
-  noOfStudents: number;
+  noOfStudents: number | null | undefined;
   averageSetRating: number;
   weightedScore: number;
 }
