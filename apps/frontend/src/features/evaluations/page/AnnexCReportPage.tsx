@@ -12,7 +12,22 @@ import { usePrograms } from "@/features/programs/hooks/usePrograms";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ReportFilters } from "../components/ReportFilters";
 import { ReportTableView } from "../components/ReportTableView";
 import { ReportGridView } from "../components/ReportGridView";
@@ -20,12 +35,20 @@ import { ReportAnalyticsCharts } from "../components/ReportAnalyticsCharts";
 import { FedafActionSection } from "../components/FedafActionSection";
 import { ReportLifecycleBar } from "../components/ReportLifecycleBar";
 import { FacultySelfReportView } from "../components/FacultySelfReportView";
+import { Can } from "@/components/Can";
 import { toast } from "sonner";
-import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from "lucide-react";
-import type { AnnexCFacultyReport, FacultyReportQuery, ReportStatus } from "@my-app/shared";
+import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Sparkles } from "lucide-react";
+import {
+  CONSOLIDATION_FORMULAS,
+  PERMISSIONS,
+  type AnnexCFacultyReport,
+  type FacultyReportQuery,
+  type ReportStatus,
+} from "@my-app/shared";
 
 export default function AnnexCReportPage() {
-  const { user, isSysAdmin, isAdmin, isSupervisor, isFaculty, isDean, isChair } = usePermissions();
+  const { user, hasAnyPermission, isSysAdmin, isAdmin, isSupervisor, isFaculty, isDean, isChair } =
+    usePermissions();
   const isPrivileged = isSysAdmin || isAdmin || isSupervisor;
   const isPrivilegedAdmin = isSysAdmin || isAdmin;
   const isPlainFaculty = isFaculty && !isSupervisor && !isAdmin && !isSysAdmin;
@@ -81,6 +104,11 @@ export default function AnnexCReportPage() {
   const [selectedReportId, setSelectedReportId] = useState<number | null>(null);
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
 
+  // Batch Consolidation Modal State
+  const [confirmBatchOpen, setConfirmBatchOpen] = useState(false);
+  const [batchTargetSemesterId, setBatchTargetSemesterId] = useState<number | undefined>(undefined);
+  const [batchFormula, setBatchFormula] = useState<string>("ANNEX_C_WEIGHTED");
+
   // ── Query for Admin / Supervisor Reports List ──
   const listQuery: FacultyReportQuery = useMemo(
     () => ({
@@ -130,7 +158,6 @@ export default function AnnexCReportPage() {
   const recalculateMutation = useRecalculateAnnexCReport();
   const batchMutation = useBatchConsolidateReports();
   const updateStatusMutation = useUpdateReportStatus();
-  const [confirmBatchOpen, setConfirmBatchOpen] = useState(false);
 
   const handleOpenDetail = (report: AnnexCFacultyReport) => {
     setSelectedReportId(report.id);
@@ -172,18 +199,28 @@ export default function AnnexCReportPage() {
     }
   };
 
+  const handleOpenBatchModal = () => {
+    setBatchTargetSemesterId(currentSemesterId || semestersList[0]?.id);
+    setConfirmBatchOpen(true);
+  };
+
   const handleRunBatchConsolidation = async () => {
-    if (!currentSemesterId) return;
+    const targetSem = batchTargetSemesterId || currentSemesterId;
+    if (!targetSem) {
+      toast.error("Please select an academic semester to consolidate.");
+      return;
+    }
+
     try {
       const summary = await batchMutation.mutateAsync({
-        semester_id: currentSemesterId,
+        semester_id: targetSem,
+        formula: batchFormula,
       });
       toast.success(summary.message);
       setConfirmBatchOpen(false);
       refetchList();
     } catch (err: any) {
       toast.error(err.message || "Failed to run batch consolidation.");
-      setConfirmBatchOpen(false);
     }
   };
 
@@ -205,6 +242,11 @@ export default function AnnexCReportPage() {
     );
   }
 
+  const canConsolidate = hasAnyPermission([
+    PERMISSIONS.EVALUATION_REPORT_BATCH_GENERATE,
+    PERMISSIONS.EVALUATION_REPORT_GENERATE,
+  ]);
+
   // ══════════════════════════════════════════════════════════════════════════
   // BRANCH B: ADMINS & SUPERVISORS (Scoped Browser & Drilldown)
   // ══════════════════════════════════════════════════════════════════════════
@@ -212,14 +254,35 @@ export default function AnnexCReportPage() {
     <div className="space-y-6 max-w-5xl mx-auto pb-24">
       {!selectedReportId ? (
         <div className="space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Faculty Evaluation Reports & Analytics
-            </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Browse consolidated teaching performance reports, category charts, and FEDAF plans by
-              college and program.
-            </p>
+          {/* 🚀 Header with Generate / Consolidate Action Button */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                Faculty Evaluation Reports & Analytics
+              </h1>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Browse consolidated teaching performance reports, category charts, and FEDAF plans
+                by college and program.
+              </p>
+            </div>
+
+            <Can
+              anyPermission={[
+                PERMISSIONS.EVALUATION_REPORT_BATCH_GENERATE,
+                PERMISSIONS.EVALUATION_REPORT_GENERATE,
+              ]}
+            >
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={handleOpenBatchModal}
+                  disabled={batchMutation.isPending}
+                  className="gap-2 h-9 text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Generate / Consolidate Reports</span>
+                </Button>
+              </div>
+            </Can>
           </div>
 
           <ReportFilters
@@ -265,9 +328,19 @@ export default function AnnexCReportPage() {
               <Spinner size="lg" />
             </div>
           ) : viewMode === "table" ? (
-            <ReportTableView reports={reportsList} onSelectReport={handleOpenDetail} />
+            <ReportTableView
+              reports={reportsList}
+              onSelectReport={handleOpenDetail}
+              onGenerateClick={handleOpenBatchModal}
+              canGenerate={canConsolidate}
+            />
           ) : (
-            <ReportGridView reports={reportsList} onSelectReport={handleOpenDetail} />
+            <ReportGridView
+              reports={reportsList}
+              onSelectReport={handleOpenDetail}
+              onGenerateClick={handleOpenBatchModal}
+              canGenerate={canConsolidate}
+            />
           )}
 
           {/* Pagination */}
@@ -342,7 +415,7 @@ export default function AnnexCReportPage() {
               onBack={handleBackToList}
               onStatusChange={handleStatusChange}
               onRecalculate={handleRecalculate}
-              onBatchConsolidateClick={() => setConfirmBatchOpen(true)}
+              onBatchConsolidateClick={handleOpenBatchModal}
               isRecalculating={recalculateMutation.isPending}
             />
           )}
@@ -394,10 +467,10 @@ export default function AnnexCReportPage() {
                 </div>
               </div>
 
-              {/* ── Visual Analytics: Pie Chart & Indicator Bar Graph ── */}
+              {/* Visual Analytics */}
               <ReportAnalyticsCharts report={activeReport} />
 
-              {/* ── Interactive FEDAF Action Center & Signatures ── */}
+              {/* Interactive FEDAF Action Center */}
               <FedafActionSection
                 report={activeReport}
                 currentUser={user}
@@ -408,17 +481,129 @@ export default function AnnexCReportPage() {
         </div>
       )}
 
-      {/* Batch Consolidation Modal */}
-      <ConfirmActionDialog
-        open={confirmBatchOpen}
-        onOpenChange={setConfirmBatchOpen}
-        title="Run Batch Consolidation for Semester?"
-        description="This will recalculate and compile Annex C and SEF scores for all faculty who taught course offerings in this semester."
-        confirmLabel="Run Batch Consolidation"
-        variant="primary"
-        isLoading={batchMutation.isPending}
-        onConfirm={handleRunBatchConsolidation}
-      />
+      {/* 🚀 Interactive Batch Consolidation Modal */}
+      <Dialog open={confirmBatchOpen} onOpenChange={setConfirmBatchOpen}>
+        <DialogContent className="sm:max-w-[480px] border-border bg-card text-card-foreground">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
+              <Sparkles className="w-5 h-5 text-primary" />
+              <span>Consolidate Faculty Reports</span>
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              Calculate and compile Annex C (SET) and SEF performance reports for all instructors
+              teaching in this term.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Semester Selection */}
+            <div className="space-y-1.5">
+              <Label className="text-foreground">Academic Semester</Label>
+              <Select
+                value={batchTargetSemesterId ? String(batchTargetSemesterId) : ""}
+                onValueChange={(val) => setBatchTargetSemesterId(val ? Number(val) : undefined)}
+              >
+                <SelectTrigger className="w-full h-10 px-3 bg-background border-input text-sm">
+                  <SelectValue placeholder="Select semester...">
+                    {semestersList.find((s) => s.id === batchTargetSemesterId) ? (
+                      <span className="truncate block text-left">
+                        <strong>
+                          {semestersList.find((s) => s.id === batchTargetSemesterId)?.semester_term}{" "}
+                          Sem
+                        </strong>{" "}
+                        (A.Y.{" "}
+                        {
+                          semestersList.find((s) => s.id === batchTargetSemesterId)
+                            ?.school_year_start
+                        }
+                        -
+                        {semestersList.find((s) => s.id === batchTargetSemesterId)?.school_year_end}
+                        )
+                      </span>
+                    ) : (
+                      "Select semester..."
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border text-sm">
+                  {semestersList.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {s.semester_term} Semester (A.Y. {s.school_year_start}-{s.school_year_end})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Formula Selection */}
+            <div className="space-y-1.5">
+              <Label className="text-foreground">Consolidation Formula</Label>
+              <Select
+                value={batchFormula}
+                onValueChange={(val) => {
+                  if (val) setBatchFormula(val);
+                }}
+              >
+                <SelectTrigger className="w-full h-10 px-3 bg-background border-input text-sm">
+                  <SelectValue placeholder="Select formula..." />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border text-sm">
+                  {Object.values(CONSOLIDATION_FORMULAS).map((f) => (
+                    <SelectItem key={f.id} value={f.id}>
+                      <div className="flex flex-col py-0.5 text-left">
+                        <span className="font-semibold">{f.name}</span>
+                        <span className="text-[11px] text-muted-foreground font-mono">
+                          {f.formulaDisplay}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="p-3 bg-muted/60 border border-border rounded-xl text-xs text-muted-foreground space-y-1.5">
+              <p className="font-semibold text-foreground">What happens during consolidation:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-[11px]">
+                <li>Scans all active course offerings for the selected semester</li>
+                <li>Aggregates student ratings (SET) and supervisor ratings (SEF)</li>
+                <li>Anonymizes class section identifiers per CHED CMO 19 s. 2025</li>
+                <li>Analyzes student comment sentiment and extracts representative excerpts</li>
+                <li>Generates draft Annex C reports and FEDAF development plans</li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter className="pt-3 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmBatchOpen(false)}
+              disabled={batchMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleRunBatchConsolidation}
+              disabled={!batchTargetSemesterId || batchMutation.isPending}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
+            >
+              {batchMutation.isPending ? (
+                <>
+                  <Spinner size="sm" className="text-primary-foreground" />
+                  <span>Consolidating...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Start Consolidation</span>
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

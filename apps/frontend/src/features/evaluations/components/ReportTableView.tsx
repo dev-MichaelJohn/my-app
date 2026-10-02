@@ -8,23 +8,43 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, FileSpreadsheet } from "lucide-react";
+import { ChevronRight, FileSpreadsheet, Sparkles } from "lucide-react";
 import type { AnnexCFacultyReport } from "@my-app/shared";
 
 interface Props {
   reports: AnnexCFacultyReport[];
   onSelectReport: (report: AnnexCFacultyReport) => void;
+  onGenerateClick?: () => void;
+  canGenerate?: boolean;
 }
 
-export function ReportTableView({ reports, onSelectReport }: Props) {
+export function ReportTableView({
+  reports,
+  onSelectReport,
+  onGenerateClick,
+  canGenerate = false,
+}: Props) {
   if (reports.length === 0) {
     return (
-      <div className="text-center py-16 border border-dashed border-border rounded-2xl bg-card">
+      <div className="text-center py-16 border border-dashed border-border rounded-2xl bg-card space-y-3">
         <FileSpreadsheet className="w-10 h-10 text-muted-foreground mx-auto mb-2 opacity-60" />
         <h3 className="font-semibold text-foreground">No evaluation reports found</h3>
-        <p className="text-xs text-muted-foreground mt-1">
-          Try adjusting the semester, college, or program filters.
+        <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+          No consolidated reports exist for the selected filters. You can generate reports for all
+          faculty teaching in this semester.
         </p>
+        {canGenerate && onGenerateClick && (
+          <div className="pt-2">
+            <Button
+              onClick={onGenerateClick}
+              size="sm"
+              className="gap-2 text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Generate Reports for Semester</span>
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
