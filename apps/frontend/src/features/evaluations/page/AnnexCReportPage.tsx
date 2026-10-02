@@ -21,7 +21,15 @@ import { FacultySelfReportView } from "../components/FacultySelfReportView";
 import { BatchConsolidateDialog } from "../components/BatchConsolidateDialog";
 import { Can } from "@/components/Can";
 import { toast } from "sonner";
-import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Sparkles } from "lucide-react";
+import {
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
+  Sparkles,
+  Users,
+  GraduationCap,
+} from "lucide-react";
 import {
   PERMISSIONS,
   type AnnexCFacultyReport,
@@ -36,6 +44,11 @@ export default function AnnexCReportPage() {
   const isPrivileged = isSysAdmin || isAdmin || isSupervisor;
   const isPrivilegedAdmin = isSysAdmin || isAdmin;
   const isPlainFaculty = isFaculty && !isSupervisor && !isAdmin && !isSysAdmin;
+
+  // 🚀 Mode toggle for Supervisors who also teach
+  const [supervisorPortalTab, setSupervisorPortalTab] = useState<"SUPERVISORY" | "SELF">(
+    "SUPERVISORY",
+  );
 
   // Metadata queries
   const { data: activeSemester } = useActiveSemester();
@@ -123,12 +136,71 @@ export default function AnnexCReportPage() {
     refetch: refetchList,
   } = useFacultyReportsList(listQuery);
 
-  const reportsList = reportsListResponse?.data ?? [];
+  // 🚀 Memoize to prevent re-creating array on every render
+  const rawReportsList = useMemo(
+    () => reportsListResponse?.data ?? [],
+    [reportsListResponse?.data],
+  );
   const pagination = reportsListResponse?.pagination;
+
+  // ── 🎯 Supervisory Scope Isolation per CHED CMO 19 s. 2025 Sec 9.2 ──
+  const deanCollegeIds = useMemo(() => user?.offices?.deanships?.map((d) => d.id) ?? [], [user]);
+
+  const chairProgramIds = useMemo(() => user?.offices?.chairships?.map((c) => c.id) ?? [], [user]);
+
+  // All Program Chairs appointed under the Dean's college(s)
+  const programChairsUnderDeanIds = useMemo(() => {
+    if (deanCollegeIds.length === 0) return [];
+    return allProgramsList
+      .filter((p) => deanCollegeIds.includes(p.program.college_id) && p.chair !== null)
+      .map((p) => p.chair!.account.id);
+  }, [allProgramsList, deanCollegeIds]);
+
+  // Strict list filtering:
+  // 1. College Dean: ONLY Program Chairs under their college (excludes regular faculty, excludes self)
+  // 2. Program Chair: ONLY regular teaching faculty in their program (excludes self, excludes other chairs)
+  // 3. Admin / SysAdmin: Institutional oversight (sees all)
+  const scopedReportsList = useMemo(() => {
+    if (isPrivilegedAdmin) {
+      return rawReportsList;
+    }
+
+    if (isDean) {
+      return rawReportsList.filter(
+        (r) =>
+          programChairsUnderDeanIds.includes(r.faculty_id) && r.faculty_id !== user?.account.id,
+      );
+    }
+
+    if (isChair) {
+      const allChairIds = allProgramsList
+        .filter((p) => p.chair !== null)
+        .map((p) => p.chair!.account.id);
+
+      return rawReportsList.filter(
+        (r) =>
+          r.faculty_id !== user?.account.id &&
+          !allChairIds.includes(r.faculty_id) &&
+          (r.program_id ? chairProgramIds.includes(r.program_id) : true), // 👈 Uses chairProgramIds
+      );
+    }
+
+    return rawReportsList;
+  }, [
+    rawReportsList,
+    isPrivilegedAdmin,
+    isDean,
+    isChair,
+    programChairsUnderDeanIds,
+    allProgramsList,
+    chairProgramIds, // 👈 Included in dependency array
+    user?.account.id,
+  ]);
 
   // Single Report Detailed View Query
   const effectiveDetailFacultyId =
-    selectedFacultyId ?? (isPlainFaculty ? user?.account.id : undefined);
+    selectedFacultyId ??
+    (isPlainFaculty || supervisorPortalTab === "SELF" ? user?.account.id : undefined);
 
   const {
     data: activeReport,
@@ -214,14 +286,14 @@ export default function AnnexCReportPage() {
     <div className="space-y-6 max-w-5xl mx-auto pb-24">
       {!selectedReportId ? (
         <div className="space-y-6">
-          {/* 🚀 Header with Generate / Consolidate Action Button */}
+          {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold tracking-tight text-foreground">
                   Faculty Evaluation Reports & Analytics
                 </h1>
-                {isDean && !isSysAdmin && !isAdmin && (
+                {isDean && !isPrivilegedAdmin && (
                   <Badge
                     variant="outline"
                     className="border-primary/40 text-primary text-xs font-semibold"
@@ -229,7 +301,7 @@ export default function AnnexCReportPage() {
                     Supervising: Program Chairs
                   </Badge>
                 )}
-                {isChair && !isSysAdmin && !isAdmin && (
+                {isChair && !isPrivilegedAdmin && (
                   <Badge
                     variant="outline"
                     className="border-primary/40 text-primary text-xs font-semibold"
@@ -239,9 +311,9 @@ export default function AnnexCReportPage() {
                 )}
               </div>
               <p className="text-sm text-muted-foreground mt-0.5">
-                {isDean && !isSysAdmin && !isAdmin
+                {isDean && !isPrivilegedAdmin
                   ? "Evaluating performance and FEDAF plans of Program Chairs under your college."
-                  : isChair && !isSysAdmin && !isAdmin
+                  : isChair && !isPrivilegedAdmin
                     ? "Evaluating performance and FEDAF plans of faculty teaching under your academic program."
                     : "Browse consolidated teaching performance reports, category charts, and FEDAF plans."}
               </p>
@@ -266,124 +338,185 @@ export default function AnnexCReportPage() {
             </Can>
           </div>
 
-          <ReportFilters
-            searchInput={searchInput}
-            onSearchChange={setSearchInput}
-            selectedSemesterId={currentSemesterId}
-            onSemesterChange={(id) => {
-              setSelectedSemesterId(id);
-              setPage(1);
-            }}
-            semesters={semestersList}
-            selectedCollegeId={selectedCollegeId}
-            onCollegeChange={(id) => {
-              setSelectedCollegeId(id);
-              setSelectedProgramId(undefined);
-              setPage(1);
-            }}
-            colleges={collegesList}
-            selectedProgramId={selectedProgramId}
-            onProgramChange={(id) => {
-              setSelectedProgramId(id);
-              setPage(1);
-            }}
-            availablePrograms={availablePrograms}
-            selectedStatus={selectedStatus}
-            onStatusChange={(status) => {
-              setSelectedStatus(status);
-              setPage(1);
-            }}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            paginate={paginate}
-            onPaginateChange={setPaginate}
-            limit={limit}
-            onLimitChange={setLimit}
-            isDean={isDean}
-            isChair={isChair}
-            isPrivilegedAdmin={isPrivilegedAdmin}
-          />
+          {/* 🚀 Mode Switcher: For Deans/Chairs who also teach */}
+          {isSupervisor && !isPrivilegedAdmin && (
+            <div className="flex border-b border-border">
+              <button
+                type="button"
+                onClick={() => {
+                  setSupervisorPortalTab("SUPERVISORY");
+                  setSelectedReportId(null);
+                  setSelectedFacultyId(null);
+                }}
+                className={`pb-2.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition ${
+                  supervisorPortalTab === "SUPERVISORY"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>
+                  {isDean ? "Supervised Program Chairs" : "Supervised Department Faculty"}
+                </span>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                  {scopedReportsList.length}
+                </Badge>
+              </button>
 
-          {isLoadingList ? (
-            <div className="py-20 flex justify-center items-center">
-              <Spinner size="lg" />
+              <button
+                type="button"
+                onClick={() => {
+                  setSupervisorPortalTab("SELF");
+                  setSelectedReportId(null);
+                  setSelectedFacultyId(null);
+                }}
+                className={`pb-2.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition ${
+                  supervisorPortalTab === "SELF"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <GraduationCap className="w-3.5 h-3.5" />
+                <span>My Own Teaching Report</span>
+              </button>
             </div>
-          ) : viewMode === "table" ? (
-            <ReportTableView
-              reports={reportsList}
-              onSelectReport={handleOpenDetail}
-              onGenerateClick={() => setBatchDialogOpen(true)}
-              canGenerate={canConsolidate}
-            />
-          ) : (
-            <ReportGridView
-              reports={reportsList}
-              onSelectReport={handleOpenDetail}
-              onGenerateClick={() => setBatchDialogOpen(true)}
-              canGenerate={canConsolidate}
-            />
           )}
 
-          {/* Pagination */}
-          {paginate && pagination && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-4 text-xs text-muted-foreground">
-              <span>
-                Showing{" "}
-                <strong className="text-foreground">
-                  {reportsList.length > 0 ? (pagination.currentPage - 1) * limit + 1 : 0}
-                </strong>{" "}
-                to{" "}
-                <strong className="text-foreground">
-                  {Math.min(pagination.currentPage * limit, pagination.totalItems)}
-                </strong>{" "}
-                of <strong className="text-foreground">{pagination.totalItems}</strong> report(s)
-              </span>
+          {/* 🚀 Render Self Portal if on SELF tab */}
+          {supervisorPortalTab === "SELF" ? (
+            <FacultySelfReportView
+              report={activeReport}
+              isLoading={isLoadingReport}
+              user={user}
+              semesters={semestersList}
+              selectedSemesterId={currentSemesterId}
+              onSemesterChange={(id) => setSelectedSemesterId(id)}
+            />
+          ) : (
+            <>
+              <ReportFilters
+                searchInput={searchInput}
+                onSearchChange={setSearchInput}
+                selectedSemesterId={currentSemesterId}
+                onSemesterChange={(id) => {
+                  setSelectedSemesterId(id);
+                  setPage(1);
+                }}
+                semesters={semestersList}
+                selectedCollegeId={selectedCollegeId}
+                onCollegeChange={(id) => {
+                  setSelectedCollegeId(id);
+                  setSelectedProgramId(undefined);
+                  setPage(1);
+                }}
+                colleges={collegesList}
+                selectedProgramId={selectedProgramId}
+                onProgramChange={(id) => {
+                  setSelectedProgramId(id);
+                  setPage(1);
+                }}
+                availablePrograms={availablePrograms}
+                selectedStatus={selectedStatus}
+                onStatusChange={(status) => {
+                  setSelectedStatus(status);
+                  setPage(1);
+                }}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                paginate={paginate}
+                onPaginateChange={setPaginate}
+                limit={limit}
+                onLimitChange={setLimit}
+                isDean={isDean}
+                isChair={isChair}
+                isPrivilegedAdmin={isPrivilegedAdmin}
+              />
 
-              <div className="flex items-center gap-1.5">
-                <span className="mr-2">
-                  Page <strong className="text-foreground">{pagination.currentPage}</strong> of{" "}
-                  <strong className="text-foreground">{Math.max(1, pagination.totalPage)}</strong>
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={!pagination.hasPrev}
-                  onClick={() => setPage(1)}
-                >
-                  <ChevronsLeft className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2.5 gap-1"
-                  disabled={!pagination.hasPrev}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span>Prev</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2.5 gap-1"
-                  disabled={!pagination.hasNext}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  <span>Next</span>
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={!pagination.hasNext}
-                  onClick={() => setPage(pagination.totalPage)}
-                >
-                  <ChevronsRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
+              {isLoadingList ? (
+                <div className="py-20 flex justify-center items-center">
+                  <Spinner size="lg" />
+                </div>
+              ) : viewMode === "table" ? (
+                <ReportTableView
+                  reports={scopedReportsList}
+                  onSelectReport={handleOpenDetail}
+                  onGenerateClick={() => setBatchDialogOpen(true)}
+                  canGenerate={canConsolidate}
+                />
+              ) : (
+                <ReportGridView
+                  reports={scopedReportsList}
+                  onSelectReport={handleOpenDetail}
+                  onGenerateClick={() => setBatchDialogOpen(true)}
+                  canGenerate={canConsolidate}
+                />
+              )}
+
+              {/* Pagination */}
+              {paginate && pagination && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-4 text-xs text-muted-foreground">
+                  <span>
+                    Showing{" "}
+                    <strong className="text-foreground">
+                      {scopedReportsList.length > 0 ? (pagination.currentPage - 1) * limit + 1 : 0}
+                    </strong>{" "}
+                    to{" "}
+                    <strong className="text-foreground">
+                      {Math.min(pagination.currentPage * limit, scopedReportsList.length)}
+                    </strong>{" "}
+                    of <strong className="text-foreground">{scopedReportsList.length}</strong>{" "}
+                    report(s)
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="mr-2">
+                      Page <strong className="text-foreground">{pagination.currentPage}</strong> of{" "}
+                      <strong className="text-foreground">
+                        {Math.max(1, pagination.totalPage)}
+                      </strong>
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={!pagination.hasPrev}
+                      onClick={() => setPage(1)}
+                    >
+                      <ChevronsLeft className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2.5 gap-1"
+                      disabled={!pagination.hasPrev}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>Prev</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2.5 gap-1"
+                      disabled={!pagination.hasNext}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      <span>Next</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={!pagination.hasNext}
+                      onClick={() => setPage(pagination.totalPage)}
+                    >
+                      <ChevronsRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       ) : (

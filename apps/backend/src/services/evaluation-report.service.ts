@@ -387,36 +387,68 @@ export class EvaluationReportService implements IEvaluationReportService {
           throw new AppError(403, "Only supervisors and academic leaders can sign as supervisor.");
         }
 
-        // 🎯 CHED CMO 19 s. 2025 Sec 9.2 Hierarchy Verification:
-        // Check if the evaluated faculty is a Program Chair
-        const [isChair] = await tx
-          .select({ id: ProgramChairs.id })
+        const deanships = actorUser.offices?.deanships || [];
+        const chairships = actorUser.offices?.chairships || [];
+        const deanCollegeIds = deanships.map((d) => d.id);
+        const chairProgramIds = chairships.map((c) => c.id);
+
+        // Check if the evaluated person is a Program Chair
+        const [targetChair] = await tx
+          .select({ id: ProgramChairs.id, collegeId: Programs.college_id })
           .from(ProgramChairs)
+          .innerJoin(Programs, eq(ProgramChairs.program_id, Programs.id))
           .where(
             and(eq(ProgramChairs.chair_id, report.faculty_id), isNull(ProgramChairs.deleted_at)),
           );
 
-        const isTargetAChair = Boolean(isChair);
-        const deanships = actorUser.offices?.deanships || [];
-        const chairships = actorUser.offices?.chairships || [];
-        const isActorDean = deanships.length > 0;
-        const isActorChair = chairships.length > 0;
+        if (targetChair) {
+          // Target IS a Program Chair -> ONLY their College Dean can sign
+          const isTheirDean =
+            isSysAdmin || isAdmin || deanCollegeIds.includes(targetChair.collegeId);
+          if (!isTheirDean) {
+            throw new AppError(
+              403,
+              "Only the College Dean can sign the FEDAF for this Program Chair.",
+            );
+          }
+          existingPlan.supervisor_name = `${actorUser.details.first_name} ${actorUser.details.last_name} (College Dean)`;
+        } else {
+          // Target is regular faculty -> Program Chair MUST sign (Dean cannot sign regular faculty FEDAF)
+          const isTheirChair =
+            isSysAdmin ||
+            isAdmin ||
+            (chairProgramIds.length > 0 &&
+              (await (async () => {
+                const [match] = await tx
+                  .select({ id: CourseOfferings.id })
+                  .from(CourseOfferings)
+                  .innerJoin(
+                    CourseCurriculums,
+                    eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+                  )
+                  .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+                  .where(
+                    and(
+                      eq(CourseOfferings.faculty_id, report.faculty_id),
+                      eq(CourseOfferings.semester_id, report.semester_id),
+                      inArray(Courses.program_id, chairProgramIds),
+                      isNull(CourseOfferings.deleted_at),
+                    ),
+                  )
+                  .limit(1);
+                return Boolean(match);
+              })()));
 
-        // If target is a Chair -> Dean must sign
-        // If target is regular faculty -> Chair must sign (or Dean if vacant chairship)
-        let supervisoryTitle = "Immediate Supervisor";
-        if (isTargetAChair) {
-          supervisoryTitle = `College Dean (${deanships[0]?.initialism || "Dean"})`;
-        } else if (isActorChair) {
-          supervisoryTitle = `Program Chair (${chairships[0]?.initialism || "Chair"})`;
-        } else if (isActorDean) {
-          supervisoryTitle = `College Dean (Acting Supervisor)`;
+          if (!isTheirChair) {
+            throw new AppError(
+              403,
+              "College Deans cannot sign the FEDAF of regular faculty. The Program Chair must conduct the feedback conference and sign.",
+            );
+          }
+          existingPlan.supervisor_name = `${actorUser.details.first_name} ${actorUser.details.last_name} (Program Chair)`;
         }
 
-        existingPlan.supervisor_name = `${actorUser.details.first_name} ${actorUser.details.last_name} (${supervisoryTitle})`;
         existingPlan.supervisor_signed_at = now;
-
-        // 🚀 AUTOMATIC PUBLISH: Signing by the supervisor releases the report to the faculty
         nextStatus = "PUBLISHED";
       } else {
         if (!isOwnReport) {
@@ -487,78 +519,70 @@ export class EvaluationReportService implements IEvaluationReportService {
           sql`${IndividualFacultyReports.total_classes} > 0`,
         ];
 
-        // ── 1. Role-Based Scoping per CMO 19 s. 2025 ──
+        // ── 1. Strict Hierarchy Scoping per CHED CMO 19 s. 2025 Sec 9.2 ──
         if (isSysAdmin || isAdmin) {
-          // Admins have campus-wide visibility
+          // Administrators see all reports
           if (faculty_id) filters.push(eq(IndividualFacultyReports.faculty_id, faculty_id));
         } else if (isSupervisor) {
           const supervisorScopeFilters: SQL[] = [];
 
           // ── A. COLLEGE DEAN: Supervises ONLY Program Chairs under their college ──
           if (deanCollegeIds.length > 0) {
-            const programsInCollege = await tx
-              .select({
-                programId: Programs.id,
-                chairId: ProgramChairs.chair_id,
-              })
-              .from(Programs)
-              .leftJoin(
-                ProgramChairs,
-                and(eq(Programs.id, ProgramChairs.program_id), isNull(ProgramChairs.deleted_at)),
-              )
+            const chairRecords = await tx
+              .select({ chairId: ProgramChairs.chair_id })
+              .from(ProgramChairs)
+              .innerJoin(Programs, eq(ProgramChairs.program_id, Programs.id))
               .where(
-                and(inArray(Programs.college_id, deanCollegeIds), isNull(Programs.deleted_at)),
+                and(
+                  inArray(Programs.college_id, deanCollegeIds),
+                  isNull(ProgramChairs.deleted_at),
+                  isNull(Programs.deleted_at),
+                ),
               );
 
-            const chairsUnderDean = programsInCollege
-              .map((p) => p.chairId)
+            const chairsUnderDean = chairRecords
+              .map((c) => c.chairId)
               .filter((id): id is number => typeof id === "number");
 
-            // Dean sees the Program Chairs of their college
             if (chairsUnderDean.length > 0) {
               supervisorScopeFilters.push(
                 inArray(IndividualFacultyReports.faculty_id, chairsUnderDean),
-              );
-            }
-
-            // Exception: If a program has a vacant chairship, Dean acts as direct supervisor
-            const vacantProgramIds = programsInCollege
-              .filter((p) => p.chairId === null)
-              .map((p) => p.programId);
-
-            if (vacantProgramIds.length > 0) {
-              supervisorScopeFilters.push(
-                sql`EXISTS (
-                  SELECT 1 FROM ${CourseOfferings}
-                  INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
-                  INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
-                  WHERE ${CourseOfferings.faculty_id} = ${IndividualFacultyReports.faculty_id}
-                    AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
-                    AND ${Courses.program_id} IN ${vacantProgramIds}
-                    AND ${CourseOfferings.deleted_at} IS NULL
-                )`,
               );
             }
           }
 
           // ── B. PROGRAM CHAIR: Supervises regular faculty teaching in their program (their underlings) ──
           if (chairProgramIds.length > 0) {
+            // Find all chairs to exclude other department heads
+            const allChairs = await tx
+              .select({ chairId: ProgramChairs.chair_id })
+              .from(ProgramChairs)
+              .where(isNull(ProgramChairs.deleted_at));
+            const allChairIds = allChairs.map((c) => c.chairId);
+
             supervisorScopeFilters.push(
-              sql`EXISTS (
-                SELECT 1 FROM ${CourseOfferings}
-                INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
-                INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
-                WHERE ${CourseOfferings.faculty_id} = ${IndividualFacultyReports.faculty_id}
-                  AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
-                  AND ${Courses.program_id} IN ${chairProgramIds}
-                  AND ${CourseOfferings.deleted_at} IS NULL
-              )`,
+              and(
+                sql`EXISTS (
+                  SELECT 1 FROM ${CourseOfferings}
+                  INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
+                  INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
+                  WHERE ${CourseOfferings.faculty_id} = ${IndividualFacultyReports.faculty_id}
+                    AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
+                    AND ${Courses.program_id} IN ${chairProgramIds}
+                    AND ${CourseOfferings.deleted_at} IS NULL
+                )`,
+                // Program Chair evaluates regular faculty, not fellow Chairs
+                allChairIds.length > 0
+                  ? sql`${IndividualFacultyReports.faculty_id} NOT IN ${allChairIds}`
+                  : undefined,
+              )!,
             );
           }
 
           if (supervisorScopeFilters.length > 0) {
             filters.push(or(...supervisorScopeFilters)!);
           } else {
+            // If Dean has no Program Chairs appointed yet, show 0 reports
             return createPaginatedData({
               data: [],
               currentPage: 1,
@@ -567,7 +591,7 @@ export class EvaluationReportService implements IEvaluationReportService {
             });
           }
 
-          // 🔒 A supervisor never evaluates themselves in their supervisory list
+          // 🔒 A supervisor NEVER supervises/evaluates themselves in their supervisory list
           filters.push(ne(IndividualFacultyReports.faculty_id, actorUser.account.id));
 
           if (faculty_id) {
