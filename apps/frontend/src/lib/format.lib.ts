@@ -54,13 +54,13 @@ export const getScheduleWindowStatus = (openAt: string | Date, closeAt: string |
   if (now >= openDate && now <= closeDate) {
     return {
       label: "Open for Submissions",
-      color: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+      color: "bg-success/15 text-success border-success/20",
     };
   }
   if (now < openDate) {
     return {
       label: "Scheduled / Upcoming",
-      color: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20",
+      color: "bg-info/15 text-info border-info/20",
     };
   }
   return { label: "Closed / Concluded", color: "bg-muted text-muted-foreground border-border" };

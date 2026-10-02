@@ -77,10 +77,10 @@ export function ReportGridView({
               variant="outline"
               className={`text-[10px] uppercase font-bold shrink-0 ${
                 report.status === "PUBLISHED"
-                  ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
+                  ? "border-success/40 text-success bg-success/10"
                   : report.status === "FINALIZED"
-                    ? "border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10"
-                    : "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10"
+                    ? "border-info/40 text-info bg-info/10"
+                    : "border-warning/40 text-warning bg-warning/10"
               }`}
             >
               {report.status}
@@ -98,7 +98,7 @@ export function ReportGridView({
               </div>
               <div className="text-center pl-2">
                 <p className="text-[10px] uppercase font-bold text-muted-foreground">SEF Score</p>
-                <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
+                <p className="text-lg font-extrabold text-success font-mono">
                   {report.overall_sef_rating !== null ? report.overall_sef_rating.toFixed(2) : "—"}
                 </p>
               </div>

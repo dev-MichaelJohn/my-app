@@ -135,7 +135,7 @@ export function CollegeTableView({
                           {item.dean && (
                             <DropdownMenuItem
                               onClick={() => onUnassignDean(item)}
-                              className="gap-2 text-amber-600 dark:text-amber-400 focus:bg-amber-500/10 cursor-pointer font-medium"
+                              className="gap-2 text-warning focus:bg-warning/10 cursor-pointer font-medium"
                             >
                               <UserX className="w-4 h-4" />
                               <span>Unassign Dean</span>

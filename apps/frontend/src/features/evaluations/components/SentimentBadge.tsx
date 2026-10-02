@@ -19,14 +19,14 @@ export function SentimentBadge({ score, classification, className, showScore = t
 
   if (label === "POSITIVE" || (!classification && score > 0.15)) {
     label = "POSITIVE";
-    colorClasses = "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
+    colorClasses = "bg-success/15 text-success border-success/20";
     Icon = Smile;
   } else if (label === "NEGATIVE" || (!classification && score < -0.15)) {
     label = "NEGATIVE";
     colorClasses = "bg-destructive/15 text-destructive border-destructive/20";
     Icon = Frown;
   } else if (label === "MIXED") {
-    colorClasses = "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20";
+    colorClasses = "bg-warning/15 text-warning border-warning/20";
     Icon = Sparkles;
   }
 

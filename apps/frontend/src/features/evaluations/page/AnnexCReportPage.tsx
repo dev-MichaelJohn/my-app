@@ -572,7 +572,7 @@ export default function AnnexCReportPage() {
                     <span className="text-[10px] uppercase font-bold text-muted-foreground block">
                       SEF Score (Supervisor)
                     </span>
-                    <span className="text-base font-extrabold font-mono text-emerald-600 dark:text-emerald-400">
+                    <span className="text-base font-extrabold font-mono text-success">
                       {activeReport.overall_sef_rating !== null
                         ? activeReport.overall_sef_rating.toFixed(2)
                         : "N/A"}

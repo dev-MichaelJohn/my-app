@@ -101,11 +101,11 @@ export default function SupervisorEvaluationPage() {
                   </div>
 
                   {item.has_submitted ? (
-                    <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-semibold gap-1 text-[11px]">
+                    <Badge className="bg-success/15 text-success border-success/20 font-semibold gap-1 text-[11px]">
                       <CheckCircle2 className="w-3.5 h-3.5" /> Evaluated
                     </Badge>
                   ) : item.is_draft ? (
-                    <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20 font-semibold text-[11px]">
+                    <Badge className="bg-warning/15 text-warning border-warning/20 font-semibold text-[11px]">
                       Draft Saved
                     </Badge>
                   ) : (
@@ -250,7 +250,7 @@ function SupervisorEvaluationFormViewComponent({
             {offering.course_curriculum.course.name}
           </Badge>
           {is_submitted && (
-            <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-semibold gap-1 text-xs">
+            <Badge className="bg-success/15 text-success border-success/20 font-semibold gap-1 text-xs">
               <CheckCircle2 className="w-3.5 h-3.5" /> Submitted
             </Badge>
           )}

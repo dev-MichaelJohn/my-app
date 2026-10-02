@@ -68,10 +68,10 @@ export function ReportLifecycleBar({
           variant="outline"
           className={`text-xs font-bold uppercase ${
             report.status === "PUBLISHED"
-              ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
+              ? "border-success/40 text-success bg-success/10"
               : report.status === "FINALIZED"
-                ? "border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10"
-                : "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10"
+                ? "border-info/40 text-info bg-info/10"
+                : "border-warning/40 text-warning bg-warning/10"
           }`}
         >
           {report.status}
@@ -87,7 +87,7 @@ export function ReportLifecycleBar({
                 size="sm"
                 variant="outline"
                 onClick={() => setTargetStatus("FINALIZED")}
-                className="h-8 text-xs gap-1 border-blue-500/30 text-blue-600 hover:bg-blue-50"
+                className="h-8 text-xs gap-1 border-info/30 text-info hover:bg-info/10"
               >
                 <CheckCircle className="w-3.5 h-3.5" />
                 <span>Finalize</span>
@@ -98,7 +98,7 @@ export function ReportLifecycleBar({
               <Button
                 size="sm"
                 onClick={() => setTargetStatus("PUBLISHED")}
-                className="h-8 text-xs gap-1 bg-emerald-600 text-white hover:bg-emerald-700"
+                className="h-8 text-xs gap-1 bg-success text-white hover:bg-success/90"
               >
                 <SendHorizontal className="w-3.5 h-3.5" />
                 <span>Publish</span>
@@ -164,7 +164,7 @@ export function ReportLifecycleBar({
               onClick={() => downloadAnnexDPdf(report)}
               className="cursor-pointer gap-2 py-2"
             >
-              <span className="font-bold text-emerald-600">Annex D</span>
+              <span className="font-bold text-success">Annex D</span>
               <span>— Action Plan (FEDAF)</span>
             </DropdownMenuItem>
           </DropdownMenuContent>

@@ -149,7 +149,7 @@ export function AnnexDDocument({ report, currentUser, isPrivileged }: Props) {
                 <TableCell className="text-center text-primary print:text-black">
                   {report.overall_set_rating.toFixed(2)}
                 </TableCell>
-                <TableCell className="text-center text-emerald-600 dark:text-emerald-400 print:text-black">
+                <TableCell className="text-center text-success print:text-black">
                   {report.overall_sef_rating !== null
                     ? report.overall_sef_rating.toFixed(2)
                     : "N/A"}
@@ -277,11 +277,11 @@ export function AnnexDDocument({ report, currentUser, isPrivileged }: Props) {
                 Supervisor
               </span>
               {report.fedaf_plan?.supervisor_signed_at ? (
-                <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1">
+                <Badge className="bg-success/15 text-success border-success/30 text-[10px] gap-1">
                   <CheckCircle className="w-3 h-3" /> Signed
                 </Badge>
               ) : (
-                <Badge variant="outline" className="text-amber-600 border-amber-500/30 text-[10px]">
+                <Badge variant="outline" className="text-warning border-warning/30 text-[10px]">
                   Pending Signature
                 </Badge>
               )}
@@ -324,11 +324,11 @@ export function AnnexDDocument({ report, currentUser, isPrivileged }: Props) {
                 Faculty Member
               </span>
               {report.fedaf_plan?.faculty_signed_at ? (
-                <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1">
+                <Badge className="bg-success/15 text-success border-success/30 text-[10px] gap-1">
                   <CheckCircle className="w-3 h-3" /> Acknowledged
                 </Badge>
               ) : (
-                <Badge variant="outline" className="text-amber-600 border-amber-500/30 text-[10px]">
+                <Badge variant="outline" className="text-warning border-warning/30 text-[10px]">
                   Pending Acknowledgment
                 </Badge>
               )}
@@ -356,7 +356,7 @@ export function AnnexDDocument({ report, currentUser, isPrivileged }: Props) {
                   size="sm"
                   onClick={() => handleSign("FACULTY")}
                   disabled={signFedafMutation.isPending}
-                  className="w-full text-xs h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white print:hidden"
+                  className="w-full text-xs h-8 gap-1.5 bg-success hover:bg-success/90 text-white print:hidden"
                 >
                   <CheckCircle className="w-3.5 h-3.5" />
                   <span>Sign & Acknowledge Evaluation</span>

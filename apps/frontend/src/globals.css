@@ -39,6 +39,9 @@
   --sidebar-border: oklch(0.9021 0.0131 141.8078);
   --sidebar-ring: oklch(0.4479 0.1083 151.3277);
   --destructive-foreground: oklch(0.9705 0.0129 17.3797);
+  --success: oklch(0.596 0.145 163.225);
+  --warning: oklch(0.666 0.179 58.318);
+  --info: oklch(0.546 0.245 262.881);
   --font-sans: DM Sans, ui-sans-serif, sans-serif, system-ui;
   --font-serif: Fraunces;
   --font-mono: JetBrains Mono;
@@ -94,6 +97,9 @@
   --sidebar-border: oklch(0.2679 0.0230 144.8978);
   --sidebar-ring: oklch(0.7227 0.1920 149.5793);
   --destructive-foreground: oklch(1.0000 0 0);
+  --success: oklch(0.765 0.177 163.223);
+  --warning: oklch(0.828 0.189 84.429);
+  --info: oklch(0.707 0.165 254.624);
   --radius: 0.5rem;
   --font-sans: DM Sans, ui-sans-serif, sans-serif, system-ui;
   --font-serif: Fraunces;
@@ -183,6 +189,9 @@
   --shadow-opacity: var(--shadow-opacity);
   --color-shadow-color: var(--shadow-color);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
 }
 
 @layer base {

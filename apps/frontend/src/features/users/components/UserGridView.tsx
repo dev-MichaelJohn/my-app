@@ -134,7 +134,7 @@ export function UserGridView({
                             onClick={() => onResetPassword(item)}
                             className="gap-2 cursor-pointer"
                           >
-                            <KeyRound className="w-4 h-4 text-amber-500" />
+                            <KeyRound className="w-4 h-4 text-warning" />
                             <span>Reset Password</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem
@@ -193,7 +193,7 @@ export function UserGridView({
                   {item.offices?.deanships?.map((d) => (
                     <Badge
                       key={d.id}
-                      className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-bold text-[10px] px-1.5 py-0.5 gap-1"
+                      className="bg-success/15 text-success border-success/30 font-bold text-[10px] px-1.5 py-0.5 gap-1"
                     >
                       <Building2 className="w-3 h-3" /> Dean of {d.initialism}
                     </Badge>
@@ -201,7 +201,7 @@ export function UserGridView({
                   {item.offices?.chairships?.map((c) => (
                     <Badge
                       key={c.id}
-                      className="bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30 font-bold text-[10px] px-1.5 py-0.5 gap-1"
+                      className="bg-info/15 text-info border-info/30 font-bold text-[10px] px-1.5 py-0.5 gap-1"
                     >
                       <GraduationCap className="w-3 h-3" /> Chair of {c.initialism}
                     </Badge>
@@ -213,7 +213,7 @@ export function UserGridView({
             <CardFooter className="pt-0 text-[11px] text-muted-foreground justify-between border-t border-border/50 py-3">
               <span>Account #{item.account.id}</span>
               {item.account.is_verified ? (
-                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                <span className="flex items-center gap-1 text-success font-medium">
                   <CheckCircle2 className="w-3 h-3" /> Verified
                 </span>
               ) : (

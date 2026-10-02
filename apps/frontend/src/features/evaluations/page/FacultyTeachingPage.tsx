@@ -271,7 +271,7 @@ export default function FacultyTeachingPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           {s.has_evaluated ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[10px] gap-1">
+                            <Badge className="bg-success/15 text-success border-success/20 text-[10px] gap-1">
                               <CheckCircle2 className="w-3 h-3" /> Submitted
                             </Badge>
                           ) : (

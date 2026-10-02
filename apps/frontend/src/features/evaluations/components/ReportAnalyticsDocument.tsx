@@ -34,7 +34,7 @@ export function ReportAnalyticsDocument({ report }: Props) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Highest Indicators (Strengths) */}
         <Card className="p-5 border-border bg-card shadow-xs space-y-3">
-          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+          <div className="flex items-center gap-2 text-success font-bold text-sm">
             <TrendingUp className="w-4 h-4" />
             <span>Identified Key Strengths</span>
           </div>
@@ -50,11 +50,11 @@ export function ReportAnalyticsDocument({ report }: Props) {
               analytics_summary.highestIndicators.map((item, idx) => (
                 <div
                   key={idx}
-                  className="p-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-xs flex items-start justify-between gap-3"
+                  className="p-2.5 rounded-xl border border-success/20 bg-success/5 text-xs flex items-start justify-between gap-3"
                 >
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-1.5">
-                      <Badge className="bg-emerald-600 text-white text-[10px] h-4 px-1.5">
+                      <Badge className="bg-success text-white text-[10px] h-4 px-1.5">
                         {item.type}
                       </Badge>
                       <span className="text-[11px] font-bold text-muted-foreground">
@@ -63,7 +63,7 @@ export function ReportAnalyticsDocument({ report }: Props) {
                     </div>
                     <p className="text-foreground font-medium leading-snug">{item.indicatorText}</p>
                   </div>
-                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm shrink-0">
+                  <span className="font-mono font-bold text-success text-sm shrink-0">
                     {item.averageRating.toFixed(2)}
                   </span>
                 </div>
@@ -74,7 +74,7 @@ export function ReportAnalyticsDocument({ report }: Props) {
 
         {/* Lowest Indicators (Growth Areas) */}
         <Card className="p-5 border-border bg-card shadow-xs space-y-3">
-          <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-bold text-sm">
+          <div className="flex items-center gap-2 text-warning font-bold text-sm">
             <AlertCircle className="w-4 h-4" />
             <span>Targeted Areas for Faculty Development</span>
           </div>
@@ -90,11 +90,11 @@ export function ReportAnalyticsDocument({ report }: Props) {
               analytics_summary.lowestIndicators.map((item, idx) => (
                 <div
                   key={idx}
-                  className="p-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 text-xs flex items-start justify-between gap-3"
+                  className="p-2.5 rounded-xl border border-warning/20 bg-warning/5 text-xs flex items-start justify-between gap-3"
                 >
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-1.5">
-                      <Badge className="bg-amber-600 text-white text-[10px] h-4 px-1.5">
+                      <Badge className="bg-warning text-white text-[10px] h-4 px-1.5">
                         {item.type}
                       </Badge>
                       <span className="text-[11px] font-bold text-muted-foreground">
@@ -103,7 +103,7 @@ export function ReportAnalyticsDocument({ report }: Props) {
                     </div>
                     <p className="text-foreground font-medium leading-snug">{item.indicatorText}</p>
                   </div>
-                  <span className="font-mono font-bold text-amber-600 dark:text-amber-400 text-sm shrink-0">
+                  <span className="font-mono font-bold text-warning text-sm shrink-0">
                     {item.averageRating.toFixed(2)}
                   </span>
                 </div>
@@ -149,7 +149,7 @@ export function ReportAnalyticsDocument({ report }: Props) {
                     <TableCell className="text-center font-mono font-bold text-primary">
                       {cat.setAverage !== null ? cat.setAverage.toFixed(2) : "—"}
                     </TableCell>
-                    <TableCell className="text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    <TableCell className="text-center font-mono font-bold text-success">
                       {cat.sefAverage !== null ? cat.sefAverage.toFixed(2) : "—"}
                     </TableCell>
                     <TableCell className="text-center font-mono font-semibold">
@@ -157,9 +157,9 @@ export function ReportAnalyticsDocument({ report }: Props) {
                         <span
                           className={`px-2 py-0.5 rounded text-[11px] ${
                             cat.gap > 0
-                              ? "bg-blue-500/10 text-blue-600"
+                              ? "bg-info/10 text-info"
                               : cat.gap < 0
-                                ? "bg-amber-500/10 text-amber-600"
+                                ? "bg-warning/10 text-warning"
                                 : "text-muted-foreground"
                           }`}
                         >
@@ -246,13 +246,13 @@ export function ReportAnalyticsDocument({ report }: Props) {
                       <div className="flex items-center justify-center gap-1 font-mono text-[10px]">
                         <span
                           title="Rating 5"
-                          className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 font-bold"
+                          className="px-1.5 py-0.5 rounded bg-success/15 text-success font-bold"
                         >
                           5:{ind.ratingDistribution?.[5] ?? 0}
                         </span>
                         <span
                           title="Rating 4"
-                          className="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-700 font-bold"
+                          className="px-1.5 py-0.5 rounded bg-info/15 text-info font-bold"
                         >
                           4:{ind.ratingDistribution?.[4] ?? 0}
                         </span>
@@ -264,7 +264,7 @@ export function ReportAnalyticsDocument({ report }: Props) {
                         </span>
                         <span
                           title="Rating 2"
-                          className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700"
+                          className="px-1.5 py-0.5 rounded bg-warning/15 text-warning"
                         >
                           2:{ind.ratingDistribution?.[2] ?? 0}
                         </span>
@@ -290,7 +290,7 @@ export function ReportAnalyticsDocument({ report }: Props) {
       {/* ── 4. SEF: Granular Indicator Breakdown with MOVs ── */}
       <Card className="p-6 border-border bg-card shadow-xs space-y-4">
         <div className="flex items-center gap-2 font-bold text-sm text-foreground">
-          <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <UserCheck className="w-4 h-4 text-success" />
           <span>Supervisor's Evaluation of Faculty (SEF) — Indicator Breakdown</span>
         </div>
 
@@ -303,13 +303,13 @@ export function ReportAnalyticsDocument({ report }: Props) {
             >
               <div className="flex justify-between items-center text-xs">
                 <span className="font-bold text-foreground truncate">{c.categoryName}</span>
-                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                <span className="font-mono font-bold text-success">
                   {c.averageRating.toFixed(2)}
                 </span>
               </div>
               <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-emerald-600"
+                  className="h-full bg-success"
                   style={{ width: `${(c.averageRating / 5) * 100}%` }}
                 />
               </div>
@@ -361,7 +361,7 @@ export function ReportAnalyticsDocument({ report }: Props) {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    <TableCell className="text-center font-mono font-bold text-success">
                       {ind.averageRating.toFixed(2)}
                     </TableCell>
                     <TableCell className="text-[11px] text-muted-foreground">

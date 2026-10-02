@@ -29,8 +29,8 @@ export function AppHeader({ onOpenMobileMenu }: AppHeaderProps) {
         {isLoading ? (
           <Skeleton className="hidden sm:block h-7 w-48 rounded-md bg-muted/60" />
         ) : activeSemester ? (
-          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-md bg-success/10 text-success border border-success/20 text-xs font-semibold shadow-2xs">
+            <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
             <span>
               A.Y. {activeSemester.school_year_start}-{activeSemester.school_year_end} |{" "}
               {activeSemester.semester_term} Sem

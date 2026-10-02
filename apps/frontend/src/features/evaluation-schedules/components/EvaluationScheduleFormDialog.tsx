@@ -295,7 +295,7 @@ function FormInner({
               <div className="w-full space-y-1.5">
                 <Label className="text-foreground">Questionnaire Template</Label>
                 {forms.length === 0 && !selectedForm ? (
-                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs rounded-lg font-medium flex items-start gap-2">
+                  <div className="p-3 bg-warning/10 border border-warning/20 text-warning text-xs rounded-lg font-medium flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                     <span>
                       No active {type === "student" ? "Student (SET)" : "Supervisor (SEF)"}{" "}

@@ -48,7 +48,7 @@ export function FacultySelfReportView({
 
     if (isSupervisorSigned && isFacultySigned) {
       return (
-        <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-bold text-[10px] gap-1">
+        <Badge className="bg-success/15 text-success border-success/30 font-bold text-[10px] gap-1">
           <CheckCircle className="w-3 h-3" /> Fully Signed & Certified
         </Badge>
       );
@@ -56,7 +56,7 @@ export function FacultySelfReportView({
 
     if (report.status === "PUBLISHED" || isSupervisorSigned) {
       return (
-        <Badge className="bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30 font-bold text-[10px] gap-1">
+        <Badge className="bg-info/15 text-info border-info/30 font-bold text-[10px] gap-1">
           <Clock className="w-3 h-3" /> Published (Awaiting Your Signature)
         </Badge>
       );
@@ -64,14 +64,14 @@ export function FacultySelfReportView({
 
     if (report.status === "FINALIZED") {
       return (
-        <Badge className="bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 font-bold text-[10px] gap-1">
+        <Badge className="bg-info/15 text-info border-info/30 font-bold text-[10px] gap-1">
           <Clock className="w-3 h-3" /> Finalized (Pending Supervisor Plan)
         </Badge>
       );
     }
 
     return (
-      <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 font-bold text-[10px] gap-1">
+      <Badge className="bg-warning/15 text-warning border-warning/30 font-bold text-[10px] gap-1">
         <Clock className="w-3 h-3" /> Draft (Pending Supervisory Review)
       </Badge>
     );
@@ -140,7 +140,7 @@ export function FacultySelfReportView({
         </div>
       ) : !report ? (
         <div className="text-center py-20 px-6 border border-dashed border-border rounded-2xl bg-card space-y-3">
-          <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-600 mx-auto flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full bg-warning/10 text-warning mx-auto flex items-center justify-center">
             <Clock className="w-6 h-6" />
           </div>
           <h3 className="font-bold text-base text-foreground">
@@ -174,7 +174,7 @@ export function FacultySelfReportView({
                 <span className="text-[10px] uppercase font-bold text-muted-foreground block">
                   Supervisor Rating (SEF)
                 </span>
-                <span className="text-xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400">
+                <span className="text-xl font-extrabold font-mono text-success">
                   {report.overall_sef_rating !== null
                     ? report.overall_sef_rating.toFixed(2)
                     : "N/A"}
@@ -212,7 +212,7 @@ export function FacultySelfReportView({
                   onClick={() => downloadAnnexDPdf(report)}
                   className="cursor-pointer gap-2 py-2"
                 >
-                  <span className="font-bold text-emerald-600">Annex D</span>
+                  <span className="font-bold text-success">Annex D</span>
                   <span>— Acknowledgment Plan (FEDAF)</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>

@@ -214,7 +214,7 @@ export function AnnexCDocument({ report }: Props) {
                 <TableCell className="text-center text-primary font-mono text-base print:text-black">
                   {report.overall_set_rating.toFixed(2)}
                 </TableCell>
-                <TableCell className="text-center text-emerald-600 dark:text-emerald-400 font-mono text-base print:text-black">
+                <TableCell className="text-center text-success font-mono text-base print:text-black">
                   {report.overall_sef_rating !== null
                     ? report.overall_sef_rating.toFixed(2)
                     : "N/A"}

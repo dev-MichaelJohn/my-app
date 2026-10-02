@@ -138,7 +138,7 @@ export function UserTableView({
                     {item.offices?.deanships?.map((d) => (
                       <Badge
                         key={d.id}
-                        className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-bold text-[10px] px-1.5 py-0.5 gap-1"
+                        className="bg-success/15 text-success border-success/30 font-bold text-[10px] px-1.5 py-0.5 gap-1"
                       >
                         <Building2 className="w-3 h-3" /> Dean of {d.initialism}
                       </Badge>
@@ -146,7 +146,7 @@ export function UserTableView({
                     {item.offices?.chairships?.map((c) => (
                       <Badge
                         key={c.id}
-                        className="bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30 font-bold text-[10px] px-1.5 py-0.5 gap-1"
+                        className="bg-info/15 text-info border-info/30 font-bold text-[10px] px-1.5 py-0.5 gap-1"
                       >
                         <GraduationCap className="w-3 h-3" /> Chair of {c.initialism}
                       </Badge>
@@ -155,7 +155,7 @@ export function UserTableView({
                 </TableCell>
                 <TableCell>
                   {item.account.is_verified ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-success">
                       <CheckCircle2 className="w-3.5 h-3.5" /> Verified
                     </span>
                   ) : (
@@ -199,7 +199,7 @@ export function UserTableView({
                                 onClick={() => onResetPassword(item)}
                                 className="gap-2 cursor-pointer"
                               >
-                                <KeyRound className="w-4 h-4 text-amber-500" />
+                                <KeyRound className="w-4 h-4 text-warning" />
                                 <span>Reset Password</span>
                               </DropdownMenuItem>
                               <DropdownMenuItem

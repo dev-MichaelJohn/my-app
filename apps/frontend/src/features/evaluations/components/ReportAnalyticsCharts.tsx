@@ -92,7 +92,7 @@ export function ReportAnalyticsCharts({ report }: Props) {
       {/* ── Top Highlights: Strengths & Growth Areas ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="p-4 border-border bg-card shadow-xs space-y-2.5">
-          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+          <div className="flex items-center gap-2 text-success font-bold text-sm">
             <TrendingUp className="w-4 h-4" />
             <span>Key Strengths (Top 3 Rated Statements)</span>
           </div>
@@ -103,7 +103,7 @@ export function ReportAnalyticsCharts({ report }: Props) {
               analytics_summary.highestIndicators.map((item, idx) => (
                 <div
                   key={idx}
-                  className="p-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-xs flex items-center justify-between gap-2"
+                  className="p-2 rounded-xl border border-success/20 bg-success/5 text-xs flex items-center justify-between gap-2"
                 >
                   <div className="space-y-0.5 truncate">
                     <span className="text-[10px] font-bold text-muted-foreground uppercase">
@@ -111,7 +111,7 @@ export function ReportAnalyticsCharts({ report }: Props) {
                     </span>
                     <p className="font-medium text-foreground truncate">{item.indicatorText}</p>
                   </div>
-                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm shrink-0">
+                  <span className="font-mono font-bold text-success text-sm shrink-0">
                     {item.averageRating.toFixed(2)}
                   </span>
                 </div>
@@ -121,7 +121,7 @@ export function ReportAnalyticsCharts({ report }: Props) {
         </Card>
 
         <Card className="p-4 border-border bg-card shadow-xs space-y-2.5">
-          <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-bold text-sm">
+          <div className="flex items-center gap-2 text-warning font-bold text-sm">
             <AlertCircle className="w-4 h-4" />
             <span>Target Growth Areas (Guide for FEDAF Plan)</span>
           </div>
@@ -132,7 +132,7 @@ export function ReportAnalyticsCharts({ report }: Props) {
               analytics_summary.lowestIndicators.map((item, idx) => (
                 <div
                   key={idx}
-                  className="p-2 rounded-xl border border-amber-500/20 bg-amber-500/5 text-xs flex items-center justify-between gap-2"
+                  className="p-2 rounded-xl border border-warning/20 bg-warning/5 text-xs flex items-center justify-between gap-2"
                 >
                   <div className="space-y-0.5 truncate">
                     <span className="text-[10px] font-bold text-muted-foreground uppercase">
@@ -140,7 +140,7 @@ export function ReportAnalyticsCharts({ report }: Props) {
                     </span>
                     <p className="font-medium text-foreground truncate">{item.indicatorText}</p>
                   </div>
-                  <span className="font-mono font-bold text-amber-600 dark:text-amber-400 text-sm shrink-0">
+                  <span className="font-mono font-bold text-warning text-sm shrink-0">
                     {item.averageRating.toFixed(2)}
                   </span>
                 </div>
@@ -250,7 +250,7 @@ export function ReportAnalyticsCharts({ report }: Props) {
           <CardHeader className="pb-2 border-b border-border/50">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
-                <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <UserCheck className="w-4 h-4 text-success" />
                 <span>Supervisor Evaluation (SEF) Categories</span>
               </CardTitle>
               <Badge variant="outline" className="text-[10px] font-mono">
@@ -318,7 +318,7 @@ export function ReportAnalyticsCharts({ report }: Props) {
                           {cat.categoryName}
                         </span>
                       </div>
-                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <span className="font-mono font-bold text-success shrink-0">
                         {cat.averageRating.toFixed(2)} / {effectiveMax.toFixed(2)}
                       </span>
                     </div>
@@ -448,10 +448,10 @@ export function ReportAnalyticsCharts({ report }: Props) {
                             <div
                               className={`h-full rounded-full transition-all duration-300 ${
                                 relativeRatio >= 0.75
-                                  ? "bg-emerald-500"
+                                  ? "bg-success"
                                   : relativeRatio >= 0.5
-                                    ? "bg-blue-500"
-                                    : "bg-amber-500"
+                                    ? "bg-info"
+                                    : "bg-warning"
                               }`}
                               style={{ width: `${percentage}%` }}
                             />

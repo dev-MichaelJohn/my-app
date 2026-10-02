@@ -234,7 +234,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
             </div>
 
             {isSupervisorSigned ? (
-              <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1">
+              <Badge className="bg-success/15 text-success border-success/30 text-[10px] gap-1">
                 <CheckCircle className="w-3 h-3" /> Signed & Published
               </Badge>
             ) : canEditSupervisorPlan ? (
@@ -242,7 +242,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
                 size="sm"
                 onClick={() => setConfirmSupervisorSignOpen(true)}
                 disabled={signFedafMutation.isPending}
-                className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                className="h-8 text-xs gap-1.5 bg-success hover:bg-success/90 text-white shadow-2xs"
               >
                 <SendHorizontal className="w-3.5 h-3.5" />
                 <span>Sign as {supervisorRoleLabel} & Publish</span>
@@ -267,7 +267,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
             </div>
 
             {isFacultySigned ? (
-              <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1">
+              <Badge className="bg-success/15 text-success border-success/30 text-[10px] gap-1">
                 <CheckCircle className="w-3 h-3" /> Acknowledged
               </Badge>
             ) : isOwnReport ? (
@@ -276,7 +276,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
                   size="sm"
                   onClick={() => setConfirmFacultySignOpen(true)}
                   disabled={signFedafMutation.isPending}
-                  className="h-8 text-xs gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 shadow-2xs"
+                  className="h-8 text-xs gap-1.5 bg-success text-white hover:bg-success/90 shadow-2xs"
                 >
                   <CheckCircle className="w-3.5 h-3.5" />
                   <span>Sign Acknowledgment</span>
@@ -290,7 +290,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
               /* When viewing as Supervisor/Admin, show status badge — NEVER a signature button */
               <Badge
                 variant="outline"
-                className="text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] gap-1"
+                className="text-warning border-warning/30 text-[10px] gap-1"
               >
                 <Clock className="w-3 h-3 opacity-60" /> Awaiting Faculty Acknowledgment
               </Badge>
@@ -308,7 +308,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
           <span>
             Signing certifies that you have formulated and discussed this development plan with{" "}
             <strong>{report.faculty_name}</strong>.
-            <span className="block mt-2 font-semibold text-emerald-600 dark:text-emerald-400 text-xs">
+            <span className="block mt-2 font-semibold text-success text-xs">
               ✓ This action will officially publish the report and notify the faculty member to
               review and sign their acknowledgment.
             </span>

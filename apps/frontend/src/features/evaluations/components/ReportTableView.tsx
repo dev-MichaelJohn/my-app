@@ -90,7 +90,7 @@ export function ReportTableView({
               <TableCell className="text-center font-mono font-bold text-primary">
                 {report.overall_set_rating.toFixed(2)}
               </TableCell>
-              <TableCell className="text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">
+              <TableCell className="text-center font-mono font-bold text-success">
                 {report.overall_sef_rating !== null ? report.overall_sef_rating.toFixed(2) : "—"}
               </TableCell>
               <TableCell className="text-center text-xs font-mono text-muted-foreground">
@@ -101,10 +101,10 @@ export function ReportTableView({
                   variant="outline"
                   className={`text-[10px] uppercase font-bold ${
                     report.status === "PUBLISHED"
-                      ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
+                      ? "border-success/40 text-success bg-success/10"
                       : report.status === "FINALIZED"
-                        ? "border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10"
-                        : "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10"
+                        ? "border-info/40 text-info bg-info/10"
+                        : "border-warning/40 text-warning bg-warning/10"
                   }`}
                 >
                   {report.status}
