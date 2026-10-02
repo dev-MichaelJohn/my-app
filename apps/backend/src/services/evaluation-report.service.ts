@@ -377,19 +377,44 @@ export class EvaluationReportService implements IEvaluationReportService {
 
       if (signatureRole === "SUPERVISOR") {
         const actorRoles = actorUser.roles ?? [];
-        const isAuthorizedSupervisor =
-          actorRoles.includes("SUPERVISOR") ||
-          actorRoles.includes("ADMIN") ||
-          actorRoles.includes("SYS_ADMIN");
+        const isSysAdmin = actorRoles.includes("SYS_ADMIN");
+        const isAdmin = actorRoles.includes("ADMIN");
+        const isSupervisor = actorRoles.includes("SUPERVISOR");
 
-        if (!isAuthorizedSupervisor) {
+        if (!isSupervisor && !isAdmin && !isSysAdmin) {
           throw new AppError(403, "Only supervisors and academic leaders can sign as supervisor.");
         }
 
-        existingPlan.supervisor_name = `${actorUser.details.first_name} ${actorUser.details.last_name}`;
+        // 🎯 CHED CMO 19 s. 2025 Sec 9.2 Hierarchy Verification:
+        // Check if the evaluated faculty is a Program Chair
+        const [isChair] = await tx
+          .select({ id: ProgramChairs.id })
+          .from(ProgramChairs)
+          .where(
+            and(eq(ProgramChairs.chair_id, report.faculty_id), isNull(ProgramChairs.deleted_at)),
+          );
+
+        const isTargetAChair = Boolean(isChair);
+        const deanships = actorUser.offices?.deanships || [];
+        const chairships = actorUser.offices?.chairships || [];
+        const isActorDean = deanships.length > 0;
+        const isActorChair = chairships.length > 0;
+
+        // If target is a Chair -> Dean must sign
+        // If target is regular faculty -> Chair must sign (or Dean if vacant chairship)
+        let supervisoryTitle = "Immediate Supervisor";
+        if (isTargetAChair) {
+          supervisoryTitle = `College Dean (${deanships[0]?.initialism || "Dean"})`;
+        } else if (isActorChair) {
+          supervisoryTitle = `Program Chair (${chairships[0]?.initialism || "Chair"})`;
+        } else if (isActorDean) {
+          supervisoryTitle = `College Dean (Acting Supervisor)`;
+        }
+
+        existingPlan.supervisor_name = `${actorUser.details.first_name} ${actorUser.details.last_name} (${supervisoryTitle})`;
         existingPlan.supervisor_signed_at = now;
 
-        // 🚀 AUTOMATIC PUBLISH: Signing by the supervisor officially releases the report to the faculty
+        // 🚀 AUTOMATIC PUBLISH: Signing by the supervisor releases the report to the faculty
         nextStatus = "PUBLISHED";
       } else {
         if (!isOwnReport) {
