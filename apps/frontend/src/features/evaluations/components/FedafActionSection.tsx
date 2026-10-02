@@ -3,8 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle, FileBadge2, PenTool, Save, Info } from "lucide-react";
+import { CheckCircle, SendHorizontal, PenTool, Save, Info } from "lucide-react";
 import { useUpdateFedafPlan, useSignFedaf } from "../hooks/useEvaluationSubmissions";
+import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { toast } from "sonner";
 import type { AnnexCFacultyReport, GetUser } from "@my-app/shared";
 
@@ -19,6 +20,8 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
   const signFedafMutation = useSignFedaf();
 
   const isOwnReport = report.faculty_id === currentUser?.account.id;
+  const isPlanPublished =
+    report.status === "PUBLISHED" || Boolean(report.fedaf_plan?.supervisor_signed_at);
   const canEditSupervisorPlan = isPrivileged && !isOwnReport;
 
   const [editMode, setEditMode] = useState(false);
@@ -27,6 +30,10 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
     proposed_activities: report.fedaf_plan?.proposed_activities || "",
     action_plan: report.fedaf_plan?.action_plan || "",
   });
+
+  // ── Friction Confirmation Dialog States ──
+  const [confirmSupervisorSignOpen, setConfirmSupervisorSignOpen] = useState(false);
+  const [confirmFacultySignOpen, setConfirmFacultySignOpen] = useState(false);
 
   const handleSave = async () => {
     try {
@@ -41,13 +48,19 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
     }
   };
 
-  const handleSign = async (role: "FACULTY" | "SUPERVISOR") => {
+  const handleConfirmSign = async (role: "FACULTY" | "SUPERVISOR") => {
     try {
       await signFedafMutation.mutateAsync({
         reportId: report.id,
         signatureRole: role,
       });
-      toast.success(`Acknowledgment recorded as ${role.toLowerCase()}.`);
+      if (role === "SUPERVISOR") {
+        toast.success("Signed and officially published to faculty member.");
+      } else {
+        toast.success("Evaluation acknowledgment recorded.");
+      }
+      setConfirmSupervisorSignOpen(false);
+      setConfirmFacultySignOpen(false);
     } catch (err: any) {
       toast.error(err.message || "Failed to sign acknowledgment.");
     }
@@ -99,7 +112,23 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
           </div>
         )}
 
-        {editMode ? (
+        {/* 🔒 IF FACULTY VIEWS BEFORE SUPERVISOR SIGNS/PUBLISHES: HIDE DRAFT PLAN */}
+        {isOwnReport && !isPlanPublished ? (
+          <div className="p-6 text-center border border-dashed border-border rounded-2xl bg-muted/20 space-y-2">
+            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center">
+              <Info className="w-5 h-5" />
+            </div>
+            <h4 className="font-bold text-sm text-foreground">
+              Development Plan Under Supervisory Formulation
+            </h4>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
+              Your academic supervisor is currently preparing your feedback and development plan
+              (Annex D). The action items and learning activities will appear here once your
+              supervisor signs and publishes the evaluation.
+            </p>
+          </div>
+        ) : editMode ? (
+          /* Supervisor in Edit Mode */
           <div className="p-4 bg-muted/40 border border-primary/40 rounded-xl space-y-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-foreground">1. Areas for Improvement:</label>
@@ -149,6 +178,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
             </div>
           </div>
         ) : (
+          /* Published Plan (Visible to supervisor, and visible to faculty once published) */
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="p-3 rounded-xl border border-border/70 bg-muted/20 space-y-1 text-xs">
               <p className="font-bold text-foreground uppercase tracking-wide text-[10px]">
@@ -195,17 +225,17 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
 
             {report.fedaf_plan?.supervisor_signed_at ? (
               <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1">
-                <CheckCircle className="w-3 h-3" /> Signed
+                <CheckCircle className="w-3 h-3" /> Signed & Published
               </Badge>
             ) : canEditSupervisorPlan ? (
               <Button
                 size="sm"
-                onClick={() => handleSign("SUPERVISOR")}
+                onClick={() => setConfirmSupervisorSignOpen(true)}
                 disabled={signFedafMutation.isPending}
-                className="h-7 text-xs gap-1"
+                className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
               >
-                <FileBadge2 className="w-3 h-3" />
-                <span>Sign as Supervisor</span>
+                <SendHorizontal className="w-3.5 h-3.5" />
+                <span>Sign & Publish to Faculty</span>
               </Button>
             ) : (
               <Badge variant="outline" className="text-muted-foreground text-[10px]">
@@ -228,26 +258,68 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
 
             {report.fedaf_plan?.faculty_signed_at ? (
               <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1">
-                <CheckCircle className="w-3 h-3" /> Signed
+                <CheckCircle className="w-3 h-3" /> Acknowledged
               </Badge>
-            ) : isOwnReport && report.status === "PUBLISHED" ? (
+            ) : isOwnReport && isPlanPublished ? (
               <Button
                 size="sm"
-                onClick={() => handleSign("FACULTY")}
+                onClick={() => setConfirmFacultySignOpen(true)}
                 disabled={signFedafMutation.isPending}
-                className="h-7 text-xs gap-1 bg-emerald-600 text-white hover:bg-emerald-700"
+                className="h-8 text-xs gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 shadow-2xs"
               >
-                <CheckCircle className="w-3 h-3" />
+                <CheckCircle className="w-3.5 h-3.5" />
                 <span>Sign Acknowledgment</span>
               </Button>
             ) : (
               <Badge variant="outline" className="text-muted-foreground text-[10px]">
-                {report.status !== "PUBLISHED" ? "Awaiting Publish" : "Pending"}
+                Awaiting Supervisor Signature
               </Badge>
             )}
           </div>
         </div>
       </CardContent>
+
+      {/* ── Friction Modal: Supervisor Signing & Auto-Publishing ── */}
+      <ConfirmActionDialog
+        open={confirmSupervisorSignOpen}
+        onOpenChange={setConfirmSupervisorSignOpen}
+        title={`Sign & Publish Evaluation for ${report.faculty_name}?`}
+        description={
+          <span>
+            Signing certifies that you have formulated and discussed this development plan with{" "}
+            <strong>{report.faculty_name}</strong>.
+            <span className="block mt-2 font-semibold text-emerald-600 dark:text-emerald-400 text-xs">
+              ✓ This action will automatically publish the report and notify the faculty member to
+              review and sign their acknowledgment.
+            </span>
+          </span>
+        }
+        confirmLabel="Confirm, Sign & Publish"
+        variant="primary"
+        isLoading={signFedafMutation.isPending}
+        onConfirm={() => handleConfirmSign("SUPERVISOR")}
+      />
+
+      {/* ── Friction Modal: Faculty Acknowledgment Signing ── */}
+      <ConfirmActionDialog
+        open={confirmFacultySignOpen}
+        onOpenChange={setConfirmFacultySignOpen}
+        title="Sign Faculty Evaluation Acknowledgment (Annex D)?"
+        description={
+          <span>
+            I acknowledge that I have received and reviewed the faculty evaluation conducted for the{" "}
+            <strong>
+              {report.semester_term} ({report.school_year})
+            </strong>
+            . My signature confirms that I have been given the opportunity to discuss it with my
+            supervisor.
+          </span>
+        }
+        confirmLabel="Confirm & Sign Acknowledgment"
+        variant="primary"
+        isLoading={signFedafMutation.isPending}
+        onConfirm={() => handleConfirmSign("FACULTY")}
+      />
     </Card>
   );
 }
