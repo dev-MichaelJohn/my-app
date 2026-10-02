@@ -17,9 +17,10 @@ import EvaluationSchedulesPage from "@/features/evaluation-schedules/page/Evalua
 import StudentEvaluationPage from "@/features/evaluations/page/StudentEvaluationPage";
 import SupervisorEvaluationPage from "@/features/evaluations/page/SupervisorEvaluationPage";
 import UserPage from "@/features/users/page/UserPage";
-import { PERMISSIONS } from "@my-app/shared";
 import FacultyTeachingPage from "@/features/evaluations/page/FacultyTeachingPage";
 import AnnexCReportPage from "@/features/evaluations/page/AnnexCReportPage";
+import AnalyticsDashboardPage from "@/features/analytics/page/AnalyticsDashboardPage";
+import { PERMISSIONS } from "@my-app/shared";
 
 export const AppRoutes = createBrowserRouter([
   // ── Public / Guest Routes ──
@@ -203,6 +204,26 @@ export const AppRoutes = createBrowserRouter([
               {
                 path: "/reports/faculty",
                 element: <AnnexCReportPage />,
+              },
+            ],
+          },
+          {
+            element: (
+              <PermissionGuard
+                permissions={[
+                  PERMISSIONS.ANALYTICS_VIEW_INSTITUTION,
+                  PERMISSIONS.ANALYTICS_VIEW_COLLEGE,
+                  PERMISSIONS.ANALYTICS_VIEW_PROGRAM,
+                  PERMISSIONS.ANALYTICS_VIEW_SELF,
+                  PERMISSIONS.EVALUATION_REPORT_VIEW_ALL,
+                  PERMISSIONS.EVALUATION_REPORT_VIEW_SELF,
+                ]}
+              />
+            ),
+            children: [
+              {
+                path: "/analytics",
+                element: <AnalyticsDashboardPage />,
               },
             ],
           },

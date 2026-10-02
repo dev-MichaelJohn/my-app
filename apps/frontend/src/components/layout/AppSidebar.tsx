@@ -16,6 +16,7 @@ import {
   UserCheck,
   Calendar,
   BookOpenCheck,
+  TrendingUp,
 } from "lucide-react";
 
 interface NavItem {
@@ -147,6 +148,33 @@ const NAVIGATION_SECTIONS: NavSection[] = [
         href: "/admin/users",
         icon: Users,
         permission: PERMISSIONS.ACCOUNT_READ,
+      },
+    ],
+  },
+  {
+    heading: "Reports & Analytics",
+    items: [
+      {
+        title: "Analytics & Benchmarks",
+        href: "/analytics",
+        icon: TrendingUp,
+        anyPermissions: [
+          PERMISSIONS.ANALYTICS_VIEW_INSTITUTION,
+          PERMISSIONS.ANALYTICS_VIEW_COLLEGE,
+          PERMISSIONS.ANALYTICS_VIEW_PROGRAM,
+          PERMISSIONS.ANALYTICS_VIEW_SELF,
+          PERMISSIONS.EVALUATION_REPORT_VIEW_ALL,
+          PERMISSIONS.EVALUATION_REPORT_VIEW_SELF,
+        ],
+      },
+      {
+        title: "IFER & FEDAF Reports",
+        href: "/reports/faculty",
+        icon: FileSpreadsheet,
+        anyPermissions: [
+          PERMISSIONS.EVALUATION_REPORT_VIEW_ALL,
+          PERMISSIONS.EVALUATION_REPORT_VIEW_SELF,
+        ],
       },
     ],
   },
