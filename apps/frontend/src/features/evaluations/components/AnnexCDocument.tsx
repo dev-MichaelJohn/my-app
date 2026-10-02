@@ -149,7 +149,8 @@ export function AnnexCDocument({ report }: Props) {
                     {row.courseCode}
                   </TableCell>
                   <TableCell className="font-medium">{row.yearSection}</TableCell>
-                  <TableCell className="text-center font-mono">{row.noOfStudents}</TableCell>
+                  {/* 🔒 Mask individual student count for anonymity */}
+                  <TableCell className="text-center font-mono text-muted-foreground">-</TableCell>
                   <TableCell className="text-right font-mono font-semibold">
                     {row.averageSetRating.toFixed(2)}
                   </TableCell>
@@ -159,15 +160,15 @@ export function AnnexCDocument({ report }: Props) {
                 </TableRow>
               ))}
 
-              {/* Totals */}
+              {/* Totals Row: Displays Overall Count */}
               <TableRow className="bg-muted/40 font-bold text-xs border-t-2 border-border print:border-black print:bg-gray-50">
                 <TableCell colSpan={3} className="text-center uppercase tracking-wider">
-                  TOTAL
+                  TOTAL RESPONDENTS
                 </TableCell>
-                <TableCell className="text-center font-mono text-sm">
+                <TableCell className="text-center font-mono text-sm text-primary print:text-black">
                   {report.total_students_evaluated}
                 </TableCell>
-                <TableCell className="text-center uppercase tracking-wider">TOTAL</TableCell>
+                <TableCell className="text-center uppercase tracking-wider">TOTAL SCORE</TableCell>
                 <TableCell className="text-right font-mono text-sm">
                   {report.total_weighted_score.toLocaleString("en-US", {
                     minimumFractionDigits: 2,
