@@ -1,4 +1,4 @@
-import { Search, LayoutGrid, List } from "lucide-react";
+import { Search, LayoutGrid, List, Lock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,6 +33,11 @@ interface Props {
   onPaginateChange: (val: boolean) => void;
   limit: number;
   onLimitChange: (val: number) => void;
+
+  // Office locks
+  isDean?: boolean;
+  isChair?: boolean;
+  isPrivilegedAdmin?: boolean;
 }
 
 export function ReportFilters({
@@ -55,10 +60,16 @@ export function ReportFilters({
   onPaginateChange,
   limit,
   onLimitChange,
+  isDean = false,
+  isChair = false,
+  isPrivilegedAdmin = false,
 }: Props) {
   const currentSemester = semesters.find((s) => s.id === selectedSemesterId);
   const currentCollege = colleges.find((c) => c.college.id === selectedCollegeId);
   const currentProgram = availablePrograms.find((p) => p.program.id === selectedProgramId);
+
+  const lockCollege = isDean && !isPrivilegedAdmin;
+  const lockProgram = isChair && !isPrivilegedAdmin;
 
   return (
     <div className="flex flex-col gap-3 p-3 bg-muted/30 border border-border rounded-2xl shadow-2xs">
@@ -69,7 +80,7 @@ export function ReportFilters({
           <Input
             value={searchInput}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search faculty name or ID..."
+            placeholder="Search faculty name..."
             className="pl-9 bg-card border-border text-xs h-9 shadow-2xs w-full"
           />
         </div>
@@ -103,9 +114,10 @@ export function ReportFilters({
           </SelectContent>
         </Select>
 
-        {/* College Selector */}
+        {/* College Selector (Locked for Deans) */}
         <Select
           value={selectedCollegeId ? String(selectedCollegeId) : "all"}
+          disabled={lockCollege}
           onValueChange={(val) => {
             const nextColId = val === "all" ? undefined : Number(val);
             onCollegeChange(nextColId);
@@ -115,6 +127,7 @@ export function ReportFilters({
             <SelectValue placeholder="All Colleges">
               {currentCollege ? (
                 <span className="truncate block text-left font-medium">
+                  {lockCollege && <Lock className="w-3 h-3 inline mr-1 text-muted-foreground" />}
                   <strong className="font-mono text-primary mr-1">
                     {currentCollege.college.initialism}
                   </strong>
@@ -126,7 +139,7 @@ export function ReportFilters({
             </SelectValue>
           </SelectTrigger>
           <SelectContent className="bg-popover border-border text-xs max-w-sm">
-            <SelectItem value="all">All Colleges</SelectItem>
+            {!lockCollege && <SelectItem value="all">All Colleges</SelectItem>}
             {colleges.map((c) => (
               <SelectItem key={c.college.id} value={String(c.college.id)}>
                 <span className="font-mono font-bold text-primary mr-1.5">
@@ -138,15 +151,17 @@ export function ReportFilters({
           </SelectContent>
         </Select>
 
-        {/* Program Selector (Anchored to College) */}
+        {/* Program Selector (Locked for Chairs) */}
         <Select
           value={selectedProgramId ? String(selectedProgramId) : "all"}
+          disabled={lockProgram}
           onValueChange={(val) => onProgramChange(val === "all" ? undefined : Number(val))}
         >
           <SelectTrigger className="w-full bg-card border-border text-xs h-9 shadow-2xs">
             <SelectValue placeholder="All Programs">
               {currentProgram ? (
                 <span className="truncate block text-left font-medium">
+                  {lockProgram && <Lock className="w-3 h-3 inline mr-1 text-muted-foreground" />}
                   <strong className="font-mono text-primary mr-1">
                     {currentProgram.program.initialism}
                   </strong>
@@ -158,7 +173,7 @@ export function ReportFilters({
             </SelectValue>
           </SelectTrigger>
           <SelectContent className="bg-popover border-border text-xs max-w-sm">
-            <SelectItem value="all">All Programs</SelectItem>
+            {!lockProgram && <SelectItem value="all">All Programs</SelectItem>}
             {availablePrograms.map((p) => (
               <SelectItem key={p.program.id} value={String(p.program.id)}>
                 <span className="font-mono font-bold text-primary mr-1.5">
