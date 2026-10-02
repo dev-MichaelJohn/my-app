@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle, FileBadge2, PenTool, Save } from "lucide-react";
+import { CheckCircle, FileBadge2, PenTool, Save, Info } from "lucide-react";
 import { useUpdateFedafPlan, useSignFedaf } from "../hooks/useEvaluationSubmissions";
 import { toast } from "sonner";
 import type { AnnexCFacultyReport, GetUser } from "@my-app/shared";
@@ -18,6 +18,9 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
   const updateFedafMutation = useUpdateFedafPlan();
   const signFedafMutation = useSignFedaf();
 
+  const isOwnReport = report.faculty_id === currentUser?.account.id;
+  const canEditSupervisorPlan = isPrivileged && !isOwnReport;
+
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState({
     areas_for_improvement: report.fedaf_plan?.areas_for_improvement || "",
@@ -25,15 +28,13 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
     action_plan: report.fedaf_plan?.action_plan || "",
   });
 
-  const isFacultyOwner = report.faculty_id === currentUser?.account.id;
-
   const handleSave = async () => {
     try {
       await updateFedafMutation.mutateAsync({
         reportId: report.id,
         plan: form,
       });
-      toast.success("Development plan saved successfully.");
+      toast.success("Supervisory development plan saved.");
       setEditMode(false);
     } catch (err: any) {
       toast.error(err.message || "Failed to update development plan.");
@@ -46,7 +47,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
         reportId: report.id,
         signatureRole: role,
       });
-      toast.success(`Acknowledgment signature recorded as ${role.toLowerCase()}.`);
+      toast.success(`Acknowledgment recorded as ${role.toLowerCase()}.`);
     } catch (err: any) {
       toast.error(err.message || "Failed to sign acknowledgment.");
     }
@@ -60,11 +61,13 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
             FEDAF Development Plan & Digital Signatures (Annex D)
           </CardTitle>
           <CardDescription className="text-xs">
-            Joint faculty and supervisor growth plan based on evaluation feedback.
+            {isOwnReport
+              ? "Your official development plan formulated by your supervising academic head."
+              : "Joint faculty and supervisor growth plan based on evaluation feedback."}
           </CardDescription>
         </div>
 
-        {!editMode && (isPrivileged || isFacultyOwner) && (
+        {!editMode && canEditSupervisorPlan && (
           <Button
             size="sm"
             variant="outline"
@@ -85,6 +88,17 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
       </CardHeader>
 
       <CardContent className="space-y-5 pt-4">
+        {isOwnReport && (
+          <div className="p-3 bg-muted/50 border border-border rounded-xl flex items-center gap-2.5 text-xs text-muted-foreground">
+            <Info className="w-4 h-4 text-primary shrink-0" />
+            <span>
+              <strong>Personal Teaching Evaluation:</strong> Under CHED CMO 19 s. 2025 Section 9.4,
+              your supervisory development plan is formulated by your immediate supervising academic
+              head (Program Chair or VPAA).
+            </span>
+          </div>
+        )}
+
         {editMode ? (
           <div className="p-4 bg-muted/40 border border-primary/40 rounded-xl space-y-4">
             <div className="space-y-1.5">
@@ -183,7 +197,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
               <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1">
                 <CheckCircle className="w-3 h-3" /> Signed
               </Badge>
-            ) : isPrivileged ? (
+            ) : canEditSupervisorPlan ? (
               <Button
                 size="sm"
                 onClick={() => handleSign("SUPERVISOR")}
@@ -191,11 +205,11 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
                 className="h-7 text-xs gap-1"
               >
                 <FileBadge2 className="w-3 h-3" />
-                <span>Sign</span>
+                <span>Sign as Supervisor</span>
               </Button>
             ) : (
               <Badge variant="outline" className="text-muted-foreground text-[10px]">
-                Pending
+                Pending Supervisor
               </Badge>
             )}
           </div>
@@ -203,7 +217,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
           {/* Faculty Card */}
           <div className="p-3.5 rounded-xl border border-border bg-muted/30 flex items-center justify-between">
             <div className="space-y-0.5 text-xs">
-              <span className="font-bold text-foreground">Faculty Acknowledgment</span>
+              <span className="font-bold text-foreground">Faculty Member Acknowledgment</span>
               <p className="text-muted-foreground">{report.faculty_name}</p>
               {report.fedaf_plan?.faculty_signed_at && (
                 <p className="text-[10px] text-muted-foreground">
@@ -216,7 +230,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
               <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] gap-1">
                 <CheckCircle className="w-3 h-3" /> Signed
               </Badge>
-            ) : isFacultyOwner && report.status === "PUBLISHED" ? (
+            ) : isOwnReport && report.status === "PUBLISHED" ? (
               <Button
                 size="sm"
                 onClick={() => handleSign("FACULTY")}
@@ -224,7 +238,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
                 className="h-7 text-xs gap-1 bg-emerald-600 text-white hover:bg-emerald-700"
               >
                 <CheckCircle className="w-3 h-3" />
-                <span>Sign</span>
+                <span>Sign Acknowledgment</span>
               </Button>
             ) : (
               <Badge variant="outline" className="text-muted-foreground text-[10px]">
