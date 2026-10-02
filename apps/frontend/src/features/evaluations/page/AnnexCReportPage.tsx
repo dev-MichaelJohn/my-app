@@ -24,8 +24,9 @@ import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from "lucide-r
 import type { AnnexCFacultyReport, FacultyReportQuery, ReportStatus } from "@my-app/shared";
 
 export default function AnnexCReportPage() {
-  const { user, isSysAdmin, isAdmin, isSupervisor } = usePermissions();
+  const { user, isSysAdmin, isAdmin, isSupervisor, isDean, isChair } = usePermissions();
   const isPrivileged = isSysAdmin || isAdmin || isSupervisor;
+  const isPrivilegedAdmin = isSysAdmin || isAdmin;
 
   // Metadata queries
   const { data: activeSemester } = useActiveSemester();
@@ -234,6 +235,9 @@ export default function AnnexCReportPage() {
             onPaginateChange={setPaginate}
             limit={limit}
             onLimitChange={setLimit}
+            isDean={isDean}
+            isChair={isChair}
+            isPrivilegedAdmin={isPrivilegedAdmin}
           />
 
           {isLoadingList ? (

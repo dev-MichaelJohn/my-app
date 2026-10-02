@@ -121,6 +121,13 @@ export class EvaluationReportService implements IEvaluationReportService {
     return WithTransaction(client, async (tx) => {
       this.enforceReportReadAccess(facultyId, actorUser);
 
+      const actorRoles = actorUser.roles ?? [];
+      const isPlainFaculty =
+        actorRoles.includes("FACULTY") &&
+        !actorRoles.includes("SUPERVISOR") &&
+        !actorRoles.includes("ADMIN") &&
+        !actorRoles.includes("SYS_ADMIN");
+
       const [existing] = await tx
         .select()
         .from(IndividualFacultyReports)
@@ -132,7 +139,23 @@ export class EvaluationReportService implements IEvaluationReportService {
         );
 
       if (existing) {
+        // Plain faculty can only see their report once it is PUBLISHED
+        if (isPlainFaculty && existing.status !== "PUBLISHED") {
+          throw new AppError(
+            403,
+            "Your evaluation report for this semester is currently under supervisory review and has not yet been published.",
+          );
+        }
+
         return this.hydrateReport(existing, tx);
+      }
+
+      // Plain faculty cannot trigger auto-computation of draft reports
+      if (isPlainFaculty) {
+        throw new AppError(
+          404,
+          "No published evaluation report is currently available for this semester.",
+        );
       }
 
       return this.computeAndUpsertReport(semesterId, facultyId, "ANNEX_C_WEIGHTED", tx);
