@@ -1464,10 +1464,31 @@ export class EvaluationReportService implements IEvaluationReportService {
     programId?: number | null,
     programName?: string | null,
     programCode?: string | null,
+    actorUserId?: number,
   ): AnnexCFacultyReport {
     const facultyName = details
       ? `${details.first_name} ${details.middle_name ? `${details.middle_name} ` : ""}${details.last_name}${details.suffix ? ` ${details.suffix}` : ""}`
       : "Faculty Member";
+
+    const rawPlan = (report.fedaf_plan as FedafPlan) || {
+      areas_for_improvement: "",
+      proposed_activities: "",
+      action_plan: "",
+      supervisor_name: "",
+      supervisor_signed_at: null,
+      faculty_signed_at: null,
+    };
+
+    const isOwnReport = actorUserId === report.faculty_id;
+    const isPublished = report.status === "PUBLISHED" || Boolean(rawPlan.supervisor_signed_at);
+
+    // 🔒 Privacy Guard: If faculty member views own report before publish, redact draft action plan
+    const sanitizedPlan: FedafPlan = {
+      ...rawPlan,
+      areas_for_improvement: isOwnReport && !isPublished ? "" : rawPlan.areas_for_improvement,
+      proposed_activities: isOwnReport && !isPublished ? "" : rawPlan.proposed_activities,
+      action_plan: isOwnReport && !isPublished ? "" : rawPlan.action_plan,
+    };
 
     return {
       id: report.id,
@@ -1505,14 +1526,7 @@ export class EvaluationReportService implements IEvaluationReportService {
         lowestIndicators: [],
         categoryComparison: [],
       },
-      fedaf_plan: (report.fedaf_plan as FedafPlan) || {
-        areas_for_improvement: "",
-        proposed_activities: "",
-        action_plan: "",
-        supervisor_name: "",
-        supervisor_signed_at: null,
-        faculty_signed_at: null,
-      },
+      fedaf_plan: sanitizedPlan,
       status: report.status as ReportStatus,
       created_at: report.created_at.toISOString(),
       updated_at: report.updated_at.toISOString(),
