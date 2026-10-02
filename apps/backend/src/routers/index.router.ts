@@ -17,6 +17,7 @@ import BuilderRouter from "./evaluation-builder.router.js";
 import ScheduleRouter from "./evaluation-schedule.router.js";
 import SubmissionRouter from "./evaluation-submission.router.js";
 import ReportRouter from "./evaluation-report.router.js";
+import AnalyticsRouter from "./analytics.router.js";
 
 const V1Router: IRouter = Router();
 
@@ -42,5 +43,6 @@ V1Router.use("/evaluation-builder", BuilderRouter);
 V1Router.use("/evaluation-schedules", ScheduleRouter);
 V1Router.use("/evaluation-submissions", SubmissionRouter);
 V1Router.use("/evaluation-reports", ReportRouter);
+V1Router.use("/analytics", AnalyticsRouter);
 
 export default V1Router;
