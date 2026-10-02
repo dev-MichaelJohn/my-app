@@ -10,11 +10,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { Can } from "@/components/Can";
-import { PERMISSIONS, type AnnexCFacultyReport, type ReportStatus } from "@my-app/shared";
+import {
+  PERMISSIONS,
+  type AnnexCFacultyReport,
+  type GetUser,
+  type ReportStatus,
+} from "@my-app/shared";
 import { downloadAnnexCPdf, downloadAnnexDPdf } from "../lib/report-export.lib";
 
 interface Props {
   report: AnnexCFacultyReport;
+  currentUser?: GetUser | null;
   onBack: () => void;
   onStatusChange: (nextStatus: ReportStatus) => Promise<void>;
   onRecalculate: () => Promise<void>;
@@ -24,12 +30,15 @@ interface Props {
 
 export function ReportLifecycleBar({
   report,
+  currentUser,
   onBack,
   onStatusChange,
   onRecalculate,
   onBatchConsolidateClick,
   isRecalculating,
 }: Props) {
+  const isOwnReport = report.faculty_id === currentUser?.account.id;
+
   const [targetStatus, setTargetStatus] = useState<ReportStatus | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -70,41 +79,44 @@ export function ReportLifecycleBar({
       </div>
 
       <div className="flex items-center gap-2">
-        <Can permission={PERMISSIONS.EVALUATION_REPORT_MANAGE_STATUS}>
-          {report.status === "DRAFT" && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setTargetStatus("FINALIZED")}
-              className="h-8 text-xs gap-1 border-blue-500/30 text-blue-600 hover:bg-blue-50"
-            >
-              <CheckCircle className="w-3.5 h-3.5" />
-              <span>Finalize</span>
-            </Button>
-          )}
+        {/* 🔒 Lifecycle controls hidden when viewing own report */}
+        {!isOwnReport && (
+          <Can permission={PERMISSIONS.EVALUATION_REPORT_MANAGE_STATUS}>
+            {report.status === "DRAFT" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setTargetStatus("FINALIZED")}
+                className="h-8 text-xs gap-1 border-blue-500/30 text-blue-600 hover:bg-blue-50"
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                <span>Finalize</span>
+              </Button>
+            )}
 
-          {report.status === "FINALIZED" && (
-            <Button
-              size="sm"
-              onClick={() => setTargetStatus("PUBLISHED")}
-              className="h-8 text-xs gap-1 bg-emerald-600 text-white hover:bg-emerald-700"
-            >
-              <SendHorizontal className="w-3.5 h-3.5" />
-              <span>Publish</span>
-            </Button>
-          )}
+            {report.status === "FINALIZED" && (
+              <Button
+                size="sm"
+                onClick={() => setTargetStatus("PUBLISHED")}
+                className="h-8 text-xs gap-1 bg-emerald-600 text-white hover:bg-emerald-700"
+              >
+                <SendHorizontal className="w-3.5 h-3.5" />
+                <span>Publish</span>
+              </Button>
+            )}
 
-          {report.status === "PUBLISHED" && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setTargetStatus("DRAFT")}
-              className="h-8 text-xs text-muted-foreground hover:text-foreground"
-            >
-              Revert
-            </Button>
-          )}
-        </Can>
+            {report.status === "PUBLISHED" && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setTargetStatus("DRAFT")}
+                className="h-8 text-xs text-muted-foreground hover:text-foreground"
+              >
+                Revert
+              </Button>
+            )}
+          </Can>
+        )}
 
         <Button
           size="sm"
