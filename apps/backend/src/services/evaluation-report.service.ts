@@ -450,14 +450,20 @@ export class EvaluationReportService implements IEvaluationReportService {
       const chairProgramIds = chairships.map((c) => c.id);
 
       return WithTransaction(client, async (tx) => {
-        const filters: SQL[] = [];
+        // 🧹 Clean up any orphaned 0-class reports that were erroneously generated (e.g. Report #18)
+        await tx
+          .delete(IndividualFacultyReports)
+          .where(eq(IndividualFacultyReports.total_classes, 0));
+
+        const filters: SQL[] = [
+          // 🔒 Ensure only reports for faculty with actual teaching classes are ever queried
+          sql`${IndividualFacultyReports.total_classes} > 0`,
+        ];
 
         // ── 1. Role-Based Scoping ──
         if (isSysAdmin || isAdmin) {
-          // Unrestricted admin view: respects query filters
           if (faculty_id) filters.push(eq(IndividualFacultyReports.faculty_id, faculty_id));
         } else if (isSupervisor) {
-          // Scoped to Dean's College or Chair's Program (+ their own report)
           const officeFilters: SQL[] = [];
 
           if (chairProgramIds.length > 0) {
@@ -489,16 +495,13 @@ export class EvaluationReportService implements IEvaluationReportService {
             );
           }
 
-          // Always allow the supervisor to see their own report
           officeFilters.push(eq(IndividualFacultyReports.faculty_id, actorUser.account.id));
-
           filters.push(or(...officeFilters)!);
 
           if (faculty_id) {
             filters.push(eq(IndividualFacultyReports.faculty_id, faculty_id));
           }
         } else {
-          // Pure Faculty: Only own reports that are published
           filters.push(eq(IndividualFacultyReports.faculty_id, actorUser.account.id));
           filters.push(eq(IndividualFacultyReports.status, "PUBLISHED"));
         }
@@ -740,6 +743,23 @@ export class EvaluationReportService implements IEvaluationReportService {
           isNull(CourseOfferings.deleted_at),
         ),
       );
+
+    // 🔒 Guard: Do not generate an evaluation report if the user has 0 assigned teaching classes
+    if (offerings.length === 0) {
+      await tx
+        .delete(IndividualFacultyReports)
+        .where(
+          and(
+            eq(IndividualFacultyReports.semester_id, semesterId),
+            eq(IndividualFacultyReports.faculty_id, facultyId),
+          ),
+        );
+
+      throw new AppError(
+        400,
+        "Cannot generate report: This user has no assigned teaching course offerings for this semester.",
+      );
+    }
 
     const classBreakdown: ClassConsolidationInput[] = [];
     let grandTotalStudents = 0;
@@ -1119,7 +1139,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       }
     >();
 
-    // Helper to generate dynamic distribution zero-map based on rating bounds
     const createDistributionMap = (min: number, max: number) => {
       const d: Record<number, number> = {};
       for (let i = min; i <= max; i++) d[i] = 0;
@@ -1129,7 +1148,6 @@ export class EvaluationReportService implements IEvaluationReportService {
     for (const r of ratingRecords) {
       const qMax = r.questionMaxRating || maxRating;
 
-      // Question map
       if (!questionMap.has(r.questionId)) {
         questionMap.set(r.questionId, {
           questionId: r.questionId,
@@ -1146,7 +1164,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       qData.ratings.push(r.rating);
       qData.dist[r.rating] = (qData.dist[r.rating] || 0) + 1;
 
-      // Category map
       if (!categoryMap.has(r.categoryId)) {
         categoryMap.set(r.categoryId, {
           categoryId: r.categoryId,
@@ -1239,7 +1256,6 @@ export class EvaluationReportService implements IEvaluationReportService {
 
     const questionIds = Array.from(new Set(ratingRecords.map((r) => r.questionId)));
 
-    // Fetch MOVs
     const meansRows =
       questionIds.length > 0
         ? await tx
@@ -1406,7 +1422,6 @@ export class EvaluationReportService implements IEvaluationReportService {
     const highestIndicators = sorted.slice(0, 3);
     const lowestIndicators = [...sorted].reverse().slice(0, 3);
 
-    // Cross-comparison by category
     const catMap = new Map<string, { setAverage: number | null; sefAverage: number | null }>();
 
     setCategories.forEach((c) => {

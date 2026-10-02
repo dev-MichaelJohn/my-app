@@ -13,7 +13,7 @@ import {
   UpdateFedafPlanSchema,
   SignFedafSchema,
 } from "@my-app/shared";
-import { errAsync } from "neverthrow";
+import { err, errAsync, ok } from "neverthrow";
 import z from "zod";
 
 export class EvaluationReportController {
@@ -25,17 +25,32 @@ export class EvaluationReportController {
     const user = req.user;
     if (!user) return errAsync(new AppError(401, "Authentication required."));
 
-    return ValidateSchema(GenerateReportQuerySchema, req.query).asyncAndThen((query) => {
-      const targetFacultyId = query.faculty_id ?? user.account.id;
+    const actorRoles = user.roles ?? [];
+    const isPlainFaculty =
+      actorRoles.includes("FACULTY") &&
+      !actorRoles.includes("SUPERVISOR") &&
+      !actorRoles.includes("ADMIN") &&
+      !actorRoles.includes("SYS_ADMIN");
 
-      return this.reportService
-        .getAnnexCReport(query.semester_id, targetFacultyId, user)
-        .map((data) => ({
-          status: 200,
-          message: "Annex C evaluation report retrieved successfully.",
-          data,
-        }));
-    });
+    return ValidateSchema(GenerateReportQuerySchema, req.query)
+      .andThen((query) => {
+        const targetFacultyId = query.faculty_id ?? (isPlainFaculty ? user.account.id : undefined);
+
+        if (!targetFacultyId) {
+          return err(new AppError(400, "Faculty ID is required to retrieve an individual report."));
+        }
+
+        return ok({ semesterId: query.semester_id, targetFacultyId });
+      })
+      .asyncAndThen(({ semesterId, targetFacultyId }) => {
+        return this.reportService
+          .getAnnexCReport(semesterId, targetFacultyId, user)
+          .map((data) => ({
+            status: 200,
+            message: "Annex C evaluation report retrieved successfully.",
+            data,
+          }));
+      });
   });
 
   recalculateFacultyReport = runAsync((req) => {

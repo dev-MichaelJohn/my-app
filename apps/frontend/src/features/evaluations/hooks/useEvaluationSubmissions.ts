@@ -106,11 +106,11 @@ export const useFacultyReportsList = (query: FacultyReportQuery) => {
   });
 };
 
-export const useAnnexCReport = (semesterId?: number, facultyId?: number) => {
+export const useAnnexCReport = (semesterId?: number, facultyId?: number, enabled = true) => {
   return useQuery({
     queryKey: SUBMISSION_KEYS.reportDetail(semesterId, facultyId),
     queryFn: () => toQuery(submissionApi.getAnnexCReport(semesterId!, facultyId)),
-    enabled: Boolean(semesterId),
+    enabled: Boolean(semesterId && facultyId) && enabled,
     staleTime: 60 * 1000,
   });
 };

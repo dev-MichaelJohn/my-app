@@ -3,7 +3,6 @@ import {
   useAnnexCReport,
   useFacultyReportsList,
   useRecalculateAnnexCReport,
-  useBatchConsolidateReports,
   useUpdateReportStatus,
 } from "../hooks/useEvaluationSubmissions";
 import { useSemesters, useActiveSemester } from "@/features/semesters/hooks/useSemesters";
@@ -12,22 +11,6 @@ import { usePrograms } from "@/features/programs/hooks/usePrograms";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { ReportFilters } from "../components/ReportFilters";
 import { ReportTableView } from "../components/ReportTableView";
 import { ReportGridView } from "../components/ReportGridView";
@@ -35,11 +18,11 @@ import { ReportAnalyticsCharts } from "../components/ReportAnalyticsCharts";
 import { FedafActionSection } from "../components/FedafActionSection";
 import { ReportLifecycleBar } from "../components/ReportLifecycleBar";
 import { FacultySelfReportView } from "../components/FacultySelfReportView";
+import { BatchConsolidateDialog } from "../components/BatchConsolidateDialog";
 import { Can } from "@/components/Can";
 import { toast } from "sonner";
 import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Sparkles } from "lucide-react";
 import {
-  CONSOLIDATION_FORMULAS,
   PERMISSIONS,
   type AnnexCFacultyReport,
   type FacultyReportQuery,
@@ -104,10 +87,8 @@ export default function AnnexCReportPage() {
   const [selectedReportId, setSelectedReportId] = useState<number | null>(null);
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
 
-  // Batch Consolidation Modal State
-  const [confirmBatchOpen, setConfirmBatchOpen] = useState(false);
-  const [batchTargetSemesterId, setBatchTargetSemesterId] = useState<number | undefined>(undefined);
-  const [batchFormula, setBatchFormula] = useState<string>("ANNEX_C_WEIGHTED");
+  // Batch Consolidation Dialog State
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false);
 
   // ── Query for Admin / Supervisor Reports List ──
   const listQuery: FacultyReportQuery = useMemo(
@@ -152,11 +133,14 @@ export default function AnnexCReportPage() {
     data: activeReport,
     isLoading: isLoadingReport,
     refetch: refetchReport,
-  } = useAnnexCReport(currentSemesterId, effectiveDetailFacultyId || undefined);
+  } = useAnnexCReport(
+    currentSemesterId,
+    effectiveDetailFacultyId || undefined,
+    Boolean(effectiveDetailFacultyId),
+  );
 
   // Mutations
   const recalculateMutation = useRecalculateAnnexCReport();
-  const batchMutation = useBatchConsolidateReports();
   const updateStatusMutation = useUpdateReportStatus();
 
   const handleOpenDetail = (report: AnnexCFacultyReport) => {
@@ -196,31 +180,6 @@ export default function AnnexCReportPage() {
       refetchReport();
     } catch (err: any) {
       toast.error(err.message || "Failed to update status.");
-    }
-  };
-
-  const handleOpenBatchModal = () => {
-    setBatchTargetSemesterId(currentSemesterId || semestersList[0]?.id);
-    setConfirmBatchOpen(true);
-  };
-
-  const handleRunBatchConsolidation = async () => {
-    const targetSem = batchTargetSemesterId || currentSemesterId;
-    if (!targetSem) {
-      toast.error("Please select an academic semester to consolidate.");
-      return;
-    }
-
-    try {
-      const summary = await batchMutation.mutateAsync({
-        semester_id: targetSem,
-        formula: batchFormula,
-      });
-      toast.success(summary.message);
-      setConfirmBatchOpen(false);
-      refetchList();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to run batch consolidation.");
     }
   };
 
@@ -271,11 +230,11 @@ export default function AnnexCReportPage() {
                 PERMISSIONS.EVALUATION_REPORT_BATCH_GENERATE,
                 PERMISSIONS.EVALUATION_REPORT_GENERATE,
               ]}
+              anyRole={["SYS_ADMIN", "ADMIN"]}
             >
               <div className="flex items-center gap-2">
                 <Button
-                  onClick={handleOpenBatchModal}
-                  disabled={batchMutation.isPending}
+                  onClick={() => setBatchDialogOpen(true)}
                   className="gap-2 h-9 text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
@@ -331,14 +290,14 @@ export default function AnnexCReportPage() {
             <ReportTableView
               reports={reportsList}
               onSelectReport={handleOpenDetail}
-              onGenerateClick={handleOpenBatchModal}
+              onGenerateClick={() => setBatchDialogOpen(true)}
               canGenerate={canConsolidate}
             />
           ) : (
             <ReportGridView
               reports={reportsList}
               onSelectReport={handleOpenDetail}
-              onGenerateClick={handleOpenBatchModal}
+              onGenerateClick={() => setBatchDialogOpen(true)}
               canGenerate={canConsolidate}
             />
           )}
@@ -415,7 +374,7 @@ export default function AnnexCReportPage() {
               onBack={handleBackToList}
               onStatusChange={handleStatusChange}
               onRecalculate={handleRecalculate}
-              onBatchConsolidateClick={handleOpenBatchModal}
+              onBatchConsolidateClick={() => setBatchDialogOpen(true)}
               isRecalculating={recalculateMutation.isPending}
             />
           )}
@@ -481,129 +440,14 @@ export default function AnnexCReportPage() {
         </div>
       )}
 
-      {/* 🚀 Interactive Batch Consolidation Modal */}
-      <Dialog open={confirmBatchOpen} onOpenChange={setConfirmBatchOpen}>
-        <DialogContent className="sm:max-w-[480px] border-border bg-card text-card-foreground">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
-              <Sparkles className="w-5 h-5 text-primary" />
-              <span>Consolidate Faculty Reports</span>
-            </DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
-              Calculate and compile Annex C (SET) and SEF performance reports for all instructors
-              teaching in this term.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            {/* Semester Selection */}
-            <div className="space-y-1.5">
-              <Label className="text-foreground">Academic Semester</Label>
-              <Select
-                value={batchTargetSemesterId ? String(batchTargetSemesterId) : ""}
-                onValueChange={(val) => setBatchTargetSemesterId(val ? Number(val) : undefined)}
-              >
-                <SelectTrigger className="w-full h-10 px-3 bg-background border-input text-sm">
-                  <SelectValue placeholder="Select semester...">
-                    {semestersList.find((s) => s.id === batchTargetSemesterId) ? (
-                      <span className="truncate block text-left">
-                        <strong>
-                          {semestersList.find((s) => s.id === batchTargetSemesterId)?.semester_term}{" "}
-                          Sem
-                        </strong>{" "}
-                        (A.Y.{" "}
-                        {
-                          semestersList.find((s) => s.id === batchTargetSemesterId)
-                            ?.school_year_start
-                        }
-                        -
-                        {semestersList.find((s) => s.id === batchTargetSemesterId)?.school_year_end}
-                        )
-                      </span>
-                    ) : (
-                      "Select semester..."
-                    )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border text-sm">
-                  {semestersList.map((s) => (
-                    <SelectItem key={s.id} value={String(s.id)}>
-                      {s.semester_term} Semester (A.Y. {s.school_year_start}-{s.school_year_end})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Formula Selection */}
-            <div className="space-y-1.5">
-              <Label className="text-foreground">Consolidation Formula</Label>
-              <Select
-                value={batchFormula}
-                onValueChange={(val) => {
-                  if (val) setBatchFormula(val);
-                }}
-              >
-                <SelectTrigger className="w-full h-10 px-3 bg-background border-input text-sm">
-                  <SelectValue placeholder="Select formula..." />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border text-sm">
-                  {Object.values(CONSOLIDATION_FORMULAS).map((f) => (
-                    <SelectItem key={f.id} value={f.id}>
-                      <div className="flex flex-col py-0.5 text-left">
-                        <span className="font-semibold">{f.name}</span>
-                        <span className="text-[11px] text-muted-foreground font-mono">
-                          {f.formulaDisplay}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="p-3 bg-muted/60 border border-border rounded-xl text-xs text-muted-foreground space-y-1.5">
-              <p className="font-semibold text-foreground">What happens during consolidation:</p>
-              <ul className="list-disc list-inside space-y-0.5 text-[11px]">
-                <li>Scans all active course offerings for the selected semester</li>
-                <li>Aggregates student ratings (SET) and supervisor ratings (SEF)</li>
-                <li>Anonymizes class section identifiers per CHED CMO 19 s. 2025</li>
-                <li>Analyzes student comment sentiment and extracts representative excerpts</li>
-                <li>Generates draft Annex C reports and FEDAF development plans</li>
-              </ul>
-            </div>
-          </div>
-
-          <DialogFooter className="pt-3 border-t border-border">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmBatchOpen(false)}
-              disabled={batchMutation.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handleRunBatchConsolidation}
-              disabled={!batchTargetSemesterId || batchMutation.isPending}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
-            >
-              {batchMutation.isPending ? (
-                <>
-                  <Spinner size="sm" className="text-primary-foreground" />
-                  <span>Consolidating...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Start Consolidation</span>
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* 🚀 Dedicated Batch Consolidation Dialog (with nested Friction modal) */}
+      <BatchConsolidateDialog
+        open={batchDialogOpen}
+        onOpenChange={setBatchDialogOpen}
+        semesters={semestersList}
+        defaultSemesterId={currentSemesterId}
+        onSuccess={() => refetchList()}
+      />
     </div>
   );
 }
