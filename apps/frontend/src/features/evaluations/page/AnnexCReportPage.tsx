@@ -19,14 +19,16 @@ import { ReportGridView } from "../components/ReportGridView";
 import { ReportAnalyticsCharts } from "../components/ReportAnalyticsCharts";
 import { FedafActionSection } from "../components/FedafActionSection";
 import { ReportLifecycleBar } from "../components/ReportLifecycleBar";
+import { FacultySelfReportView } from "../components/FacultySelfReportView";
 import { toast } from "sonner";
 import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from "lucide-react";
 import type { AnnexCFacultyReport, FacultyReportQuery, ReportStatus } from "@my-app/shared";
 
 export default function AnnexCReportPage() {
-  const { user, isSysAdmin, isAdmin, isSupervisor, isDean, isChair } = usePermissions();
+  const { user, isSysAdmin, isAdmin, isSupervisor, isFaculty, isDean, isChair } = usePermissions();
   const isPrivileged = isSysAdmin || isAdmin || isSupervisor;
   const isPrivilegedAdmin = isSysAdmin || isAdmin;
+  const isPlainFaculty = isFaculty && !isSupervisor && !isAdmin && !isSysAdmin;
 
   // Metadata queries
   const { data: activeSemester } = useActiveSemester();
@@ -79,7 +81,7 @@ export default function AnnexCReportPage() {
   const [selectedReportId, setSelectedReportId] = useState<number | null>(null);
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
 
-  // Query for Reports List
+  // ── Query for Admin / Supervisor Reports List ──
   const listQuery: FacultyReportQuery = useMemo(
     () => ({
       paginate,
@@ -116,7 +118,7 @@ export default function AnnexCReportPage() {
 
   // Single Report Detailed View Query
   const effectiveDetailFacultyId =
-    selectedFacultyId ?? (isPrivileged ? undefined : user?.account.id);
+    selectedFacultyId ?? (isPlainFaculty ? user?.account.id : undefined);
 
   const {
     data: activeReport,
@@ -185,11 +187,29 @@ export default function AnnexCReportPage() {
     }
   };
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // BRANCH A: PLAIN FACULTY MEMBER (Dedicated Instructor Portal)
+  // ══════════════════════════════════════════════════════════════════════════
+  if (isPlainFaculty) {
+    return (
+      <div className="space-y-6 pb-24">
+        <FacultySelfReportView
+          report={activeReport}
+          isLoading={isLoadingReport}
+          user={user}
+          semesters={semestersList}
+          selectedSemesterId={currentSemesterId}
+          onSemesterChange={(id) => setSelectedSemesterId(id)}
+        />
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // BRANCH B: ADMINS & SUPERVISORS (Scoped Browser & Drilldown)
+  // ══════════════════════════════════════════════════════════════════════════
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-24">
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* 1. LIST FIRST VIEW (Default landing with College/Program filter)   */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
       {!selectedReportId ? (
         <div className="space-y-6">
           <div>
@@ -313,13 +333,12 @@ export default function AnnexCReportPage() {
           )}
         </div>
       ) : (
-        /* ══════════════════════════════════════════════════════════════════ */
-        /* 2. REPORT DETAIL VIEW (Visual Dashboard + Action Plan + Downloads) */
-        /* ══════════════════════════════════════════════════════════════════ */
+        /* Report Detail View */
         <div className="space-y-6">
           {activeReport && (
             <ReportLifecycleBar
               report={activeReport}
+              currentUser={user}
               onBack={handleBackToList}
               onStatusChange={handleStatusChange}
               onRecalculate={handleRecalculate}
@@ -375,7 +394,7 @@ export default function AnnexCReportPage() {
                 </div>
               </div>
 
-              {/* ── Visual Analytics: Pie Chart & Per-Indicator Rating Distribution Bar Graph ── */}
+              {/* ── Visual Analytics: Pie Chart & Indicator Bar Graph ── */}
               <ReportAnalyticsCharts report={activeReport} />
 
               {/* ── Interactive FEDAF Action Center & Signatures ── */}

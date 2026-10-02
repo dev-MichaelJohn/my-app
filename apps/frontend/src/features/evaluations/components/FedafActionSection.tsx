@@ -10,7 +10,7 @@ import type { AnnexCFacultyReport, GetUser } from "@my-app/shared";
 
 interface Props {
   report: AnnexCFacultyReport;
-  currentUser?: GetUser | null;
+  currentUser?: GetUser | null | undefined;
   isPrivileged: boolean;
 }
 

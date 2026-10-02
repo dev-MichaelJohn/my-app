@@ -20,7 +20,7 @@ import { downloadAnnexCPdf, downloadAnnexDPdf } from "../lib/report-export.lib";
 
 interface Props {
   report: AnnexCFacultyReport;
-  currentUser?: GetUser | null;
+  currentUser?: GetUser | null | undefined;
   onBack: () => void;
   onStatusChange: (nextStatus: ReportStatus) => Promise<void>;
   onRecalculate: () => Promise<void>;

@@ -21,11 +21,11 @@ import { Download, Clock, GraduationCap } from "lucide-react";
 import type { AnnexCFacultyReport, GetUser, ISemesterSelect } from "@my-app/shared";
 
 interface Props {
-  report?: AnnexCFacultyReport | null;
+  report?: AnnexCFacultyReport | null | undefined;
   isLoading: boolean;
-  user: GetUser | null;
+  user?: GetUser | null | undefined;
   semesters: ISemesterSelect[];
-  selectedSemesterId?: number;
+  selectedSemesterId?: number | undefined;
   onSemesterChange: (id: number) => void;
 }
 

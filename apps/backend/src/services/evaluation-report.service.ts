@@ -373,22 +373,9 @@ export class EvaluationReportService implements IEvaluationReportService {
       };
 
       const now = new Date().toISOString();
+      let nextStatus = report.status;
 
-      if (signatureRole === "FACULTY") {
-        if (!isOwnReport) {
-          throw new AppError(
-            403,
-            "You can only sign the faculty acknowledgment on your own evaluation report.",
-          );
-        }
-        if (report.status !== "PUBLISHED") {
-          throw new AppError(
-            400,
-            "Faculty acknowledgment can only be signed after the report is published.",
-          );
-        }
-        existingPlan.faculty_signed_at = now;
-      } else {
+      if (signatureRole === "SUPERVISOR") {
         const actorRoles = actorUser.roles ?? [];
         const isAuthorizedSupervisor =
           actorRoles.includes("SUPERVISOR") ||
@@ -398,13 +385,35 @@ export class EvaluationReportService implements IEvaluationReportService {
         if (!isAuthorizedSupervisor) {
           throw new AppError(403, "Only supervisors and academic leaders can sign as supervisor.");
         }
+
         existingPlan.supervisor_name = `${actorUser.details.first_name} ${actorUser.details.last_name}`;
         existingPlan.supervisor_signed_at = now;
+
+        // 🚀 AUTOMATIC PUBLISH: Signing by the supervisor officially releases the report to the faculty
+        nextStatus = "PUBLISHED";
+      } else {
+        if (!isOwnReport) {
+          throw new AppError(
+            403,
+            "You can only sign the faculty acknowledgment on your own evaluation report.",
+          );
+        }
+        if (!existingPlan.supervisor_signed_at && report.status !== "PUBLISHED") {
+          throw new AppError(
+            400,
+            "The supervisor must first establish and sign the development plan before you can acknowledge.",
+          );
+        }
+        existingPlan.faculty_signed_at = now;
       }
 
       const [updated] = await tx
         .update(IndividualFacultyReports)
-        .set({ fedaf_plan: existingPlan, updated_at: new Date() })
+        .set({
+          fedaf_plan: existingPlan,
+          status: nextStatus,
+          updated_at: new Date(),
+        })
         .where(eq(IndividualFacultyReports.id, reportId))
         .returning();
 
