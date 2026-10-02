@@ -7,6 +7,7 @@ import {
   Courses,
   IndividualFacultyReports,
   PersonalDetails,
+  ProgramChairs,
   Programs,
   Semesters,
   StudentClasses,
