@@ -31,6 +31,7 @@ export const EnvSchema = z.object({
   EMAIL_FROM: z.string().trim(),
   RESEND_API_KEY: z.string().trim().optional(),
   BREVO_API_KEY: z.string().trim().optional(),
+  BYPASS_OTP: z.string().trim().optional(),
 });
 
 export type EnvType = z.infer<typeof EnvSchema>;

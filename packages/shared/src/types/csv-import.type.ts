@@ -64,6 +64,7 @@ export const UserCsvRowSchema = z.object({
   middle_name: z.string().trim().optional().or(z.literal("")),
   suffix: z.string().trim().optional().or(z.literal("")),
   role: z.enum(SystemRoles.enumValues).default("STUDENT"),
+  password: z.string().trim().optional().or(z.literal("")),
 });
 
 export type CollegeCsvRow = z.infer<typeof CollegeCsvRowSchema>;
