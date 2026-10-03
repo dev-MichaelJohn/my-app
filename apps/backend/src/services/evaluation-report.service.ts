@@ -16,11 +16,13 @@ import {
   StudentEvaluationQuestions,
   StudentEvaluationRatings,
   StudentEvaluations,
+  StudentEvaluationSchedules,
   SupervisorEvaluationCategories,
   SupervisorEvaluationMeans,
   SupervisorEvaluationQuestions,
   SupervisorEvaluationRatings,
   SupervisorEvaluations,
+  SupervisorEvaluationSchedules,
   type AnnexCFacultyReport,
   type AnonymousFeedbackComment,
   type BatchConsolidationSummary,
@@ -171,6 +173,8 @@ export class EvaluationReportService implements IEvaluationReportService {
     client: DbClient = db,
   ): ResultAsync<AnnexCFacultyReport, AppError> {
     return WithTransaction(client, async (tx) => {
+      await this.validateEvaluationWindowsConcluded(semesterId, tx);
+
       return this.computeAndUpsertReport(semesterId, facultyId, formulaId, tx);
     });
   }
@@ -193,6 +197,8 @@ export class EvaluationReportService implements IEvaluationReportService {
         if (!semester) {
           throw new AppError(404, "Academic semester was not found.");
         }
+
+        await this.validateEvaluationWindowsConcluded(semester_id, tx);
 
         const facultyRows = await tx
           .selectDistinct({ facultyId: CourseOfferings.faculty_id })
@@ -1778,6 +1784,96 @@ export class EvaluationReportService implements IEvaluationReportService {
       throw new AppError(
         403,
         "Access denied: This faculty member is outside your direct supervisory scope.",
+      );
+    }
+  }
+
+  private async validateEvaluationWindowsConcluded(
+    semesterId: number,
+    tx: PgTransaction,
+  ): Promise<void> {
+    const now = new Date();
+
+    // 1. Fetch the latest SET schedule for this semester
+    const [setSchedule] = await tx
+      .select({
+        id: StudentEvaluationSchedules.id,
+        open_at: StudentEvaluationSchedules.open_at,
+        close_at: StudentEvaluationSchedules.close_at,
+      })
+      .from(StudentEvaluationSchedules)
+      .where(
+        and(
+          eq(StudentEvaluationSchedules.semester_id, semesterId),
+          isNull(StudentEvaluationSchedules.deleted_at),
+        ),
+      )
+      .orderBy(desc(StudentEvaluationSchedules.open_at))
+      .limit(1);
+
+    // 2. Fetch the latest SEF schedule for this semester
+    const [sefSchedule] = await tx
+      .select({
+        id: SupervisorEvaluationSchedules.id,
+        open_at: SupervisorEvaluationSchedules.open_at,
+        close_at: SupervisorEvaluationSchedules.close_at,
+      })
+      .from(SupervisorEvaluationSchedules)
+      .where(
+        and(
+          eq(SupervisorEvaluationSchedules.semester_id, semesterId),
+          isNull(SupervisorEvaluationSchedules.deleted_at),
+        ),
+      )
+      .orderBy(desc(SupervisorEvaluationSchedules.open_at))
+      .limit(1);
+
+    // If neither window was even configured yet
+    if (!setSchedule && !sefSchedule) {
+      throw new AppError(
+        400,
+        "Cannot generate reports: Evaluation schedules for this semester have not been created yet.",
+      );
+    }
+
+    const blockingReasons: string[] = [];
+
+    // Check SET Window
+    if (setSchedule) {
+      const openTime = new Date(setSchedule.open_at);
+      const closeTime = new Date(setSchedule.close_at);
+      if (now >= openTime && now <= closeTime) {
+        blockingReasons.push(
+          `Student Evaluation (SET) is currently ongoing until ${closeTime.toLocaleString()}.`,
+        );
+      } else if (now < openTime) {
+        blockingReasons.push(
+          `Student Evaluation (SET) has not started yet (opens ${openTime.toLocaleString()}).`,
+        );
+      }
+    }
+
+    // Check SEF Window
+    if (sefSchedule) {
+      const openTime = new Date(sefSchedule.open_at);
+      const closeTime = new Date(sefSchedule.close_at);
+      if (now >= openTime && now <= closeTime) {
+        blockingReasons.push(
+          `Supervisor Evaluation (SEF) is currently ongoing until ${closeTime.toLocaleString()}.`,
+        );
+      } else if (now < openTime) {
+        blockingReasons.push(
+          `Supervisor Evaluation (SEF) has not started yet (opens ${openTime.toLocaleString()}).`,
+        );
+      }
+    }
+
+    if (blockingReasons.length > 0) {
+      throw new AppError(
+        400,
+        `Cannot consolidate reports while evaluation periods are active:\n• ${blockingReasons.join(
+          "\n• ",
+        )}\n\nBoth evaluation windows must conclude (or be force-stopped) before official reports can be generated.`,
       );
     }
   }

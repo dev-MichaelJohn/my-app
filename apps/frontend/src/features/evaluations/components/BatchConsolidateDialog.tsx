@@ -16,8 +16,9 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import { Sparkles, Layers } from "lucide-react";
+import { Sparkles, Layers, Lock, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   CONSOLIDATION_FORMULAS,
@@ -25,6 +26,10 @@ import {
   type ISemesterSelect,
 } from "@my-app/shared";
 import { useBatchConsolidateReports } from "../hooks/useEvaluationSubmissions";
+import {
+  useActiveStudentSchedule,
+  useActiveSupervisorSchedule,
+} from "@/features/evaluation-schedules/hooks/useEvaluationSchedules";
 
 interface BatchConsolidateDialogProps {
   open: boolean;
@@ -43,7 +48,7 @@ export function BatchConsolidateDialog({
 }: BatchConsolidateDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] border-border bg-card text-card-foreground">
+      <DialogContent className="sm:max-w-[520px] border-border bg-card text-card-foreground">
         {open && (
           <BatchConsolidateDialogInner
             semesters={semesters}
@@ -76,6 +81,14 @@ function BatchConsolidateDialogInner({
   const [formula, setFormula] = useState<string>(DEFAULT_CONSOLIDATION_FORMULA);
   const [confirmFrictionOpen, setConfirmFrictionOpen] = useState(false);
 
+  // Check if evaluation schedules are still actively open for this semester
+  const { data: activeStudentSchedule, isLoading: isCheckingSet } =
+    useActiveStudentSchedule(targetSemesterId);
+  const { data: activeSupervisorSchedule, isLoading: isCheckingSef } =
+    useActiveSupervisorSchedule(targetSemesterId);
+
+  const isScheduleActive = Boolean(activeStudentSchedule || activeSupervisorSchedule);
+
   const selectedSemester = semesters.find((s) => s.id === targetSemesterId);
   const selectedFormulaDef =
     CONSOLIDATION_FORMULAS[formula] || CONSOLIDATION_FORMULAS[DEFAULT_CONSOLIDATION_FORMULA];
@@ -83,6 +96,10 @@ function BatchConsolidateDialogInner({
   const handleProceedToConfirmation = () => {
     if (!targetSemesterId) {
       toast.error("Please select an academic semester to consolidate.");
+      return;
+    }
+    if (isScheduleActive) {
+      toast.error("Cannot consolidate reports while evaluation windows are still open.");
       return;
     }
     setConfirmFrictionOpen(true);
@@ -121,7 +138,7 @@ function BatchConsolidateDialogInner({
       </DialogHeader>
 
       <div className="space-y-4 py-2">
-        {/* Academic Semester Selector */}
+        {/* Semester Selector */}
         <div className="space-y-1.5">
           <Label className="text-foreground">Target Academic Semester</Label>
           <Select
@@ -152,11 +169,57 @@ function BatchConsolidateDialogInner({
           </Select>
         </div>
 
+        {/* ── 🛡️ Active Schedule Blocker Banner ── */}
+        {isScheduleActive ? (
+          <div className="p-3.5 bg-warning/10 border border-warning/30 rounded-xl space-y-2 text-xs">
+            <div className="flex items-center gap-2 font-bold text-warning">
+              <Lock className="w-4 h-4 shrink-0" />
+              <span>Evaluation Periods Currently In Progress</span>
+            </div>
+            <p className="text-muted-foreground leading-relaxed">
+              Consolidation is locked because evaluations are still actively being submitted for
+              this semester:
+            </p>
+            <div className="space-y-1 pl-1">
+              {activeStudentSchedule && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px] text-warning border-warning/40">
+                    SET Window Active
+                  </Badge>
+                  <span className="text-[11px] text-muted-foreground">
+                    Closes on {new Date(activeStudentSchedule.close_at).toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {activeSupervisorSchedule && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px] text-warning border-warning/40">
+                    SEF Window Active
+                  </Badge>
+                  <span className="text-[11px] text-muted-foreground">
+                    Closes on {new Date(activeSupervisorSchedule.close_at).toLocaleString()}
+                  </span>
+                </div>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground italic pt-1">
+              Wait for the schedule deadline to pass or use <strong>Force Stop</strong> in
+              Evaluation Schedules before generating official reports.
+            </p>
+          </div>
+        ) : (
+          <div className="p-2.5 bg-success/10 border border-success/20 rounded-xl flex items-center gap-2 text-xs text-success">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>Evaluation schedules for this term are concluded. Ready for consolidation.</span>
+          </div>
+        )}
+
         {/* Consolidation Formula Selector */}
         <div className="space-y-1.5">
           <Label className="text-foreground">Consolidation Formula</Label>
           <Select
             value={formula}
+            disabled={isScheduleActive}
             onValueChange={(val) => {
               if (val) setFormula(val);
             }}
@@ -181,16 +244,17 @@ function BatchConsolidateDialogInner({
         <div className="p-3.5 bg-muted/50 border border-border/80 rounded-xl text-xs space-y-1.5">
           <p className="font-semibold text-foreground flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5 text-primary" />
-            <span>Process Summary:</span>
+            <span>Compliance Notice (CHED CMO 19 s. 2025):</span>
           </p>
           <ul className="list-disc list-inside space-y-1 text-muted-foreground text-[11px] leading-relaxed">
-            <li>Scans all course offerings and enrolled student rosters for this semester</li>
-            <li>Calculates class averages and computes weighted SET ratings</li>
-            <li>Anonymizes subject names & sections per CHED CMO 19 s. 2025</li>
             <li>
-              Extracts supervisor evaluation ratings (SEF) and analyzes qualitative sentiments
+              Reports require complete student and supervisory submissions to ensure valid metrics.
             </li>
-            <li>Initializes official Annex C records and draft FEDAF development plans</li>
+            <li>Subject names and sections will be anonymized to protect student privacy.</li>
+            <li>
+              Annex C and Annex D (FEDAF) development plans will be generated in <code>DRAFT</code>{" "}
+              status for supervisory review.
+            </li>
           </ul>
         </div>
       </div>
@@ -207,14 +271,20 @@ function BatchConsolidateDialogInner({
         <Button
           type="button"
           onClick={handleProceedToConfirmation}
-          disabled={!targetSemesterId || batchMutation.isPending}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
+          disabled={
+            !targetSemesterId ||
+            isScheduleActive ||
+            isCheckingSet ||
+            isCheckingSef ||
+            batchMutation.isPending
+          }
+          className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 disabled:opacity-50"
         >
-          <span>Continue</span>
+          {isScheduleActive ? "Schedules In Progress" : "Continue"}
         </Button>
       </DialogFooter>
 
-      {/* ── 🛡️ Friction Confirmation Modal ── */}
+      {/* Confirmation Modal */}
       <ConfirmActionDialog
         open={confirmFrictionOpen}
         onOpenChange={setConfirmFrictionOpen}
@@ -227,14 +297,10 @@ function BatchConsolidateDialogInner({
               -{selectedSemester?.school_year_end})
             </strong>{" "}
             using the <strong>{selectedFormulaDef?.name}</strong> formula?
-            <span className="block mt-2 font-semibold text-chart-2 text-xs">
-              ⚠️ This will calculate and compile evaluation scores for all faculty who taught course
-              offerings in this semester.
-            </span>
           </span>
         }
         confirmLabel="Yes, Start Consolidation"
-        cancelLabel="Back to Options"
+        cancelLabel="Back"
         variant="primary"
         isLoading={batchMutation.isPending}
         onConfirm={handleConfirmedConsolidate}
