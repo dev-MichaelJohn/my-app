@@ -1,3 +1,4 @@
+import env from "@/configs/env.config.js";
 import { OTPEmailTemplate, OTPTextTemplate } from "@/libs/email.lib.js";
 import { AppError } from "@/libs/error.lib.js";
 import { runAsync, runMiddleware } from "@/libs/express-adapter.lib.js";
@@ -47,6 +48,10 @@ export class AuthController {
                 text: OTPTextTemplate(otpCode.code),
                 html: OTPEmailTemplate(otpCode.code),
               },
+            })
+            .orElse((err) => {
+              if (env.BYPASS_OTP) return okAsync(undefined);
+              return errAsync(err);
             })
             .map(() => {
               const resendAt = this.generateResendTime(otpCode.expires_at);
