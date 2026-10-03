@@ -1,7 +1,9 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { analyticsApi } from "../api/analytics.api";
+import { AnalyticsAPI } from "../api/analytics.api";
 import { toQuery } from "@/lib/query.lib";
 import type { AnalyticsQuery } from "@my-app/shared";
+
+export const analyticsApi = new AnalyticsAPI();
 
 export const ANALYTICS_KEYS = {
   all: ["analytics"] as const,

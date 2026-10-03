@@ -21,6 +21,7 @@ import FacultyTeachingPage from "@/features/evaluations/page/FacultyTeachingPage
 import AnnexCReportPage from "@/features/evaluations/page/AnnexCReportPage";
 import AnalyticsDashboardPage from "@/features/analytics/page/AnalyticsDashboardPage";
 import AccountSettingsPage from "@/features/users/page/AccountSettingsPage";
+import DashboardPage from "@/features/dashboard/page/DashboardPage";
 import { PERMISSIONS } from "@my-app/shared";
 
 export const AppRoutes = createBrowserRouter([
@@ -44,7 +45,7 @@ export const AppRoutes = createBrowserRouter([
         children: [
           {
             path: "/dashboard",
-            element: <></>,
+            element: <DashboardPage />,
           },
 
           // Account Settings (Available to all logged-in users)
