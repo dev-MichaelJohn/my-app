@@ -14,23 +14,23 @@ export function DomainCompetencyView({ competencies }: Props) {
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
             <Radar className="w-4 h-4 text-primary" />
-            <span>Core Pedagogical Domains</span>
+            <span>Core Teaching Domains</span>
           </CardTitle>
-          <span className="text-xs text-muted-foreground">Scale: 5.00 Max</span>
+          <span className="text-xs text-muted-foreground">5.00 Max</span>
         </div>
         <CardDescription className="text-xs">
-          Competency metrics compared to institutional averages.
+          Evaluation scores compared against institutional benchmarks.
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-4 space-y-4">
         {competencies.length === 0 ? (
           <p className="text-xs text-muted-foreground italic text-center py-6">
-            No category evaluations available.
+            No category evaluations recorded yet.
           </p>
         ) : (
           competencies.map((domain) => {
             const isPositive = domain.deltaFromBenchmark >= 0;
-            const progressPercentage = Math.min(100, Math.max(0, (domain.setScore / 5) * 100));
+            const progress = Math.min(100, Math.max(0, (domain.setScore / 5) * 100));
 
             return (
               <div
@@ -62,7 +62,7 @@ export function DomainCompetencyView({ competencies }: Props) {
                 <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-primary transition-all duration-300"
-                    style={{ width: `${progressPercentage}%` }}
+                    style={{ width: `${progress}%` }}
                   />
                 </div>
 

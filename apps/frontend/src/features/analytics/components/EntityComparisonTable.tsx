@@ -9,10 +9,10 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Trophy } from "lucide-react";
-import type { EntityComparisonRow } from "@my-app/shared";
+import type { EntityBarComparison } from "@my-app/shared";
 
 interface Props {
-  breakdown: EntityComparisonRow[];
+  breakdown: EntityBarComparison[];
   scope: string;
 }
 
@@ -35,11 +35,12 @@ export function EntityComparisonTable({ breakdown, scope }: Props) {
             {breakdown.length} {scope === "INSTITUTION" ? "Colleges" : "Programs"} Ranked
           </Badge>
         </div>
+        <CardDescription className="text-xs">
+          Consolidated program performance: Combines all faculty teaching in each degree program.
+          SET represents aggregate student ratings, SEF represents supervisor evaluations, and
+          Perception Gap measures variance (Δ = SEF − SET).
+        </CardDescription>
       </CardHeader>
-      <CardDescription className="text-xs">
-        Compares teaching quality (SET), supervisor assessments (SEF), and perception divergence (Δ
-        SEF − SET).
-      </CardDescription>
       <CardContent className="p-0 overflow-x-auto">
         <Table>
           <TableHeader className="bg-muted/40 text-xs">

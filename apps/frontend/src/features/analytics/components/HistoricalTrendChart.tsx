@@ -23,31 +23,34 @@ interface Props {
 
 const chartConfig: ChartConfig = {
   setRating: {
-    label: "SET Rating (Students)",
-    color: "var(--primary)",
+    label: "SET (Students)",
+    color: "#22c55e",
   },
   sefRating: {
-    label: "SEF Rating (Supervisor)",
-    color: "var(--color-success)",
+    label: "SEF (Supervisor)",
+    color: "#0284c7",
   },
   benchmarkSetRating: {
     label: "Univ Baseline (SET)",
-    color: "var(--muted-foreground)",
+    color: "#a1a1aa",
   },
   benchmarkSefRating: {
     label: "Univ Baseline (SEF)",
-    color: "var(--color-info)",
+    color: "#38bdf8",
   },
 };
 
 export function HistoricalTrendChart({ trends }: Props) {
-  const chartData = trends.map((t) => ({
-    term: `${t.semesterTerm} (${t.schoolYear})`,
-    setRating: t.setRating,
-    sefRating: t.sefRating,
-    benchmarkSetRating: t.benchmarkSetRating,
-    benchmarkSefRating: t.benchmarkSefRating,
-  }));
+  // Only plot terms that have actual data
+  const chartData = trends
+    .filter((t) => t.totalRespondents > 0 || t.setRating > 0 || t.benchmarkSetRating > 0)
+    .map((t) => ({
+      term: `${t.semesterTerm} (${t.schoolYear})`,
+      setRating: t.setRating > 0 ? t.setRating : null,
+      sefRating: t.sefRating,
+      benchmarkSetRating: t.benchmarkSetRating > 0 ? t.benchmarkSetRating : null,
+      benchmarkSefRating: t.benchmarkSefRating,
+    }));
 
   return (
     <Card className="border-border bg-card shadow-xs">
@@ -55,14 +58,14 @@ export function HistoricalTrendChart({ trends }: Props) {
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
             <TrendingUp className="w-4 h-4 text-primary" />
-            <span>Multi-Semester Longitudinal Trajectory</span>
+            <span>Multi-Semester Historical Trajectory</span>
           </CardTitle>
           <div className="flex items-center gap-3 text-xs">
             <span className="flex items-center gap-1 font-semibold text-primary">
-              <Users className="w-3.5 h-3.5" /> SET (Students)
+              <Users className="w-3.5 h-3.5" /> SET
             </span>
             <span className="flex items-center gap-1 font-semibold text-success">
-              <UserCheck className="w-3.5 h-3.5" /> SEF (Supervisor)
+              <UserCheck className="w-3.5 h-3.5" /> SEF
             </span>
           </div>
         </div>
@@ -72,7 +75,7 @@ export function HistoricalTrendChart({ trends }: Props) {
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-4">
-        <div className="h-[300px] w-full">
+        <div className="h-[280px] w-full">
           {chartData.length === 0 ? (
             <div className="h-full flex items-center justify-center text-xs text-muted-foreground italic">
               No historical evaluation data recorded yet.
@@ -81,7 +84,7 @@ export function HistoricalTrendChart({ trends }: Props) {
             <ChartContainer config={chartConfig} className="h-full w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2} />
                   <XAxis
                     dataKey="term"
                     tickLine={false}
@@ -98,41 +101,41 @@ export function HistoricalTrendChart({ trends }: Props) {
                   />
                   <ChartTooltip content={<ChartTooltipContent />} />
                   <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
-                  {/* SET Rating Line */}
                   <Line
-                    type="monotone"
+                    type="linear"
                     dataKey="setRating"
-                    name="SET Rating"
-                    stroke="var(--primary)"
+                    connectNulls={true}
+                    name="SET (Students)"
+                    stroke="#22c55e"
                     strokeWidth={2.5}
                     dot={{ r: 4 }}
                     activeDot={{ r: 6 }}
                   />
-                  {/* SEF Rating Line */}
                   <Line
-                    type="monotone"
+                    type="linear"
                     dataKey="sefRating"
-                    name="SEF Rating"
-                    stroke="var(--color-success)"
+                    connectNulls={true}
+                    name="SEF (Supervisor)"
+                    stroke="#0284c7"
                     strokeWidth={2.5}
                     dot={{ r: 4 }}
                   />
-                  {/* SET Institutional Baseline */}
                   <Line
-                    type="monotone"
+                    type="linear"
                     dataKey="benchmarkSetRating"
+                    connectNulls={true}
                     name="SET Baseline"
-                    stroke="var(--muted-foreground)"
+                    stroke="#a1a1aa"
                     strokeDasharray="4 4"
                     strokeWidth={1.5}
                     dot={false}
                   />
-                  {/* SEF Institutional Baseline */}
                   <Line
-                    type="monotone"
+                    type="linear"
                     dataKey="benchmarkSefRating"
+                    connectNulls={true}
                     name="SEF Baseline"
-                    stroke="var(--color-info)"
+                    stroke="#38bdf8"
                     strokeDasharray="4 4"
                     strokeWidth={1.5}
                     dot={false}

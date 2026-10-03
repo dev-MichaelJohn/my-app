@@ -8,6 +8,9 @@ import {
   Programs,
   Accounts,
   PersonalDetails,
+  CourseOfferings,
+  CourseCurriculums,
+  Courses,
   type AnalyticsQuery,
   type ComprehensiveAnalyticsReport,
   type LongitudinalPoint,
@@ -43,17 +46,17 @@ export class AnalyticsService implements IAnalyticsService {
     client: DbClient = db,
   ): ResultAsync<ComprehensiveAnalyticsReport, AppError> {
     return WithTransaction(client, async (tx): Promise<ComprehensiveAnalyticsReport> => {
-      // 1. Enforce Role & Office Scoping
+      // 1. Enforce RBAC & Scoping
       const { validatedScope, resolvedEntityId, scopeEntityName } = await this.enforceRbacScope(
         actorUser,
         query,
         tx,
       );
 
-      // 2. Resolve Target Semester
+      // 2. Resolve Active Semester
       const activeSemester = await this.resolveSemester(query.semesterId, tx);
       if (!activeSemester) {
-        throw new AppError(404, "No academic semester records found.");
+        throw new AppError(404, "No active or historical semester records found.");
       }
 
       // 3. Fetch past 6 semesters for historical progression
@@ -66,7 +69,7 @@ export class AnalyticsService implements IAnalyticsService {
 
       const semesterIds = recentSemesters.map((s) => s.id);
 
-      // 4. Fetch all reports for these semesters
+      // 4. Fetch reports across these semesters
       const allReports = await tx
         .select()
         .from(IndividualFacultyReports)
@@ -77,39 +80,43 @@ export class AnalyticsService implements IAnalyticsService {
           ),
         );
 
+      // Map faculty affiliations to guarantee bulletproof matching
+      const allFacultyIds = Array.from(new Set(allReports.map((r) => r.faculty_id)));
+      const affiliationMap = await this.getFacultyAffiliations(allFacultyIds, tx);
+
       const currentSemesterReports = allReports.filter((r) => r.semester_id === activeSemester.id);
 
       const scopedCurrentReports = currentSemesterReports.filter((r) =>
-        this.matchesScope(r, validatedScope, resolvedEntityId),
+        this.matchesScope(r, validatedScope, resolvedEntityId, affiliationMap),
       );
 
-      // 5. Compute Historical Multi-Term Trajectory (both SET and SEF)
+      // 5. Compute Historical Trends
       const historicalTrends = this.computeHistoricalTrends(
         recentSemesters,
         allReports,
         validatedScope,
         resolvedEntityId,
+        affiliationMap,
       );
 
-      // 6. Compute Summary KPIs
+      // 6. Compute KPIs
       const kpis = this.computeKpis(scopedCurrentReports, historicalTrends, activeSemester.id);
 
-      // 7. Core Pedagogical Domains
+      // 7. Domain Competencies
       const domainCompetencies = this.computeDomainCompetencies(
         scopedCurrentReports,
         currentSemesterReports,
       );
 
-      // 8. Indicator Diagnostics
+      // 8. Diagnostics
       const diagnostics = this.computeDiagnostics(scopedCurrentReports, currentSemesterReports);
 
-      // 9. Comparison Bar Breakdown:
-      // - When INSTITUTION: Compare all Colleges (SET vs SEF)
-      // - When COLLEGE: Compare all Programs under that College (SET vs SEF)
+      // 9. Side-by-side Entity Bar Comparisons
       const comparisons = await this.computeComparisons(
         validatedScope,
         resolvedEntityId,
         currentSemesterReports,
+        affiliationMap,
         tx,
       );
 
@@ -131,9 +138,47 @@ export class AnalyticsService implements IAnalyticsService {
     });
   }
 
-  // =========================================================================
-  // RBAC & OFFICE SCOPE ENFORCEMENT
-  // =========================================================================
+  // ==========================================
+  // AFFILIATION MAP ENGINE
+  // ==========================================
+  private async getFacultyAffiliations(
+    facultyIds: number[],
+    tx: PgTransaction,
+  ): Promise<Map<number, { collegeIds: Set<number>; programIds: Set<number> }>> {
+    const map = new Map<number, { collegeIds: Set<number>; programIds: Set<number> }>();
+    if (facultyIds.length === 0) return map;
+
+    const rows = await tx
+      .select({
+        facultyId: CourseOfferings.faculty_id,
+        collegeId: Colleges.id,
+        programId: Programs.id,
+      })
+      .from(CourseOfferings)
+      .innerJoin(CourseCurriculums, eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id))
+      .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+      .innerJoin(Programs, eq(Courses.program_id, Programs.id))
+      .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
+      .where(
+        and(inArray(CourseOfferings.faculty_id, facultyIds), isNull(CourseOfferings.deleted_at)),
+      );
+
+    for (const r of rows) {
+      if (!r.facultyId) continue;
+      if (!map.has(r.facultyId)) {
+        map.set(r.facultyId, { collegeIds: new Set(), programIds: new Set() });
+      }
+      const entry = map.get(r.facultyId)!;
+      entry.collegeIds.add(r.collegeId);
+      entry.programIds.add(r.programId);
+    }
+
+    return map;
+  }
+
+  // ==========================================
+  // RBAC SCOPE ENFORCEMENT
+  // ==========================================
   private async enforceRbacScope(
     actorUser: GetUser,
     query: AnalyticsQuery,
@@ -159,7 +204,7 @@ export class AnalyticsService implements IAnalyticsService {
       };
     }
 
-    // Program Chair: Limited to their PROGRAM or SELF
+    // Program Chair: Limited to their handled PROGRAM or SELF
     if (isChair && !isDean && !isSysAdmin && !isAdmin) {
       if (query.scope === "SELF") {
         return {
@@ -176,7 +221,7 @@ export class AnalyticsService implements IAnalyticsService {
       };
     }
 
-    // College Dean: Limited to their COLLEGE, PROGRAMs under their college, or SELF
+    // College Dean: Limited to their handled COLLEGE, programs under it, or SELF
     if (isDean && !isSysAdmin && !isAdmin) {
       if (query.scope === "SELF") {
         return {
@@ -213,7 +258,7 @@ export class AnalyticsService implements IAnalyticsService {
       };
     }
 
-    // Admins & SysAdmins: Full freedom across scopes
+    // Admins & SysAdmins: Full access across all scopes
     let entityName: string | undefined = undefined;
 
     if (query.scope === "COLLEGE" && query.collegeId) {
@@ -263,18 +308,26 @@ export class AnalyticsService implements IAnalyticsService {
   private matchesScope(
     report: typeof IndividualFacultyReports.$inferSelect,
     scope: AnalyticsScope,
-    entityId?: number,
+    entityId: number | undefined,
+    affiliationMap?: Map<number, { collegeIds: Set<number>; programIds: Set<number> }>,
   ): boolean {
     if (scope === "INSTITUTION") return true;
     if (scope === "SELF" && entityId) return report.faculty_id === entityId;
 
     const breakdown = (report.class_breakdown as any[]) || [];
+
     if (scope === "COLLEGE" && entityId) {
-      return breakdown.some((c) => c.collegeId === entityId);
+      const inBreakdown = breakdown.some((c) => c.collegeId === entityId);
+      if (inBreakdown) return true;
+      return affiliationMap?.get(report.faculty_id)?.collegeIds.has(entityId) ?? false;
     }
+
     if (scope === "PROGRAM" && entityId) {
-      return breakdown.some((c) => c.programId === entityId);
+      const inBreakdown = breakdown.some((c) => c.programId === entityId);
+      if (inBreakdown) return true;
+      return affiliationMap?.get(report.faculty_id)?.programIds.has(entityId) ?? false;
     }
+
     return true;
   }
 
@@ -292,20 +345,23 @@ export class AnalyticsService implements IAnalyticsService {
     return latest;
   }
 
-  // =========================================================================
-  // HISTORICAL MULTI-SEMESTER PROGRESSION
-  // =========================================================================
+  // ==========================================
+  // MULTI-SEMESTER LONGITUDINAL ENGINE
+  // ==========================================
   private computeHistoricalTrends(
     semesters: (typeof Semesters.$inferSelect)[],
     allReports: (typeof IndividualFacultyReports.$inferSelect)[],
     scope: AnalyticsScope,
     entityId?: number,
+    affiliationMap?: Map<number, { collegeIds: Set<number>; programIds: Set<number> }>,
   ): LongitudinalPoint[] {
     const chronologicalSemesters = [...semesters].sort((a, b) => a.id - b.id);
 
     return chronologicalSemesters.map((sem) => {
       const inSem = allReports.filter((r) => r.semester_id === sem.id);
-      const scopedInSem = inSem.filter((r) => this.matchesScope(r, scope, entityId));
+      const scopedInSem = inSem.filter((r) =>
+        this.matchesScope(r, scope, entityId, affiliationMap),
+      );
 
       const avgInstSet = inSem.length
         ? inSem.reduce((sum, r) => sum + Number(r.overall_set_rating), 0) / inSem.length
@@ -523,22 +579,24 @@ export class AnalyticsService implements IAnalyticsService {
     };
   }
 
-  // =========================================================================
-  // COMPARATIVE BAR MATRIX (COLLEGES or PROGRAMS)
-  // =========================================================================
+  // ==========================================
+  // COMPARISON MATRIX (COLLEGES or PROGRAMS)
+  // ==========================================
   private async computeComparisons(
     scope: AnalyticsScope,
     resolvedEntityId: number | undefined,
     allCurrentReports: (typeof IndividualFacultyReports.$inferSelect)[],
+    affiliationMap: Map<number, { collegeIds: Set<number>; programIds: Set<number> }>,
     tx: PgTransaction,
   ): Promise<EntityBarComparison[]> {
-    // 1. In INSTITUTION scope -> Compare all Colleges
     if (scope === "INSTITUTION") {
       const colleges = await tx.select().from(Colleges).where(isNull(Colleges.deleted_at));
       const rows = colleges.map((col) => {
         const matching = allCurrentReports.filter((r) => {
           const breakdown = (r.class_breakdown as any[]) || [];
-          return breakdown.some((c) => c.collegeId === col.id);
+          const inBreakdown = breakdown.some((c) => c.collegeId === col.id);
+          if (inBreakdown) return true;
+          return affiliationMap.get(r.faculty_id)?.collegeIds.has(col.id) ?? false;
         });
         return this.formatBarComparison(col.id, col.name, col.initialism, matching);
       });
@@ -546,7 +604,6 @@ export class AnalyticsService implements IAnalyticsService {
       return rows.sort((a, b) => b.setRating - a.setRating).map((r, i) => ({ ...r, rank: i + 1 }));
     }
 
-    // 2. In COLLEGE scope -> Compare all Programs within that College
     if (scope === "COLLEGE" && resolvedEntityId) {
       const programs = await tx
         .select()
@@ -556,7 +613,9 @@ export class AnalyticsService implements IAnalyticsService {
       const rows = programs.map((prog) => {
         const matching = allCurrentReports.filter((r) => {
           const breakdown = (r.class_breakdown as any[]) || [];
-          return breakdown.some((c) => c.programId === prog.id);
+          const inBreakdown = breakdown.some((c) => c.programId === prog.id);
+          if (inBreakdown) return true;
+          return affiliationMap.get(r.faculty_id)?.programIds.has(prog.id) ?? false;
         });
         return this.formatBarComparison(prog.id, prog.name, prog.initialism, matching);
       });
