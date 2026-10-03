@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "node --watch --import tsx ./src/index.ts",
     "db:push": "pnpm drizzle-kit push",
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "start": "node dist/index.js"
   },
   "dependencies": {
@@ -62,6 +62,7 @@
     "@types/pg": "^8.23.1",
     "@types/sentiment": "^5.0.4",
     "oxfmt": "^0.67.0",
+    "tsc-alias": "^1.9.7",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
   },
