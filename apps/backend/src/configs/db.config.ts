@@ -8,6 +8,7 @@ import type { PgAsyncTransaction } from "drizzle-orm/pg-core";
 export const pool = new pg.Pool({
   connectionString: env.DATABASE_URL,
   max: 20,
+  ssl: env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });
