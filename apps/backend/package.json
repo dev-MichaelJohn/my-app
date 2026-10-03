@@ -9,7 +9,9 @@
   "main": "index.js",
   "scripts": {
     "dev": "node --watch --import tsx ./src/index.ts",
-    "db:push": "pnpm drizzle-kit push"
+    "db:push": "pnpm drizzle-kit push",
+    "build": "tsc",
+    "start": "node dist/src/index.js"
   },
   "dependencies": {
     "@my-app/shared": "workspace:*",
