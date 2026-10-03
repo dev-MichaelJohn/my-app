@@ -13,7 +13,7 @@ import {
   type LongitudinalPoint,
   type DomainCompetencyMetric,
   type IndicatorDiagnosis,
-  type EntityComparisonRow,
+  type EntityBarComparison,
   type AnalyticsScope,
   type GetUser,
   type CategoryAnalytics,
@@ -43,29 +43,30 @@ export class AnalyticsService implements IAnalyticsService {
     client: DbClient = db,
   ): ResultAsync<ComprehensiveAnalyticsReport, AppError> {
     return WithTransaction(client, async (tx): Promise<ComprehensiveAnalyticsReport> => {
+      // 1. Enforce Role & Office Scoping
       const { validatedScope, resolvedEntityId, scopeEntityName } = await this.enforceRbacScope(
         actorUser,
-        query.scope,
-        query.entityId,
+        query,
         tx,
       );
 
+      // 2. Resolve Target Semester
       const activeSemester = await this.resolveSemester(query.semesterId, tx);
       if (!activeSemester) {
-        throw new AppError(404, "No active or historical semester records found.");
+        throw new AppError(404, "No academic semester records found.");
       }
 
-      // Past 5 semesters for longitudinal progression
+      // 3. Fetch past 6 semesters for historical progression
       const recentSemesters = await tx
         .select()
         .from(Semesters)
         .where(sql`${Semesters.id} <= ${activeSemester.id}`)
         .orderBy(desc(Semesters.id))
-        .limit(5);
+        .limit(6);
 
       const semesterIds = recentSemesters.map((s) => s.id);
 
-      // Fetch all published reports
+      // 4. Fetch all reports for these semesters
       const allReports = await tx
         .select()
         .from(IndividualFacultyReports)
@@ -76,14 +77,13 @@ export class AnalyticsService implements IAnalyticsService {
           ),
         );
 
-      const institutionalCurrentReports = allReports.filter(
-        (r) => r.semester_id === activeSemester.id,
-      );
+      const currentSemesterReports = allReports.filter((r) => r.semester_id === activeSemester.id);
 
-      const scopedCurrentReports = institutionalCurrentReports.filter((r) =>
+      const scopedCurrentReports = currentSemesterReports.filter((r) =>
         this.matchesScope(r, validatedScope, resolvedEntityId),
       );
 
+      // 5. Compute Historical Multi-Term Trajectory (both SET and SEF)
       const historicalTrends = this.computeHistoricalTrends(
         recentSemesters,
         allReports,
@@ -91,21 +91,25 @@ export class AnalyticsService implements IAnalyticsService {
         resolvedEntityId,
       );
 
+      // 6. Compute Summary KPIs
       const kpis = this.computeKpis(scopedCurrentReports, historicalTrends, activeSemester.id);
 
+      // 7. Core Pedagogical Domains
       const domainCompetencies = this.computeDomainCompetencies(
         scopedCurrentReports,
-        institutionalCurrentReports,
+        currentSemesterReports,
       );
 
-      const diagnostics = this.computeDiagnostics(
-        scopedCurrentReports,
-        institutionalCurrentReports,
-      );
+      // 8. Indicator Diagnostics
+      const diagnostics = this.computeDiagnostics(scopedCurrentReports, currentSemesterReports);
 
-      const breakdown = await this.computeBreakdown(
+      // 9. Comparison Bar Breakdown:
+      // - When INSTITUTION: Compare all Colleges (SET vs SEF)
+      // - When COLLEGE: Compare all Programs under that College (SET vs SEF)
+      const comparisons = await this.computeComparisons(
         validatedScope,
-        institutionalCurrentReports,
+        resolvedEntityId,
+        currentSemesterReports,
         tx,
       );
 
@@ -122,18 +126,17 @@ export class AnalyticsService implements IAnalyticsService {
         historicalTrends,
         domainCompetencies,
         diagnostics,
-        breakdown,
+        comparisons,
       };
     });
   }
 
-  // ==========================================
-  // RBAC SCOPE ENFORCEMENT
-  // ==========================================
+  // =========================================================================
+  // RBAC & OFFICE SCOPE ENFORCEMENT
+  // =========================================================================
   private async enforceRbacScope(
     actorUser: GetUser,
-    requestedScope: AnalyticsScope,
-    requestedEntityId: number | undefined,
+    query: AnalyticsQuery,
     tx: PgTransaction,
   ): Promise<ResolvedScope> {
     const roles = actorUser.roles ?? [];
@@ -147,6 +150,7 @@ export class AnalyticsService implements IAnalyticsService {
     const isDean = deanships.length > 0;
     const isChair = chairships.length > 0;
 
+    // Faculty only has access to SELF
     if (isFaculty && !isSupervisor && !isAdmin && !isSysAdmin) {
       return {
         validatedScope: "SELF",
@@ -155,67 +159,85 @@ export class AnalyticsService implements IAnalyticsService {
       };
     }
 
+    // Program Chair: Limited to their PROGRAM or SELF
     if (isChair && !isDean && !isSysAdmin && !isAdmin) {
-      if (requestedScope === "SELF") {
+      if (query.scope === "SELF") {
         return {
           validatedScope: "SELF",
           resolvedEntityId: actorUser.account.id,
-          scopeEntityName: `${actorUser.details.first_name} ${actorUser.details.last_name}`,
+          scopeEntityName: `${actorUser.details.first_name} ${actorUser.details.last_name} (My Teaching)`,
         };
       }
       const myProgram = chairships[0]!;
       return {
         validatedScope: "PROGRAM",
         resolvedEntityId: myProgram.id,
-        scopeEntityName: myProgram.name,
+        scopeEntityName: `${myProgram.initialism} - ${myProgram.name}`,
       };
     }
 
+    // College Dean: Limited to their COLLEGE, PROGRAMs under their college, or SELF
     if (isDean && !isSysAdmin && !isAdmin) {
-      if (requestedScope === "SELF") {
+      if (query.scope === "SELF") {
         return {
           validatedScope: "SELF",
           resolvedEntityId: actorUser.account.id,
-          scopeEntityName: `${actorUser.details.first_name} ${actorUser.details.last_name}`,
+          scopeEntityName: `${actorUser.details.first_name} ${actorUser.details.last_name} (My Teaching)`,
         };
       }
 
       const myCollege = deanships[0]!;
-      if (requestedScope === "PROGRAM" && requestedEntityId) {
+      if (query.scope === "PROGRAM" && query.programId) {
         const [prog] = await tx
           .select()
           .from(Programs)
           .where(
             and(
-              eq(Programs.id, requestedEntityId),
+              eq(Programs.id, query.programId),
               eq(Programs.college_id, myCollege.id),
               isNull(Programs.deleted_at),
             ),
           );
-        if (!prog) throw new AppError(403, "You can only view programs in your college.");
+        if (!prog) throw new AppError(403, "You can only view programs belonging to your college.");
         return {
           validatedScope: "PROGRAM",
           resolvedEntityId: prog.id,
-          scopeEntityName: prog.name,
+          scopeEntityName: `${prog.initialism} - ${prog.name}`,
         };
       }
 
       return {
         validatedScope: "COLLEGE",
         resolvedEntityId: myCollege.id,
-        scopeEntityName: myCollege.name,
+        scopeEntityName: `${myCollege.initialism} - ${myCollege.name}`,
       };
     }
 
+    // Admins & SysAdmins: Full freedom across scopes
     let entityName: string | undefined = undefined;
-    if (requestedScope === "COLLEGE" && requestedEntityId) {
-      const [col] = await tx.select().from(Colleges).where(eq(Colleges.id, requestedEntityId));
-      entityName = col?.name;
-    } else if (requestedScope === "PROGRAM" && requestedEntityId) {
-      const [prog] = await tx.select().from(Programs).where(eq(Programs.id, requestedEntityId));
-      entityName = prog?.name;
-    } else if (requestedScope === "SELF") {
-      const targetId = requestedEntityId || actorUser.account.id;
+
+    if (query.scope === "COLLEGE" && query.collegeId) {
+      const [col] = await tx.select().from(Colleges).where(eq(Colleges.id, query.collegeId));
+      entityName = col ? `${col.initialism} - ${col.name}` : undefined;
+      return {
+        validatedScope: "COLLEGE",
+        resolvedEntityId: query.collegeId,
+        scopeEntityName: entityName,
+      };
+    }
+
+    if (query.scope === "PROGRAM" && query.programId) {
+      const [prog] = await tx.select().from(Programs).where(eq(Programs.id, query.programId));
+      entityName = prog ? `${prog.initialism} - ${prog.name}` : undefined;
+      return {
+        validatedScope: "PROGRAM",
+        resolvedEntityId: query.programId,
+        scopeEntityName: entityName,
+      };
+    }
+
+    if (query.scope === "SELF") {
+      const targetId = query.facultyId || actorUser.account.id;
       const [pers] = await tx
         .select()
         .from(PersonalDetails)
@@ -224,14 +246,17 @@ export class AnalyticsService implements IAnalyticsService {
       entityName = pers
         ? `${pers.personal_details.first_name} ${pers.personal_details.last_name}`
         : "Faculty";
+      return {
+        validatedScope: "SELF",
+        resolvedEntityId: targetId,
+        scopeEntityName: entityName,
+      };
     }
 
     return {
-      validatedScope: requestedScope,
-      resolvedEntityId:
-        requestedEntityId ?? (requestedScope === "SELF" ? actorUser.account.id : undefined),
-      scopeEntityName:
-        entityName ?? (requestedScope === "INSTITUTION" ? "Institution-Wide" : undefined),
+      validatedScope: "INSTITUTION",
+      resolvedEntityId: undefined,
+      scopeEntityName: "University-Wide Institution",
     };
   }
 
@@ -267,9 +292,9 @@ export class AnalyticsService implements IAnalyticsService {
     return latest;
   }
 
-  // ==========================================
-  // LONGITUDINAL TREND ENGINE (SET & SEF)
-  // ==========================================
+  // =========================================================================
+  // HISTORICAL MULTI-SEMESTER PROGRESSION
+  // =========================================================================
   private computeHistoricalTrends(
     semesters: (typeof Semesters.$inferSelect)[],
     allReports: (typeof IndividualFacultyReports.$inferSelect)[],
@@ -282,7 +307,6 @@ export class AnalyticsService implements IAnalyticsService {
       const inSem = allReports.filter((r) => r.semester_id === sem.id);
       const scopedInSem = inSem.filter((r) => this.matchesScope(r, scope, entityId));
 
-      // Institutional baselines
       const avgInstSet = inSem.length
         ? inSem.reduce((sum, r) => sum + Number(r.overall_set_rating), 0) / inSem.length
         : 0;
@@ -292,7 +316,6 @@ export class AnalyticsService implements IAnalyticsService {
         ? instSef.reduce((sum, r) => sum + Number(r.overall_sef_rating), 0) / instSef.length
         : null;
 
-      // Scoped entity ratings
       const avgScopedSet = scopedInSem.length
         ? scopedInSem.reduce((sum, r) => sum + Number(r.overall_set_rating), 0) / scopedInSem.length
         : 0;
@@ -321,9 +344,6 @@ export class AnalyticsService implements IAnalyticsService {
     });
   }
 
-  // ==========================================
-  // KPIS WITH PERCEPTION GAP
-  // ==========================================
   private computeKpis(
     scopedReports: (typeof IndividualFacultyReports.$inferSelect)[],
     historicalTrends: LongitudinalPoint[],
@@ -376,7 +396,6 @@ export class AnalyticsService implements IAnalyticsService {
       0,
     );
     const uniqueFaculty = new Set(scopedReports.map((r) => r.faculty_id)).size;
-
     const satisfactory = scopedReports.filter((r) => Number(r.overall_set_rating) >= 3.5).length;
     const satisfactionRate = Number(((satisfactory / scopedReports.length) * 100).toFixed(1));
 
@@ -392,9 +411,6 @@ export class AnalyticsService implements IAnalyticsService {
     };
   }
 
-  // ==========================================
-  // DOMAIN COMPETENCIES (SET vs SEF Gap)
-  // ==========================================
   private computeDomainCompetencies(
     scopedReports: (typeof IndividualFacultyReports.$inferSelect)[],
     institutionalReports: (typeof IndividualFacultyReports.$inferSelect)[],
@@ -449,9 +465,6 @@ export class AnalyticsService implements IAnalyticsService {
     });
   }
 
-  // ==========================================
-  // TOP & BOTTOM INDICATOR DIAGNOSTICS
-  // ==========================================
   private computeDiagnostics(
     scopedReports: (typeof IndividualFacultyReports.$inferSelect)[],
     institutionalReports: (typeof IndividualFacultyReports.$inferSelect)[],
@@ -510,14 +523,16 @@ export class AnalyticsService implements IAnalyticsService {
     };
   }
 
-  // ==========================================
-  // CROSS-ENTITY BREAKDOWN & PARITY MATRIX
-  // ==========================================
-  private async computeBreakdown(
+  // =========================================================================
+  // COMPARATIVE BAR MATRIX (COLLEGES or PROGRAMS)
+  // =========================================================================
+  private async computeComparisons(
     scope: AnalyticsScope,
+    resolvedEntityId: number | undefined,
     allCurrentReports: (typeof IndividualFacultyReports.$inferSelect)[],
     tx: PgTransaction,
-  ): Promise<EntityComparisonRow[]> {
+  ): Promise<EntityBarComparison[]> {
+    // 1. In INSTITUTION scope -> Compare all Colleges
     if (scope === "INSTITUTION") {
       const colleges = await tx.select().from(Colleges).where(isNull(Colleges.deleted_at));
       const rows = colleges.map((col) => {
@@ -525,39 +540,39 @@ export class AnalyticsService implements IAnalyticsService {
           const breakdown = (r.class_breakdown as any[]) || [];
           return breakdown.some((c) => c.collegeId === col.id);
         });
-        return this.formatEntityRow(col.id, col.name, col.initialism, matching);
+        return this.formatBarComparison(col.id, col.name, col.initialism, matching);
       });
 
-      // Rank colleges by highest SET score
       return rows.sort((a, b) => b.setRating - a.setRating).map((r, i) => ({ ...r, rank: i + 1 }));
     }
 
-    if (scope === "COLLEGE") {
-      const programs = await tx.select().from(Programs).where(isNull(Programs.deleted_at));
+    // 2. In COLLEGE scope -> Compare all Programs within that College
+    if (scope === "COLLEGE" && resolvedEntityId) {
+      const programs = await tx
+        .select()
+        .from(Programs)
+        .where(and(eq(Programs.college_id, resolvedEntityId), isNull(Programs.deleted_at)));
+
       const rows = programs.map((prog) => {
         const matching = allCurrentReports.filter((r) => {
           const breakdown = (r.class_breakdown as any[]) || [];
           return breakdown.some((c) => c.programId === prog.id);
         });
-        return this.formatEntityRow(prog.id, prog.name, prog.initialism, matching);
+        return this.formatBarComparison(prog.id, prog.name, prog.initialism, matching);
       });
 
-      // Filter to programs that have reports or belong to the active college
-      return rows
-        .filter((r) => r.totalFaculty > 0)
-        .sort((a, b) => b.setRating - a.setRating)
-        .map((r, i) => ({ ...r, rank: i + 1 }));
+      return rows.sort((a, b) => b.setRating - a.setRating).map((r, i) => ({ ...r, rank: i + 1 }));
     }
 
     return [];
   }
 
-  private formatEntityRow(
+  private formatBarComparison(
     id: number,
     name: string,
     code: string,
     reports: (typeof IndividualFacultyReports.$inferSelect)[],
-  ): EntityComparisonRow {
+  ): EntityBarComparison {
     const totalSet = reports.reduce((sum, r) => sum + Number(r.overall_set_rating), 0);
     const setRating = reports.length ? Number((totalSet / reports.length).toFixed(2)) : 0;
 
@@ -582,7 +597,6 @@ export class AnalyticsService implements IAnalyticsService {
       perceptionGap,
       totalFaculty: new Set(reports.map((r) => r.faculty_id)).size,
       totalEvaluations,
-      completionRate: 100,
       ratingDistribution: {
         outstanding: reports.filter((r) => Number(r.overall_set_rating) >= 4.5).length,
         verySatisfactory: reports.filter(
