@@ -89,3 +89,46 @@ export interface ComprehensiveAnalyticsReport {
   };
   comparisons: EntityBarComparison[];
 }
+
+export interface LiveEvaluationPulseEvent {
+  id: string;
+  type: "SET" | "SEF";
+  timestamp: string;
+  courseCode: string;
+  courseName: string;
+  programCode: string;
+  programId: number;
+  collegeCode: string;
+  collegeId: number;
+  yearLevel: string;
+  section: string;
+  // 🔒 Strict Privacy: Student identity, exact rating, and qualitative text are NEVER emitted
+}
+
+export interface DashboardOverviewStats {
+  activeSchedule: {
+    isOpen: boolean;
+    openAt?: string;
+    closeAt?: string;
+    semesterTerm?: string;
+    schoolYear?: string;
+    secondsRemaining?: number;
+  };
+  metrics: {
+    totalEnrolledStudentEvaluations: number;
+    completedStudentEvaluations: number;
+    pendingStudentEvaluations: number;
+    completionPercentage: number;
+    totalFacultyEvaluated: number;
+    totalSupervisorSubmissions: number;
+  };
+  collegeParticipation: {
+    collegeId: number;
+    collegeName: string;
+    collegeCode: string;
+    totalExpected: number;
+    completed: number;
+    percentage: number;
+  }[];
+  recentPulses: LiveEvaluationPulseEvent[];
+}
