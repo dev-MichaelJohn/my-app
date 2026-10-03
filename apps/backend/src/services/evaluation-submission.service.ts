@@ -17,18 +17,19 @@ import {
   StudentEvaluationForms,
   StudentEvaluationRatings,
   StudentEvaluations,
-  StudentEvaluationSchedules,
-  SupervisorEvaluationForms,
   SupervisorEvaluationRatings,
   SupervisorEvaluations,
   SupervisorEvaluationSchedules,
+  StudentEvaluationSchedules,
   type FacultyTeachingOffering,
   type TeachingStudentItem,
+  SupervisorEvaluationForms,
 } from "@my-app/shared";
 import { AppError } from "@/libs/error.lib.js";
 import { ValidateSchema } from "@/libs/result.lib.js";
 import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
 import { analyzeCommentSentiment } from "@/libs/sentiment.lib.js";
+import { emitEvaluationPulse } from "@/libs/socket.lib.js";
 import {
   EvaluationInstrumentService,
   type IEvaluationInstrumentService,
@@ -519,7 +520,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         // ══════════════════════════════════════════════════════════════════
         let computedRating: number | null = null;
         if (data.ratings.length > 0) {
-          // Fetch the template's chosen calculation formula and score bounds
           const [formRecord] = await tx
             .select({
               min_rating: StudentEvaluationForms.min_rating,
@@ -534,7 +534,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           const maxRatingPerQ = formRecord?.max_rating ?? 5;
           const maxPossibleScore = data.ratings.length * maxRatingPerQ;
 
-          // Runs the plug-and-play formula
           computedRating = formula.calculate({
             ratings: data.ratings,
             totalScore,
@@ -559,7 +558,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
               comment: data.comment ?? null,
               comment_score: commentScore !== null ? String(commentScore) : null,
               comment_sentiment: commentSentiment,
-              set_rating: computedRating !== null ? String(computedRating) : null, // 👈 Saved in DB
+              set_rating: computedRating !== null ? String(computedRating) : null,
               submitted_at: data.is_draft ? null : now,
             })
             .where(eq(StudentEvaluations.id, existing.id))
@@ -578,7 +577,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
               comment: data.comment ?? null,
               comment_score: commentScore !== null ? String(commentScore) : null,
               comment_sentiment: commentSentiment,
-              set_rating: computedRating !== null ? String(computedRating) : null, // 👈 Saved in DB
+              set_rating: computedRating !== null ? String(computedRating) : null,
               submitted_at: data.is_draft ? null : now,
             })
             .returning({ id: StudentEvaluations.id });
@@ -595,12 +594,48 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           await tx.insert(StudentEvaluationRatings).values(ratingInserts);
         }
 
-        console.log({
-          evaluation_id: evaluationId,
-          rating: computedRating,
-          sentiment_score: commentScore,
-          sentiment_classification: commentSentiment,
-        });
+        // ══════════════════════════════════════════════════════════════════
+        // 📡 REAL-TIME PULSE BROADCAST (Only when finalized, strictly anonymous)
+        // ══════════════════════════════════════════════════════════════════
+        if (!data.is_draft) {
+          const [offeringMeta] = await tx
+            .select({
+              courseCode: Courses.initialism,
+              courseName: Courses.name,
+              programCode: Programs.initialism,
+              programId: Programs.id,
+              collegeCode: Colleges.initialism,
+              collegeId: Colleges.id,
+              yearLevel: Classes.year_level,
+              section: Classes.section,
+            })
+            .from(CourseOfferings)
+            .innerJoin(
+              CourseCurriculums,
+              eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+            )
+            .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+            .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+            .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+            .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
+            .where(eq(CourseOfferings.id, studentClass.course_offering_id));
+
+          if (offeringMeta) {
+            emitEvaluationPulse({
+              id: `pulse-set-${evaluationId}`,
+              type: "SET",
+              timestamp: now.toISOString(),
+              courseCode: offeringMeta.courseCode,
+              courseName: offeringMeta.courseName,
+              programCode: offeringMeta.programCode,
+              programId: offeringMeta.programId,
+              collegeCode: offeringMeta.collegeCode,
+              collegeId: offeringMeta.collegeId,
+              yearLevel: offeringMeta.yearLevel,
+              section: offeringMeta.section,
+            });
+          }
+        }
 
         return {
           evaluation_id: evaluationId,
@@ -623,7 +658,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
     return WithTransaction(client, async (tx) => {
       const now = new Date();
 
-      // 1. Check active supervisor evaluation schedule
       const [activeSchedule] = await tx
         .select()
         .from(SupervisorEvaluationSchedules)
@@ -638,7 +672,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
       if (!activeSchedule) return [];
 
-      // 2. Fetch offices held by evaluator
       const [deanships, chairships] = await Promise.all([
         tx
           .select({ collegeId: CollegeDeans.college_id })
@@ -661,7 +694,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         return [];
       }
 
-      // 3. Find Program Chair Account IDs under the Dean's colleges
       let programChairsUnderDean: number[] = [];
       if (deanCollegeIds.length > 0) {
         const chairAccounts = await tx
@@ -678,7 +710,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         programChairsUnderDean = chairAccounts.map((c) => c.chairId);
       }
 
-      // 4. Fetch all active offerings for this semester
       const offerings = await tx
         .select({
           offeringId: CourseOfferings.id,
@@ -724,20 +755,15 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           and(
             eq(CourseOfferings.semester_id, activeSchedule.semester_id),
             isNull(CourseOfferings.deleted_at),
-            ne(CourseOfferings.faculty_id, evaluatorAccountId), // CANNOT rate self
+            ne(CourseOfferings.faculty_id, evaluatorAccountId),
           ),
         );
 
-      // 5. Apply the strict hierarchy:
-      // - If Dean: CAN ONLY rate Program Chairs under their college
-      // - If Chair: CAN ONLY rate faculty teaching subjects under their program
       const scopedOfferings = offerings.filter((o) => {
-        // A. Program Chair role: Rates faculty in their program
         if (chairProgramIds.includes(o.programId)) {
           return true;
         }
 
-        // B. College Dean role: Rates ONLY Program Chairs under their college
         if (
           deanCollegeIds.includes(o.collegeId) &&
           programChairsUnderDean.includes(o.facultyAccountId)
@@ -1071,7 +1097,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         // ══════════════════════════════════════════════════════════════════
         let computedRating: number | null = null;
         if (data.ratings.length > 0) {
-          // Fetch the template's chosen calculation formula and score bounds
           const [formRecord] = await tx
             .select({
               min_rating: SupervisorEvaluationForms.min_rating,
@@ -1086,7 +1111,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           const maxRatingPerQ = formRecord?.max_rating ?? 5;
           const maxPossibleScore = data.ratings.length * maxRatingPerQ;
 
-          // Runs the plug-and-play formula
           computedRating = formula.calculate({
             ratings: data.ratings,
             totalScore,
@@ -1111,7 +1135,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
               comment: data.comment ?? null,
               comment_score: commentScore !== null ? String(commentScore) : null,
               comment_sentiment: commentSentiment,
-              set_rating: computedRating !== null ? String(computedRating) : null, // 👈 Saved in DB
+              set_rating: computedRating !== null ? String(computedRating) : null,
               submitted_at: data.is_draft ? null : now,
             })
             .where(eq(SupervisorEvaluations.id, existing.id))
@@ -1131,7 +1155,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
               comment: data.comment ?? null,
               comment_score: commentScore !== null ? String(commentScore) : null,
               comment_sentiment: commentSentiment,
-              set_rating: computedRating !== null ? String(computedRating) : null, // 👈 Saved in DB
+              set_rating: computedRating !== null ? String(computedRating) : null,
               submitted_at: data.is_draft ? null : now,
             })
             .returning({ id: SupervisorEvaluations.id });
@@ -1148,12 +1172,48 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           await tx.insert(SupervisorEvaluationRatings).values(ratingInserts);
         }
 
-        console.log({
-          evaluation_id: evaluationId,
-          rating: computedRating,
-          sentiment_score: commentScore,
-          sentiment_classification: commentSentiment,
-        });
+        // ══════════════════════════════════════════════════════════════════
+        // 📡 REAL-TIME PULSE BROADCAST (Only when finalized, strictly anonymous)
+        // ══════════════════════════════════════════════════════════════════
+        if (!data.is_draft) {
+          const [offeringMeta] = await tx
+            .select({
+              courseCode: Courses.initialism,
+              courseName: Courses.name,
+              programCode: Programs.initialism,
+              programId: Programs.id,
+              collegeCode: Colleges.initialism,
+              collegeId: Colleges.id,
+              yearLevel: Classes.year_level,
+              section: Classes.section,
+            })
+            .from(CourseOfferings)
+            .innerJoin(
+              CourseCurriculums,
+              eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+            )
+            .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+            .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+            .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+            .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
+            .where(eq(CourseOfferings.id, data.course_offering_id));
+
+          if (offeringMeta) {
+            emitEvaluationPulse({
+              id: `pulse-sef-${evaluationId}`,
+              type: "SEF",
+              timestamp: now.toISOString(),
+              courseCode: offeringMeta.courseCode,
+              courseName: offeringMeta.courseName,
+              programCode: offeringMeta.programCode,
+              programId: offeringMeta.programId,
+              collegeCode: offeringMeta.collegeCode,
+              collegeId: offeringMeta.collegeId,
+              yearLevel: offeringMeta.yearLevel,
+              section: offeringMeta.section,
+            });
+          }
+        }
 
         return {
           evaluation_id: evaluationId,
@@ -1171,7 +1231,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
     client: DbClient = db,
   ): ResultAsync<FacultyTeachingOffering[], AppError> {
     return WithTransaction(client, async (tx) => {
-      // 1. Determine Target Semester (active or latest)
       let targetSemesterId = semesterId;
       if (!targetSemesterId) {
         const today = new Date().toISOString().slice(0, 10);
@@ -1202,7 +1261,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
       if (!targetSemesterId) return [];
 
-      // 2. Fetch all offerings assigned to this faculty member for the semester
       const offerings = await tx
         .select({
           id: CourseOfferings.id,
@@ -1243,7 +1301,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
       const results: FacultyTeachingOffering[] = [];
 
       for (const off of offerings) {
-        // 3. Fetch all enrolled students for this course offering
         const enrollments = await tx
           .select({
             studentClassId: StudentClasses.id,
@@ -1269,7 +1326,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
         const studentClassIds = enrollments.map((e) => e.studentClassId);
 
-        // 4. Fetch SET submissions for this offering
         const submissions =
           studentClassIds.length > 0
             ? await tx
@@ -1281,7 +1337,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
                 .where(
                   and(
                     inArray(StudentEvaluations.student_class_id, studentClassIds),
-                    isNotNull(StudentEvaluations.submitted_at), // Only finalized submissions
+                    isNotNull(StudentEvaluations.submitted_at),
                   ),
                 )
             : [];

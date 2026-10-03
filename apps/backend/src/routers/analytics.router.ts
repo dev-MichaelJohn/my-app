@@ -12,6 +12,22 @@ const authController = new AuthController();
 AnalyticsRouter.use(authController.verifyJWT);
 AnalyticsRouter.use(standardApiLimiter);
 
+// 🚀 Dashboard Overview & Live Submission Feed
+AnalyticsRouter.get(
+  "/dashboard-overview",
+  RequireAnyPermission(
+    PERMISSIONS.ANALYTICS_VIEW_INSTITUTION,
+    PERMISSIONS.ANALYTICS_VIEW_COLLEGE,
+    PERMISSIONS.ANALYTICS_VIEW_PROGRAM,
+    PERMISSIONS.ANALYTICS_VIEW_SELF,
+    PERMISSIONS.EVALUATION_REPORT_VIEW_ALL,
+    PERMISSIONS.EVALUATION_REPORT_VIEW_SELF,
+    PERMISSIONS.EVALUATION_PERIOD_READ,
+  ),
+  controller.getDashboardOverview,
+);
+
+// 📊 Deep Benchmark Matrix & Longitudinal Analytics
 AnalyticsRouter.get(
   "/",
   RequireAnyPermission(

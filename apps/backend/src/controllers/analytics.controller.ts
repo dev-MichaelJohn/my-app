@@ -20,4 +20,15 @@ export class AnalyticsController {
       }));
     });
   });
+
+  getDashboardOverview = runAsync((req) => {
+    const user = req.user;
+    if (!user) return errAsync(new AppError(401, "Authentication required."));
+
+    return this.analyticsService.getDashboardOverview(user).map((data) => ({
+      status: 200,
+      message: "Dashboard overview statistics retrieved successfully.",
+      data,
+    }));
+  });
 }

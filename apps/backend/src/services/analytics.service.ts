@@ -11,6 +11,11 @@ import {
   CourseOfferings,
   CourseCurriculums,
   Courses,
+  Classes,
+  StudentClasses,
+  StudentEvaluations,
+  StudentEvaluationSchedules,
+  SupervisorEvaluations,
   type AnalyticsQuery,
   type ComprehensiveAnalyticsReport,
   type LongitudinalPoint,
@@ -21,8 +26,21 @@ import {
   type GetUser,
   type CategoryAnalytics,
   type IndicatorAnalytics,
+  type DashboardOverviewStats,
+  type LiveEvaluationPulseEvent,
 } from "@my-app/shared";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  isNotNull,
+  sql,
+  SQL,
+  count,
+  countDistinct,
+} from "drizzle-orm";
 import { type ResultAsync } from "neverthrow";
 
 interface ResolvedScope {
@@ -37,6 +55,11 @@ export interface IAnalyticsService {
     actorUser: GetUser,
     client?: DbClient,
   ): ResultAsync<ComprehensiveAnalyticsReport, AppError>;
+
+  getDashboardOverview(
+    actorUser: GetUser,
+    client?: DbClient,
+  ): ResultAsync<DashboardOverviewStats, AppError>;
 }
 
 export class AnalyticsService implements IAnalyticsService {
@@ -67,7 +90,6 @@ export class AnalyticsService implements IAnalyticsService {
         .orderBy(desc(Semesters.id))
         .limit(6);
 
-      // Also ensure the activeSemester itself is included
       if (!recentSemesters.some((s) => s.id === activeSemester.id)) {
         recentSemesters.unshift(activeSemester);
       }
@@ -85,7 +107,6 @@ export class AnalyticsService implements IAnalyticsService {
           ),
         );
 
-      // Map faculty affiliations to guarantee bulletproof matching
       const allFacultyIds = Array.from(new Set(allReports.map((r) => r.faculty_id)));
       const affiliationMap = await this.getFacultyAffiliations(allFacultyIds, tx);
 
@@ -144,6 +165,321 @@ export class AnalyticsService implements IAnalyticsService {
   }
 
   // ==========================================
+  // REAL-TIME DASHBOARD OVERVIEW ENGINE
+  // ==========================================
+  getDashboardOverview(
+    actorUser: GetUser,
+    client: DbClient = db,
+  ): ResultAsync<DashboardOverviewStats, AppError> {
+    return WithTransaction(client, async (tx): Promise<DashboardOverviewStats> => {
+      const now = new Date();
+
+      // 1. Resolve Active or Nearest Semester
+      const activeSemester = await this.resolveSemester(undefined, tx);
+      if (!activeSemester) {
+        throw new AppError(404, "No active academic semester found.");
+      }
+
+      // 2. Resolve Active or Most Recent Evaluation Window
+      const [scheduleRecord] = await tx
+        .select({
+          id: StudentEvaluationSchedules.id,
+          open_at: StudentEvaluationSchedules.open_at,
+          close_at: StudentEvaluationSchedules.close_at,
+          semester_term: Semesters.semester_term,
+          school_year_start: Semesters.school_year_start,
+          school_year_end: Semesters.school_year_end,
+        })
+        .from(StudentEvaluationSchedules)
+        .innerJoin(Semesters, eq(StudentEvaluationSchedules.semester_id, Semesters.id))
+        .where(
+          and(
+            eq(StudentEvaluationSchedules.semester_id, activeSemester.id),
+            isNull(StudentEvaluationSchedules.deleted_at),
+          ),
+        )
+        .orderBy(desc(StudentEvaluationSchedules.open_at))
+        .limit(1);
+
+      let activeSchedule: DashboardOverviewStats["activeSchedule"] = {
+        isOpen: false,
+      };
+
+      if (scheduleRecord) {
+        const openTime = new Date(scheduleRecord.open_at).getTime();
+        const closeTime = new Date(scheduleRecord.close_at).getTime();
+        const currentTime = now.getTime();
+        const isOpen = currentTime >= openTime && currentTime <= closeTime;
+        const secondsRemaining = isOpen
+          ? Math.max(0, Math.floor((closeTime - currentTime) / 1000))
+          : 0;
+
+        activeSchedule = {
+          isOpen,
+          openAt: new Date(scheduleRecord.open_at).toISOString(),
+          closeAt: new Date(scheduleRecord.close_at).toISOString(),
+          semesterTerm: `${scheduleRecord.semester_term} Semester`,
+          schoolYear: `A.Y. ${scheduleRecord.school_year_start}-${scheduleRecord.school_year_end}`,
+          secondsRemaining,
+        };
+      }
+
+      // 3. Determine User Scope (Institution, College, Program)
+      const roles = actorUser.roles ?? [];
+      const isPrivilegedAdmin = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+      const deanships = actorUser.offices?.deanships || [];
+      const chairships = actorUser.offices?.chairships || [];
+      const isDean = deanships.length > 0 && !isPrivilegedAdmin;
+      const isChair = chairships.length > 0 && !isPrivilegedAdmin && !isDean;
+
+      const deanCollegeIds = deanships.map((d) => d.id);
+      const chairProgramIds = chairships.map((c) => c.id);
+
+      const scopeConditions: SQL[] = [
+        eq(CourseOfferings.semester_id, activeSemester.id),
+        isNull(CourseOfferings.deleted_at),
+        isNotNull(CourseOfferings.faculty_id),
+      ];
+
+      if (isDean) {
+        scopeConditions.push(inArray(Programs.college_id, deanCollegeIds));
+      } else if (isChair) {
+        scopeConditions.push(inArray(Programs.id, chairProgramIds));
+      }
+
+      // 4. Compute High-Level Metrics
+      const [enrolledCount] = await tx
+        .select({ total: count(StudentClasses.id) })
+        .from(StudentClasses)
+        .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
+        .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+        .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+        .where(and(...scopeConditions, isNull(StudentClasses.deleted_at)));
+
+      const totalEnrolled = enrolledCount?.total ?? 0;
+
+      const [completedCount] = await tx
+        .select({ total: count(StudentEvaluations.id) })
+        .from(StudentEvaluations)
+        .innerJoin(StudentClasses, eq(StudentEvaluations.student_class_id, StudentClasses.id))
+        .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
+        .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+        .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+        .where(
+          and(
+            ...scopeConditions,
+            isNull(StudentClasses.deleted_at),
+            isNotNull(StudentEvaluations.submitted_at),
+          ),
+        );
+
+      const completedSubmissions = completedCount?.total ?? 0;
+      const pendingSubmissions = Math.max(0, totalEnrolled - completedSubmissions);
+      const completionPercentage =
+        totalEnrolled > 0 ? Number(((completedSubmissions / totalEnrolled) * 100).toFixed(1)) : 0;
+
+      const [distinctFacultyCount] = await tx
+        .select({ total: countDistinct(CourseOfferings.faculty_id) })
+        .from(CourseOfferings)
+        .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+        .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+        .innerJoin(StudentClasses, eq(StudentClasses.course_offering_id, CourseOfferings.id))
+        .innerJoin(StudentEvaluations, eq(StudentEvaluations.student_class_id, StudentClasses.id))
+        .where(
+          and(
+            ...scopeConditions,
+            isNull(StudentClasses.deleted_at),
+            isNotNull(StudentEvaluations.submitted_at),
+          ),
+        );
+
+      const totalFacultyEvaluated = distinctFacultyCount?.total ?? 0;
+
+      const [supervisorCount] = await tx
+        .select({ total: count(SupervisorEvaluations.id) })
+        .from(SupervisorEvaluations)
+        .innerJoin(
+          CourseOfferings,
+          eq(SupervisorEvaluations.course_offering_id, CourseOfferings.id),
+        )
+        .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+        .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+        .where(and(...scopeConditions, isNotNull(SupervisorEvaluations.submitted_at)));
+
+      const totalSupervisorSubmissions = supervisorCount?.total ?? 0;
+
+      // 5. College-Level Participation Breakdown
+      const collegeQueryCondition = isDean
+        ? inArray(Colleges.id, deanCollegeIds)
+        : isNull(Colleges.deleted_at);
+
+      const allColleges = await tx
+        .select({
+          id: Colleges.id,
+          name: Colleges.name,
+          initialism: Colleges.initialism,
+        })
+        .from(Colleges)
+        .where(collegeQueryCondition);
+
+      const collegeParticipation = await Promise.all(
+        allColleges.map(async (col) => {
+          const [expected] = await tx
+            .select({ total: count(StudentClasses.id) })
+            .from(StudentClasses)
+            .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
+            .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+            .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+            .where(
+              and(
+                eq(CourseOfferings.semester_id, activeSemester.id),
+                eq(Programs.college_id, col.id),
+                isNotNull(CourseOfferings.faculty_id),
+                isNull(CourseOfferings.deleted_at),
+                isNull(StudentClasses.deleted_at),
+              ),
+            );
+
+          const [done] = await tx
+            .select({ total: count(StudentEvaluations.id) })
+            .from(StudentEvaluations)
+            .innerJoin(StudentClasses, eq(StudentEvaluations.student_class_id, StudentClasses.id))
+            .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
+            .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+            .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+            .where(
+              and(
+                eq(CourseOfferings.semester_id, activeSemester.id),
+                eq(Programs.college_id, col.id),
+                isNotNull(CourseOfferings.faculty_id),
+                isNull(CourseOfferings.deleted_at),
+                isNull(StudentClasses.deleted_at),
+                isNotNull(StudentEvaluations.submitted_at),
+              ),
+            );
+
+          const expTotal = expected?.total ?? 0;
+          const doneTotal = done?.total ?? 0;
+          const pct = expTotal > 0 ? Number(((doneTotal / expTotal) * 100).toFixed(1)) : 0;
+
+          return {
+            collegeId: col.id,
+            collegeName: col.name,
+            collegeCode: col.initialism,
+            totalExpected: expTotal,
+            completed: doneTotal,
+            percentage: pct,
+          };
+        }),
+      );
+
+      // 6. Recent Pulses Initial State (Combined SET & SEF submissions, strictly anonymized)
+      const recentStudentSubmissions = await tx
+        .select({
+          id: StudentEvaluations.id,
+          submittedAt: StudentEvaluations.submitted_at,
+          courseCode: Courses.initialism,
+          courseName: Courses.name,
+          programCode: Programs.initialism,
+          programId: Programs.id,
+          collegeCode: Colleges.initialism,
+          collegeId: Colleges.id,
+          yearLevel: Classes.year_level,
+          section: Classes.section,
+        })
+        .from(StudentEvaluations)
+        .innerJoin(StudentClasses, eq(StudentEvaluations.student_class_id, StudentClasses.id))
+        .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
+        .innerJoin(
+          CourseCurriculums,
+          eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+        )
+        .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+        .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+        .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+        .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
+        .where(and(...scopeConditions, isNotNull(StudentEvaluations.submitted_at)))
+        .orderBy(desc(StudentEvaluations.submitted_at))
+        .limit(15);
+
+      const recentSupervisorSubmissions = await tx
+        .select({
+          id: SupervisorEvaluations.id,
+          submittedAt: SupervisorEvaluations.submitted_at,
+          courseCode: Courses.initialism,
+          courseName: Courses.name,
+          programCode: Programs.initialism,
+          programId: Programs.id,
+          collegeCode: Colleges.initialism,
+          collegeId: Colleges.id,
+          yearLevel: Classes.year_level,
+          section: Classes.section,
+        })
+        .from(SupervisorEvaluations)
+        .innerJoin(
+          CourseOfferings,
+          eq(SupervisorEvaluations.course_offering_id, CourseOfferings.id),
+        )
+        .innerJoin(
+          CourseCurriculums,
+          eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+        )
+        .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+        .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+        .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+        .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
+        .where(and(...scopeConditions, isNotNull(SupervisorEvaluations.submitted_at)))
+        .orderBy(desc(SupervisorEvaluations.submitted_at))
+        .limit(10);
+
+      const recentPulses: LiveEvaluationPulseEvent[] = [
+        ...recentStudentSubmissions.map((r) => ({
+          id: `pulse-set-${r.id}`,
+          type: "SET" as const,
+          timestamp: r.submittedAt ? new Date(r.submittedAt).toISOString() : now.toISOString(),
+          courseCode: r.courseCode,
+          courseName: r.courseName,
+          programCode: r.programCode,
+          programId: r.programId,
+          collegeCode: r.collegeCode,
+          collegeId: r.collegeId,
+          yearLevel: r.yearLevel,
+          section: r.section,
+        })),
+        ...recentSupervisorSubmissions.map((r) => ({
+          id: `pulse-sef-${r.id}`,
+          type: "SEF" as const,
+          timestamp: r.submittedAt ? new Date(r.submittedAt).toISOString() : now.toISOString(),
+          courseCode: r.courseCode,
+          courseName: r.courseName,
+          programCode: r.programCode,
+          programId: r.programId,
+          collegeCode: r.collegeCode,
+          collegeId: r.collegeId,
+          yearLevel: r.yearLevel,
+          section: r.section,
+        })),
+      ]
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 15);
+
+      return {
+        activeSchedule,
+        metrics: {
+          totalEnrolledStudentEvaluations: totalEnrolled,
+          completedStudentEvaluations: completedSubmissions,
+          pendingStudentEvaluations: pendingSubmissions,
+          completionPercentage,
+          totalFacultyEvaluated,
+          totalSupervisorSubmissions,
+        },
+        collegeParticipation,
+        recentPulses,
+      };
+    });
+  }
+
+  // ==========================================
   // AFFILIATION MAP ENGINE
   // ==========================================
   private async getFacultyAffiliations(
@@ -153,7 +489,6 @@ export class AnalyticsService implements IAnalyticsService {
     const map = new Map<number, { collegeIds: Set<number>; programIds: Set<number> }>();
     if (facultyIds.length === 0) return map;
 
-    // Look up across all course offerings of these faculty regardless of semester
     const rows = await tx
       .select({
         facultyId: CourseOfferings.faculty_id,
@@ -201,7 +536,6 @@ export class AnalyticsService implements IAnalyticsService {
     const isDean = deanships.length > 0;
     const isChair = chairships.length > 0;
 
-    // Faculty only has access to SELF
     if (isFaculty && !isSupervisor && !isAdmin && !isSysAdmin) {
       return {
         validatedScope: "SELF",
@@ -210,7 +544,6 @@ export class AnalyticsService implements IAnalyticsService {
       };
     }
 
-    // Program Chair: Limited to their handled PROGRAM or SELF
     if (isChair && !isDean && !isSysAdmin && !isAdmin) {
       if (query.scope === "SELF") {
         return {
@@ -227,7 +560,6 @@ export class AnalyticsService implements IAnalyticsService {
       };
     }
 
-    // College Dean: Limited to their handled COLLEGE, programs under it, or SELF
     if (isDean && !isSysAdmin && !isAdmin) {
       if (query.scope === "SELF") {
         return {
@@ -264,7 +596,6 @@ export class AnalyticsService implements IAnalyticsService {
       };
     }
 
-    // Admins & SysAdmins: Full access across all scopes
     let entityName: string | undefined = undefined;
 
     if (query.scope === "COLLEGE" && query.collegeId) {
@@ -343,7 +674,6 @@ export class AnalyticsService implements IAnalyticsService {
       if (sem) return sem;
     }
 
-    // 1. Try to find the latest semester that ALREADY HAS evaluation reports
     const [latestWithReports] = await tx
       .select({
         id: Semesters.id,
@@ -364,7 +694,6 @@ export class AnalyticsService implements IAnalyticsService {
 
     if (latestWithReports) return latestWithReports;
 
-    // 2. Fallback to newest semester
     const [latest] = await tx
       .select()
       .from(Semesters)
@@ -375,9 +704,6 @@ export class AnalyticsService implements IAnalyticsService {
     return latest;
   }
 
-  // ==========================================
-  // MULTI-SEMESTER LONGITUDINAL ENGINE
-  // ==========================================
   private computeHistoricalTrends(
     semesters: (typeof Semesters.$inferSelect)[],
     allReports: (typeof IndividualFacultyReports.$inferSelect)[],
@@ -609,9 +935,6 @@ export class AnalyticsService implements IAnalyticsService {
     };
   }
 
-  // ==========================================
-  // COMPARISON MATRIX (COLLEGES or PROGRAMS)
-  // ==========================================
   private async computeComparisons(
     scope: AnalyticsScope,
     resolvedEntityId: number | undefined,
