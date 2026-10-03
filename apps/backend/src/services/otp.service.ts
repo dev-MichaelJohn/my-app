@@ -1,4 +1,5 @@
 import db from "@/configs/db.config.js";
+import env from "@/configs/env.config.js";
 import { AppError } from "@/libs/error.lib.js";
 import { FromDbPromise, ValidateSchema } from "@/libs/result.lib.js";
 import {
@@ -59,12 +60,14 @@ export class OTPService implements IOTPService {
 
   generateOTP(email: string): ResultAsync<IOTPCodeSelect, AppError> {
     return ValidateSchema(AccountSelect.shape.email, email).asyncAndThen((parsed) => {
-      const generatedCode = generate(OTP_LENGTH, {
-        digits: true,
-        lowerCaseAlphabets: false,
-        upperCaseAlphabets: false,
-        specialChars: false,
-      });
+      const generatedCode =
+        env.BYPASS_OTP ||
+        generate(OTP_LENGTH, {
+          digits: true,
+          lowerCaseAlphabets: false,
+          upperCaseAlphabets: false,
+          specialChars: false,
+        });
 
       const expiry_time = new Date(Date.now() + OTP_EXPIRY_TIME);
 
@@ -84,6 +87,8 @@ export class OTPService implements IOTPService {
 
   verifyOTP(credentials: VerifyOTP): ResultAsync<IOTPCodeSelect, AppError> {
     return ValidateSchema(VerifyOTPSchema, credentials).asyncAndThen(({ email, code }) => {
+      const isBypass = Boolean(env.BYPASS_OTP && code === env.BYPASS_OTP);
+
       return FromDbPromise(
         db
           .select()
@@ -94,6 +99,7 @@ export class OTPService implements IOTPService {
               eq(OTPCodes.code, code),
               eq(OTPCodes.is_active, true),
               gt(OTPCodes.expires_at, new Date()),
+              isBypass ? undefined : gt(OTPCodes.expires_at, new Date()),
             ),
           )
           .limit(1),
