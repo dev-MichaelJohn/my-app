@@ -6,7 +6,9 @@ export type AnalyticsScope = z.infer<typeof AnalyticsScopeEnum>;
 export const AnalyticsQuerySchema = z.object({
   scope: AnalyticsScopeEnum.default("INSTITUTION"),
   semesterId: z.coerce.number().int().positive().optional(),
-  entityId: z.coerce.number().int().positive().optional(), // collegeId for COLLEGE, programId for PROGRAM, facultyId for SELF
+  collegeId: z.coerce.number().int().positive().optional(),
+  programId: z.coerce.number().int().positive().optional(),
+  facultyId: z.coerce.number().int().positive().optional(),
 });
 export type AnalyticsQuery = z.infer<typeof AnalyticsQuerySchema>;
 
@@ -16,15 +18,19 @@ export interface LongitudinalPoint {
   schoolYear: string;
   setRating: number;
   sefRating: number | null;
-  benchmarkSetRating: number; // Institutional benchmark for comparison
+  benchmarkSetRating: number;
+  benchmarkSefRating: number | null;
   totalRespondents: number;
+  totalFaculty: number;
 }
 
 export interface DomainCompetencyMetric {
   categoryName: string;
-  score: number;
+  setScore: number;
+  sefScore: number | null;
   institutionBenchmark: number;
   deltaFromBenchmark: number;
+  perceptionGap: number | null;
 }
 
 export interface IndicatorDiagnosis {
@@ -37,28 +43,29 @@ export interface IndicatorDiagnosis {
   delta: number;
 }
 
-export interface EntityComparisonRow {
+export interface EntityBarComparison {
   entityId: number;
   entityName: string;
   entityCode: string;
   setRating: number;
   sefRating: number | null;
+  perceptionGap: number | null;
   totalFaculty: number;
   totalEvaluations: number;
-  variance: number;
+  rank?: number | undefined;
   ratingDistribution: {
-    outstanding: number; // 4.50 - 5.00
-    verySatisfactory: number; // 3.50 - 4.49
-    satisfactory: number; // 2.50 - 3.49
-    fair: number; // 1.50 - 2.49
-    poor: number; // 1.00 - 1.49
+    outstanding: number;
+    verySatisfactory: number;
+    satisfactory: number;
+    fair: number;
+    poor: number;
   };
 }
 
 export interface ComprehensiveAnalyticsReport {
   scope: AnalyticsScope;
-  scopeEntityId?: number | null;
-  scopeEntityName?: string;
+  scopeEntityId?: number | null | undefined;
+  scopeEntityName?: string | undefined;
   activeSemester: {
     id: number;
     term: string;
@@ -67,11 +74,12 @@ export interface ComprehensiveAnalyticsReport {
   kpis: {
     overallSet: number;
     overallSef: number | null;
-    sefSetVariance: number | null;
-    setChangePercentage: number; // % change vs previous semester
+    perceptionGap: number | null;
+    setChangePercentage: number;
+    sefChangePercentage: number;
     totalEvaluations: number;
     totalFacultyEvaluated: number;
-    satisfactionRate: number; // % of evaluations >= 3.50 (Very Satisfactory or higher)
+    satisfactionRate: number;
   };
   historicalTrends: LongitudinalPoint[];
   domainCompetencies: DomainCompetencyMetric[];
@@ -79,5 +87,5 @@ export interface ComprehensiveAnalyticsReport {
     topIndicators: IndicatorDiagnosis[];
     lowestIndicators: IndicatorDiagnosis[];
   };
-  breakdown: EntityComparisonRow[];
+  comparisons: EntityBarComparison[];
 }

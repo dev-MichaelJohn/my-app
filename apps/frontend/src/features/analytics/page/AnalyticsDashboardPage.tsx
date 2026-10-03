@@ -17,12 +17,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { Users, Sparkles, Lock } from "lucide-react";
+import { Users, Lock, ArrowUpDown } from "lucide-react";
 import type { AnalyticsScope } from "@my-app/shared";
 
 export default function AnalyticsDashboardPage() {
   const { user, isSysAdmin, isAdmin, isDean, isChair } = usePermissions();
-
   const isPrivilegedAdmin = isSysAdmin || isAdmin;
 
   // Metadata queries
@@ -36,7 +35,6 @@ export default function AnalyticsDashboardPage() {
   const { data: programsResponse } = usePrograms({ paginate: false });
   const allProgramsList = useMemo(() => programsResponse?.data ?? [], [programsResponse?.data]);
 
-  // Scope Determination
   const defaultScope: AnalyticsScope = useMemo(() => {
     if (isPrivilegedAdmin) return "INSTITUTION";
     if (isDean) return "COLLEGE";
@@ -49,7 +47,6 @@ export default function AnalyticsDashboardPage() {
   const [selectedCollegeId, setSelectedCollegeId] = useState<number | undefined>(undefined);
   const [selectedProgramId, setSelectedProgramId] = useState<number | undefined>(undefined);
 
-  // Auto-resolve entity ID based on user office if not Admin
   const resolvedEntityId = useMemo(() => {
     if (selectedScope === "SELF") return user?.account.id;
     if (selectedScope === "COLLEGE") {
@@ -72,6 +69,7 @@ export default function AnalyticsDashboardPage() {
   ]);
 
   const currentSemesterId = selectedSemesterId ?? activeSemester?.id;
+  const currentSemesterObj = semestersList.find((s) => s.id === currentSemesterId);
 
   const { data: report, isLoading } = useAnalytics({
     scope: selectedScope,
@@ -87,24 +85,20 @@ export default function AnalyticsDashboardPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-24">
       {/* ── Page Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Evaluations Analytics & Benchmark Dashboard
-            </h1>
-          </div>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Institutional quality oversight, multi-term progress benchmarks, and pedagogical
-            diagnostics.
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          Evaluations Analytics & Benchmark Dashboard
+        </h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Comprehensive multi-term performance tracking, perceptual gap diagnostics, and
+          institutional benchmarks.
+        </p>
       </div>
 
       {/* ── Filter & Scope Selector Bar ── */}
       <div className="flex flex-col sm:flex-row items-center gap-3 p-3 bg-muted/30 border border-border rounded-2xl shadow-2xs">
         {/* Scope Selector */}
-        <div className="w-full sm:w-48">
+        <div className="w-full sm:w-52">
           <Select
             value={selectedScope}
             disabled={!isPrivilegedAdmin && (isDean || isChair) && selectedScope === "SELF"}
@@ -127,18 +121,32 @@ export default function AnalyticsDashboardPage() {
         </div>
 
         {/* Semester Selector */}
-        <div className="w-full sm:w-56">
+        <div className="w-full sm:w-64">
           <Select
             value={currentSemesterId ? String(currentSemesterId) : ""}
-            onValueChange={(val) => setSelectedSemesterId(Number(val))}
+            onValueChange={(val) => setSelectedSemesterId(val ? Number(val) : undefined)}
           >
             <SelectTrigger className="w-full h-9 bg-card border-border text-xs">
-              <SelectValue placeholder="Select Semester" />
+              <SelectValue placeholder="Select Semester">
+                {currentSemesterObj ? (
+                  <span className="truncate block text-left">
+                    <strong className="text-primary mr-1">
+                      {currentSemesterObj.semester_term} Sem
+                    </strong>
+                    <span className="text-muted-foreground">
+                      (A.Y. {currentSemesterObj.school_year_start}-
+                      {currentSemesterObj.school_year_end})
+                    </span>
+                  </span>
+                ) : (
+                  "Select Semester"
+                )}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="bg-popover border-border text-xs">
               {semestersList.map((s) => (
                 <SelectItem key={s.id} value={String(s.id)}>
-                  {s.semester_term} Sem ({s.school_year_start}-{s.school_year_end})
+                  {s.semester_term} Semester (A.Y. {s.school_year_start}-{s.school_year_end})
                 </SelectItem>
               ))}
             </SelectContent>
@@ -187,10 +195,9 @@ export default function AnalyticsDashboardPage() {
           </div>
         )}
 
-        {/* Anonymity Badge Notice */}
         <div className="ml-auto text-[11px] text-muted-foreground flex items-center gap-1.5 shrink-0">
           <Lock className="w-3.5 h-3.5 text-primary" />
-          <span>CHED CMO 19 s. 2025 Anonymized</span>
+          <span>CMO 19 s. 2025 Confidential Anonymized</span>
         </div>
       </div>
 
@@ -210,7 +217,7 @@ export default function AnalyticsDashboardPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="p-4 border-border bg-card shadow-xs space-y-1">
               <span className="text-[10px] uppercase font-bold text-muted-foreground block">
-                Overall SET Rating
+                Student Index (SET)
               </span>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-extrabold font-mono text-primary">
@@ -232,26 +239,51 @@ export default function AnalyticsDashboardPage() {
 
             <Card className="p-4 border-border bg-card shadow-xs space-y-1">
               <span className="text-[10px] uppercase font-bold text-muted-foreground block">
-                Supervisor SEF Rating
+                Supervisor Index (SEF)
               </span>
-              <span className="text-2xl font-extrabold font-mono text-success">
-                {report.kpis.overallSef !== null ? report.kpis.overallSef.toFixed(2) : "N/A"}
-              </span>
-            </Card>
-
-            <Card className="p-4 border-border bg-card shadow-xs space-y-1">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground block">
-                Satisfaction Rate
-              </span>
-              <div className="flex items-center gap-1.5 text-2xl font-extrabold font-mono text-foreground">
-                <Sparkles className="w-5 h-5 text-warning" />
-                <span>{report.kpis.satisfactionRate}%</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-extrabold font-mono text-success">
+                  {report.kpis.overallSef !== null ? report.kpis.overallSef.toFixed(2) : "N/A"}
+                </span>
+                {report.kpis.sefChangePercentage !== 0 && (
+                  <span
+                    className={`text-xs font-bold font-mono ${
+                      report.kpis.sefChangePercentage > 0 ? "text-success" : "text-warning"
+                    }`}
+                  >
+                    {report.kpis.sefChangePercentage > 0
+                      ? `+${report.kpis.sefChangePercentage}%`
+                      : `${report.kpis.sefChangePercentage}%`}
+                  </span>
+                )}
               </div>
             </Card>
 
             <Card className="p-4 border-border bg-card shadow-xs space-y-1">
               <span className="text-[10px] uppercase font-bold text-muted-foreground block">
-                Total Submissions
+                Perception Gap (SEF − SET)
+              </span>
+              <div className="flex items-center gap-1.5 text-2xl font-extrabold font-mono">
+                <ArrowUpDown className="w-5 h-5 text-muted-foreground" />
+                <span
+                  className={
+                    report.kpis.perceptionGap !== null && report.kpis.perceptionGap > 0
+                      ? "text-info"
+                      : report.kpis.perceptionGap !== null && report.kpis.perceptionGap < 0
+                        ? "text-warning"
+                        : "text-foreground"
+                  }
+                >
+                  {report.kpis.perceptionGap !== null
+                    ? `${report.kpis.perceptionGap > 0 ? "+" : ""}${report.kpis.perceptionGap.toFixed(2)}`
+                    : "—"}
+                </span>
+              </div>
+            </Card>
+
+            <Card className="p-4 border-border bg-card shadow-xs space-y-1">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                Evaluations Volume
               </span>
               <div className="flex items-center gap-1.5 text-2xl font-extrabold font-mono text-foreground">
                 <Users className="w-5 h-5 text-muted-foreground" />

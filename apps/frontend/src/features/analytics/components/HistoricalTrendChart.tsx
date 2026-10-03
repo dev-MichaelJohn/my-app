@@ -14,7 +14,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, Users, UserCheck } from "lucide-react";
 import type { LongitudinalPoint } from "@my-app/shared";
 
 interface Props {
@@ -31,8 +31,12 @@ const chartConfig: ChartConfig = {
     color: "var(--color-success)",
   },
   benchmarkSetRating: {
-    label: "Institution Benchmark",
+    label: "Univ Baseline (SET)",
     color: "var(--muted-foreground)",
+  },
+  benchmarkSefRating: {
+    label: "Univ Baseline (SEF)",
+    color: "var(--color-info)",
   },
 };
 
@@ -42,6 +46,7 @@ export function HistoricalTrendChart({ trends }: Props) {
     setRating: t.setRating,
     sefRating: t.sefRating,
     benchmarkSetRating: t.benchmarkSetRating,
+    benchmarkSefRating: t.benchmarkSefRating,
   }));
 
   return (
@@ -50,16 +55,24 @@ export function HistoricalTrendChart({ trends }: Props) {
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
             <TrendingUp className="w-4 h-4 text-primary" />
-            <span>Multi-Semester Longitudinal Trend</span>
+            <span>Multi-Semester Longitudinal Trajectory</span>
           </CardTitle>
-          <span className="text-xs text-muted-foreground">Chronological Trajectory</span>
+          <div className="flex items-center gap-3 text-xs">
+            <span className="flex items-center gap-1 font-semibold text-primary">
+              <Users className="w-3.5 h-3.5" /> SET (Students)
+            </span>
+            <span className="flex items-center gap-1 font-semibold text-success">
+              <UserCheck className="w-3.5 h-3.5" /> SEF (Supervisor)
+            </span>
+          </div>
         </div>
         <CardDescription className="text-xs">
-          Tracks performance across recent academic terms compared to the university baseline.
+          Tracks both student and supervisory performance trajectories across recent semesters
+          against university baselines.
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-4">
-        <div className="h-[280px] w-full">
+        <div className="h-[300px] w-full">
           {chartData.length === 0 ? (
             <div className="h-full flex items-center justify-center text-xs text-muted-foreground italic">
               No historical evaluation data recorded yet.
@@ -85,28 +98,41 @@ export function HistoricalTrendChart({ trends }: Props) {
                   />
                   <ChartTooltip content={<ChartTooltipContent />} />
                   <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
+                  {/* SET Rating Line */}
                   <Line
                     type="monotone"
                     dataKey="setRating"
-                    name="SET (Students)"
+                    name="SET Rating"
                     stroke="var(--primary)"
                     strokeWidth={2.5}
                     dot={{ r: 4 }}
                     activeDot={{ r: 6 }}
                   />
+                  {/* SEF Rating Line */}
                   <Line
                     type="monotone"
                     dataKey="sefRating"
-                    name="SEF (Supervisor)"
+                    name="SEF Rating"
                     stroke="var(--color-success)"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
+                    strokeWidth={2.5}
+                    dot={{ r: 4 }}
                   />
+                  {/* SET Institutional Baseline */}
                   <Line
                     type="monotone"
                     dataKey="benchmarkSetRating"
-                    name="Institution Baseline"
+                    name="SET Baseline"
                     stroke="var(--muted-foreground)"
+                    strokeDasharray="4 4"
+                    strokeWidth={1.5}
+                    dot={false}
+                  />
+                  {/* SEF Institutional Baseline */}
+                  <Line
+                    type="monotone"
+                    dataKey="benchmarkSefRating"
+                    name="SEF Baseline"
+                    stroke="var(--color-info)"
                     strokeDasharray="4 4"
                     strokeWidth={1.5}
                     dot={false}

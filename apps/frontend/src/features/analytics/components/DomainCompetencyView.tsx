@@ -30,7 +30,7 @@ export function DomainCompetencyView({ competencies }: Props) {
         ) : (
           competencies.map((domain) => {
             const isPositive = domain.deltaFromBenchmark >= 0;
-            const progressPercentage = Math.min(100, Math.max(0, (domain.score / 5) * 100));
+            const progressPercentage = Math.min(100, Math.max(0, (domain.setScore / 5) * 100));
 
             return (
               <div
@@ -38,10 +38,10 @@ export function DomainCompetencyView({ competencies }: Props) {
                 className="space-y-1.5 p-3 rounded-xl border border-border/60 bg-muted/20"
               >
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-foreground">{domain.categoryName}</span>
+                  <span className="font-bold text-foreground truncate">{domain.categoryName}</span>
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-primary">
-                      {domain.score.toFixed(2)}
+                      {domain.setScore.toFixed(2)}
                     </span>
                     <Badge
                       variant="outline"
@@ -65,6 +65,31 @@ export function DomainCompetencyView({ competencies }: Props) {
                     style={{ width: `${progressPercentage}%` }}
                   />
                 </div>
+
+                {domain.sefScore !== null && (
+                  <div className="flex justify-between items-center text-[10px] text-muted-foreground pt-0.5">
+                    <span>
+                      Supervisor SEF:{" "}
+                      <strong className="text-foreground">{domain.sefScore.toFixed(2)}</strong>
+                    </span>
+                    {domain.perceptionGap !== null && (
+                      <span
+                        className={
+                          domain.perceptionGap > 0
+                            ? "text-info"
+                            : domain.perceptionGap < 0
+                              ? "text-warning"
+                              : "text-muted-foreground"
+                        }
+                      >
+                        Gap:{" "}
+                        {domain.perceptionGap > 0
+                          ? `+${domain.perceptionGap.toFixed(2)}`
+                          : domain.perceptionGap.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })
