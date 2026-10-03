@@ -1,4 +1,3 @@
-import { createAPIResponse } from "@/libs/response.lib.js";
 import { Router, type IRouter } from "express";
 import AuthRouter from "./auth.router.js";
 import CollegeRouter from "./college.router.js";
@@ -18,12 +17,18 @@ import ScheduleRouter from "./evaluation-schedule.router.js";
 import SubmissionRouter from "./evaluation-submission.router.js";
 import ReportRouter from "./evaluation-report.router.js";
 import AnalyticsRouter from "./analytics.router.js";
+import { checkSystemHealth } from "@/libs/health.lib.js";
 
 const V1Router: IRouter = Router();
 
-V1Router.get("/health", (_req, res, _next) => {
-  const response = createAPIResponse(200, "Hello from PIT-FES V1 API!!");
-  res.status(response.status).json(response);
+V1Router.get("/health", async (_req, res, _next) => {
+  const { isHealthy, report } = await checkSystemHealth();
+  res.status(isHealthy ? 200 : 503).json({
+    success: isHealthy,
+    status: isHealthy ? 200 : 503,
+    message: isHealthy ? "PIT-FES API and Database operational." : "Database connection degraded.",
+    data: report,
+  });
 });
 
 V1Router.use("/auth", AuthRouter);

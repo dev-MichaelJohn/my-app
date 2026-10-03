@@ -12,8 +12,14 @@ import V1Router from "./routers/index.router.js";
 import { logger } from "./libs/logger.lib.js";
 import { loggerMiddleware } from "./middlewares/logger.middleware.js";
 import { InitializeSocketServer } from "./libs/socket.lib.js";
+import { checkSystemHealth } from "./libs/health.lib.js";
 
 const app = CreateApp();
+
+app.get("/healthz", async (_req, res) => {
+  const { isHealthy, report } = await checkSystemHealth();
+  res.status(isHealthy ? 200 : 503).json(report);
+});
 
 app.use(loggerMiddleware);
 app.use("/api/v1", V1Router);
