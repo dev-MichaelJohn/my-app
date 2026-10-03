@@ -11,6 +11,7 @@ import { SeederFunction } from "./libs/seeder.lib.js";
 import V1Router from "./routers/index.router.js";
 import { logger } from "./libs/logger.lib.js";
 import { loggerMiddleware } from "./middlewares/logger.middleware.js";
+import { InitializeSocketServer } from "./libs/socket.lib.js";
 
 const app = CreateApp();
 
@@ -19,6 +20,8 @@ app.use("/api/v1", V1Router);
 app.use(GlobalErrorHandler);
 
 const appServer = createServer(app);
+
+InitializeSocketServer(appServer);
 
 export const StartApp = () => {
   return VerifyDatabaseConnection()
