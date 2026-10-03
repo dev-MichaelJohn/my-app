@@ -15,6 +15,7 @@ export type RefreshCookieOptions = {
   secure: boolean;
   sameSite: "strict" | "lax" | "none";
   maxAge?: number;
+  path: string;
 };
 
 export const RefreshTokenSelect = createSelectSchema(RefreshToken, {

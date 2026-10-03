@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { useLogout } from "@/features/auth/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import { LogOut } from "lucide-react";
+import { Settings, LogOut } from "lucide-react";
+import { useNavigate } from "react-router";
 
 export function UserNav() {
   const { user, roles } = usePermissions();
@@ -10,6 +11,7 @@ export function UserNav() {
   const [isOpen, setIsOpen] = useState(false);
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -68,6 +70,18 @@ export function UserNav() {
                 ))}
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsOpen(false);
+                navigate("/settings/account");
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted rounded-lg transition font-medium text-left cursor-pointer"
+            >
+              <Settings className="w-4 h-4 text-muted-foreground" />
+              <span>Account Settings</span>
+            </button>
 
             <button
               type="button"

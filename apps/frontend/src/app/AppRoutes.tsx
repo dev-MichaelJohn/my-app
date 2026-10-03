@@ -20,6 +20,7 @@ import UserPage from "@/features/users/page/UserPage";
 import FacultyTeachingPage from "@/features/evaluations/page/FacultyTeachingPage";
 import AnnexCReportPage from "@/features/evaluations/page/AnnexCReportPage";
 import AnalyticsDashboardPage from "@/features/analytics/page/AnalyticsDashboardPage";
+import AccountSettingsPage from "@/features/users/page/AccountSettingsPage";
 import { PERMISSIONS } from "@my-app/shared";
 
 export const AppRoutes = createBrowserRouter([
@@ -44,6 +45,12 @@ export const AppRoutes = createBrowserRouter([
           {
             path: "/dashboard",
             element: <></>,
+          },
+
+          // Account Settings (Available to all logged-in users)
+          {
+            path: "/settings/account",
+            element: <AccountSettingsPage />,
           },
 
           // ── 1. User Management (SYS_ADMIN & ADMIN only) ──

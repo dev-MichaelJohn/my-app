@@ -73,8 +73,10 @@ export default function AnalyticsDashboardPage() {
     return selectedProgramId ?? availablePrograms[0]?.program.id;
   }, [isChair, isPrivilegedAdmin, user, selectedProgramId, availablePrograms]);
 
-  const currentSemesterId = selectedSemesterId ?? activeSemester?.id;
-  const currentSemesterObj = semestersList.find((s) => s.id === currentSemesterId);
+  // Priority: User's manual selection -> active semester -> first available semester
+  const currentSemesterId = useMemo(() => {
+    return selectedSemesterId ?? activeSemester?.id ?? semestersList[0]?.id;
+  }, [selectedSemesterId, activeSemester?.id, semestersList]);
 
   // Active query parameters
   const queryParams = useMemo(() => {
@@ -88,6 +90,14 @@ export default function AnalyticsDashboardPage() {
   }, [scope, currentSemesterId, resolvedCollegeId, resolvedProgramId, user]);
 
   const { data: report, isLoading } = useAnalytics(queryParams);
+
+  // Derived current semester object (safely reads report.activeSemester after declaration)
+  const currentSemesterObj = useMemo(() => {
+    return (
+      semestersList.find((s) => s.id === (report?.activeSemester.id ?? currentSemesterId)) ||
+      semestersList[0]
+    );
+  }, [semestersList, report?.activeSemester.id, currentSemesterId]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-24">

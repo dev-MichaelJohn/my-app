@@ -150,9 +150,19 @@ export class AuthController {
   logout = runAsync(
     (req, res) => {
       const refreshToken = req.cookies?.refresh;
-      const cookieOptions = this.tokenService.generateCookieOptions();
 
-      res.clearCookie("refresh", cookieOptions);
+      // 🔒 Ensure cookie is aggressively removed across all browsers
+      const isProduction = process.env.NODE_ENV === "production";
+      res.clearCookie("refresh", {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax",
+        path: "/",
+      });
+
+      if (!refreshToken) {
+        return okAsync(undefined);
+      }
 
       return this.tokenService.deleteRefreshToken(refreshToken).map(() => undefined);
     },

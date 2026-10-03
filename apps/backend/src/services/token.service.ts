@@ -68,6 +68,7 @@ export class TokenService implements ITokenService {
       secure: isProduction,
       sameSite: isProduction ? "none" : "lax",
       maxAge: REFRESH_COOKIE_LIFETIME,
+      path: "/",
     };
   }
 

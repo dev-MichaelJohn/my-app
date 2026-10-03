@@ -49,6 +49,8 @@ export class UserAPI {
   resendWelcomeEmail(id: number): ResultAsync<void, ApiError> {
     return http.post<void>(`/users/${id}/resend-welcome`);
   }
-}
 
-export const userApi = new UserAPI();
+  changeSelfPassword(payload: ChangePassword): ResultAsync<void, ApiError> {
+    return http.put<void>("/users/self/change-password", payload);
+  }
+}

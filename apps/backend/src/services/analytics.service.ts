@@ -59,17 +59,22 @@ export class AnalyticsService implements IAnalyticsService {
         throw new AppError(404, "No active or historical semester records found.");
       }
 
-      // 3. Fetch past 6 semesters for historical progression
+      // 3. Find all semesters that have reports up to the resolved semester
       const recentSemesters = await tx
         .select()
         .from(Semesters)
-        .where(sql`${Semesters.id} <= ${activeSemester.id}`)
+        .where(and(sql`${Semesters.id} <= ${activeSemester.id}`, isNull(Semesters.deleted_at)))
         .orderBy(desc(Semesters.id))
         .limit(6);
 
+      // Also ensure the activeSemester itself is included
+      if (!recentSemesters.some((s) => s.id === activeSemester.id)) {
+        recentSemesters.unshift(activeSemester);
+      }
+
       const semesterIds = recentSemesters.map((s) => s.id);
 
-      // 4. Fetch reports across these semesters
+      // 4. Fetch all reports across these semesters
       const allReports = await tx
         .select()
         .from(IndividualFacultyReports)
@@ -148,6 +153,7 @@ export class AnalyticsService implements IAnalyticsService {
     const map = new Map<number, { collegeIds: Set<number>; programIds: Set<number> }>();
     if (facultyIds.length === 0) return map;
 
+    // Look up across all course offerings of these faculty regardless of semester
     const rows = await tx
       .select({
         facultyId: CourseOfferings.faculty_id,
@@ -336,12 +342,36 @@ export class AnalyticsService implements IAnalyticsService {
       const [sem] = await tx.select().from(Semesters).where(eq(Semesters.id, semesterId));
       if (sem) return sem;
     }
+
+    // 1. Try to find the latest semester that ALREADY HAS evaluation reports
+    const [latestWithReports] = await tx
+      .select({
+        id: Semesters.id,
+        semester_term: Semesters.semester_term,
+        school_year_start: Semesters.school_year_start,
+        school_year_end: Semesters.school_year_end,
+        start_date: Semesters.start_date,
+        end_date: Semesters.end_date,
+        created_at: Semesters.created_at,
+        updated_at: Semesters.updated_at,
+        deleted_at: Semesters.deleted_at,
+      })
+      .from(Semesters)
+      .innerJoin(IndividualFacultyReports, eq(Semesters.id, IndividualFacultyReports.semester_id))
+      .where(and(isNull(Semesters.deleted_at), sql`${IndividualFacultyReports.total_classes} > 0`))
+      .orderBy(desc(Semesters.id))
+      .limit(1);
+
+    if (latestWithReports) return latestWithReports;
+
+    // 2. Fallback to newest semester
     const [latest] = await tx
       .select()
       .from(Semesters)
       .where(isNull(Semesters.deleted_at))
       .orderBy(desc(Semesters.id))
       .limit(1);
+
     return latest;
   }
 

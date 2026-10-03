@@ -1,7 +1,9 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { userApi } from "../api/user.api";
+import { UserAPI } from "../api/user.api";
 import { toQuery } from "@/lib/query.lib";
 import type { ChangePassword, CreateUser, SystemRole, UpdateUser } from "@my-app/shared";
+
+const userApi = new UserAPI();
 
 export const USER_KEYS = {
   all: ["users"] as const,
@@ -104,5 +106,11 @@ export const useChangePassword = () => {
 export const useResendWelcomeEmail = () => {
   return useMutation({
     mutationFn: (id: number) => toQuery(userApi.resendWelcomeEmail(id)),
+  });
+};
+
+export const useChangeSelfPassword = () => {
+  return useMutation({
+    mutationFn: (payload: ChangePassword) => toQuery(userApi.changeSelfPassword(payload)),
   });
 };
