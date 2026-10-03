@@ -39,10 +39,14 @@ apiClient.interceptors.response.use(
   (error: AxiosError) => {
     const requestUrl = error.config?.url || "";
     const isAuthRequest =
-      requestUrl.includes("/auth/login") || requestUrl.includes("/auth/verify-otp");
+      requestUrl.includes("/auth/login") ||
+      requestUrl.includes("/auth/verify-otp") ||
+      requestUrl.includes("/auth/me");
 
     const isAuthPage =
-      window.location.pathname.includes("/login") || window.location.pathname.includes("/auth");
+      window.location.pathname === "/" ||
+      window.location.pathname.includes("/login") ||
+      window.location.pathname.includes("/auth");
 
     if (error.response?.status === 401 && !isAuthRequest && !isAuthPage) {
       setAccessToken(null);

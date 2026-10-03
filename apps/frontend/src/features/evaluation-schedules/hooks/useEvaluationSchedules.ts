@@ -35,10 +35,11 @@ export const useStudentSchedules = (query?: unknown) => {
   });
 };
 
-export const useActiveStudentSchedule = (semesterId?: number) => {
+export const useActiveStudentSchedule = (semesterId?: number, enabled: boolean = true) => {
   return useQuery({
     queryKey: SCHEDULE_KEYS.studentActive(semesterId),
     queryFn: () => toQuery(scheduleApi.getActiveStudentSchedule(semesterId)),
+    enabled: Boolean(semesterId) && enabled,
     staleTime: 5 * 60 * 1000,
   });
 };

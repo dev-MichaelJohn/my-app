@@ -23,10 +23,11 @@ export const useSemesters = (query?: unknown) => {
   });
 };
 
-export const useActiveSemester = () => {
+export const useActiveSemester = (enabled: boolean = true) => {
   return useQuery({
     queryKey: SEMESTER_KEYS.active(),
     queryFn: () => toQuery(semesterAPI.getActiveSemester()),
+    enabled,
     staleTime: 10 * 60 * 1000,
   });
 };

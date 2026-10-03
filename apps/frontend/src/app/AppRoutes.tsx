@@ -1,5 +1,6 @@
 import { createBrowserRouter } from "react-router";
 import { AuthGuard, GuestGuard, PermissionGuard, RoleGuard } from "@/components/route-guards";
+import LandingPage from "@/features/landing/page/LandingPage";
 import LoginPage from "@/features/auth/page/LoginPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import CollegePage from "@/features/colleges/page/CollegePage";
@@ -25,6 +26,10 @@ import DashboardPage from "@/features/dashboard/page/DashboardPage";
 import { PERMISSIONS } from "@my-app/shared";
 
 export const AppRoutes = createBrowserRouter([
+  {
+    path: "/",
+    element: <LandingPage />,
+  },
   // ── Public / Guest Routes ──
   {
     element: <GuestGuard />,
