@@ -78,5 +78,6 @@ export const IndividualFacultyReports = pgTable(
     index("idx_reports_faculty_id").on(t.faculty_id),
     index("idx_reports_semester_id").on(t.semester_id),
     index("idx_reports_status").on(t.status),
+    index("idx_reports_sem_status_faculty").on(t.semester_id, t.status, t.faculty_id),
   ],
 );

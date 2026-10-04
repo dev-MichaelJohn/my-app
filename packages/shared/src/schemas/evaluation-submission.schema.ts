@@ -48,6 +48,8 @@ export const StudentEvaluations = pgTable(
     index("idx_student_eval_student_class_id").on(t.student_class_id),
     index("idx_student_eval_sentiment").on(t.comment_sentiment),
     uniqueIndex("uidx_unique_student_submission").on(t.schedule_id, t.student_class_id),
+    index("idx_student_eval_submitted").on(t.student_class_id, t.submitted_at),
+    index("idx_student_eval_schedule_submitted").on(t.schedule_id, t.submitted_at),
   ],
 );
 
@@ -99,6 +101,8 @@ export const SupervisorEvaluations = pgTable(
       t.evaluator_id,
       t.course_offering_id,
     ),
+    index("idx_supervisor_eval_offering_submitted").on(t.course_offering_id, t.submitted_at),
+    index("idx_supervisor_eval_evaluator_schedule").on(t.evaluator_id, t.schedule_id),
   ],
 );
 
