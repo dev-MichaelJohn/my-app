@@ -463,7 +463,7 @@ export class UserService implements IUserService {
           throw new AppError(500, "Failed to create personal details record.");
         }
 
-        const hash = bcrypt.hashSync(plainPassword, 10);
+        const hash = await bcrypt.hash(plainPassword, 10);
 
         const [userAccount] = await tx
           .insert(Accounts)
@@ -678,7 +678,7 @@ export class UserService implements IUserService {
           }
 
           if (a.password) {
-            accountUpdateData.password = bcrypt.hashSync(a.password, 10);
+            accountUpdateData.password = await bcrypt.hash(a.password, 10);
             updatedFieldsList.push({
               label: "Password",
               oldValue: "••••••••",
@@ -1103,7 +1103,7 @@ export class UserService implements IUserService {
       }
 
       const temporaryPassword = this.generatePassword(12);
-      const hash = bcrypt.hashSync(temporaryPassword, 10);
+      const hash = await bcrypt.hash(temporaryPassword, 10);
 
       await tx
         .update(Accounts)
@@ -1164,7 +1164,7 @@ export class UserService implements IUserService {
           }
         }
 
-        const newHash = bcrypt.hashSync(parsed.new_password, 10);
+        const newHash = await bcrypt.hash(parsed.new_password, 10);
 
         await tx
           .update(Accounts)
@@ -1205,7 +1205,7 @@ export class UserService implements IUserService {
       }
 
       const temporaryPassword = this.generatePassword(12);
-      const hash = bcrypt.hashSync(temporaryPassword, 10);
+      const hash = await bcrypt.hash(temporaryPassword, 10);
 
       await tx
         .update(Accounts)

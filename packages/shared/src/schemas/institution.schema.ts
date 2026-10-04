@@ -257,6 +257,12 @@ export const CourseOfferings = pgTable(
     index("idx_course_offerings_class_id").on(t.class_id),
     index("idx_course_offerings_semester_id").on(t.semester_id),
     index("idx_course_offerings_curriculum_id").on(t.course_curriculum_id),
+    index("idx_offerings_faculty_semester")
+      .on(t.faculty_id, t.semester_id)
+      .where(sql`deleted_at IS NULL`),
+    index("idx_offerings_class_semester")
+      .on(t.class_id, t.semester_id)
+      .where(sql`deleted_at IS NULL`),
   ],
 );
 
