@@ -1,7 +1,7 @@
 import Papa from "papaparse";
-import { eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
-import db from "@/configs/db.config.js";
+import db, { type PgTransaction } from "@/configs/db.config.js";
 import {
   Accounts,
   Classes,
@@ -28,6 +28,7 @@ import {
 } from "@my-app/shared";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
+import { UserService, type IUserService } from "./user.service.js";
 
 export interface IBulkImportService {
   importColleges(csvContent: string, client?: DbClient): ResultAsync<ImportSummary, AppError>;
@@ -39,7 +40,98 @@ export interface IBulkImportService {
 }
 
 export class BulkImportService implements IBulkImportService {
-  // ── Existing Imports (Colleges, Programs, Courses, Curriculums, Classes) ──
+  constructor(private userService: IUserService = new UserService()) {}
+
+  // =========================================================================
+  // ── Candidate Validations (Aligned with CollegeService & ProgramService) ──
+  // =========================================================================
+
+  private async validateDeanCandidate(
+    accountId: number,
+    tx: PgTransaction,
+  ): Promise<string | null> {
+    const [account] = await tx
+      .select({ id: Accounts.id })
+      .from(Accounts)
+      .where(and(eq(Accounts.id, accountId), isNull(Accounts.deleted_at)));
+
+    if (!account) return "Dean account not found or is archived.";
+
+    // 1. Check non-assignable roles (SYS_ADMIN, ADMIN, STUDENT)
+    const userRoles = await tx
+      .select({ system_role: Roles.system_role })
+      .from(AccountRoles)
+      .innerJoin(Roles, and(eq(Roles.id, AccountRoles.role_id), isNull(Roles.deleted_at)))
+      .where(and(eq(AccountRoles.account_id, accountId), isNull(AccountRoles.deleted_at)));
+
+    const nonAssignableRoles = ["SYS_ADMIN", "ADMIN", "STUDENT"];
+    const conflictingRole = userRoles.find((r) => nonAssignableRoles.includes(r.system_role));
+    if (conflictingRole) {
+      return `This account has role "${conflictingRole.system_role}" and is not eligible to be assigned as a Dean.`;
+    }
+
+    // 2. Check if already Dean of another active college
+    const activeDeanships = await tx
+      .select({ collegeName: Colleges.name })
+      .from(CollegeDeans)
+      .innerJoin(
+        Colleges,
+        and(eq(CollegeDeans.college_id, Colleges.id), isNull(Colleges.deleted_at)),
+      )
+      .where(and(eq(CollegeDeans.dean_id, accountId), isNull(CollegeDeans.deleted_at)));
+
+    if (activeDeanships.length > 0) {
+      return `This account is already assigned as the Dean of "${activeDeanships[0]!.collegeName}".`;
+    }
+
+    // 3. Check if already active Program Chair
+    const activeChairships = await tx
+      .select({ programName: Programs.name })
+      .from(ProgramChairs)
+      .innerJoin(
+        Programs,
+        and(eq(ProgramChairs.program_id, Programs.id), isNull(Programs.deleted_at)),
+      )
+      .where(and(eq(ProgramChairs.chair_id, accountId), isNull(ProgramChairs.deleted_at)));
+
+    if (activeChairships.length > 0) {
+      return `This account is currently assigned as the Program Chair of "${activeChairships[0]!.programName}".`;
+    }
+
+    return null;
+  }
+
+  private async validateChairCandidate(
+    accountId: number,
+    tx: PgTransaction,
+  ): Promise<string | null> {
+    const [account] = await tx
+      .select({ id: Accounts.id })
+      .from(Accounts)
+      .where(and(eq(Accounts.id, accountId), isNull(Accounts.deleted_at)));
+
+    if (!account) return "Chair account not found or is archived.";
+
+    // 1. Check non-assignable roles (SYS_ADMIN, ADMIN, STUDENT)
+    const userRoles = await tx
+      .select({ system_role: Roles.system_role })
+      .from(AccountRoles)
+      .innerJoin(Roles, and(eq(Roles.id, AccountRoles.role_id), isNull(Roles.deleted_at)))
+      .where(and(eq(AccountRoles.account_id, accountId), isNull(AccountRoles.deleted_at)));
+
+    const nonAssignableRoles = ["SYS_ADMIN", "ADMIN", "STUDENT"];
+    const conflictingRole = userRoles.find((r) => nonAssignableRoles.includes(r.system_role));
+    if (conflictingRole) {
+      return `This account has role "${conflictingRole.system_role}" and is not eligible to be assigned as a Program Chair.`;
+    }
+
+    return null;
+  }
+
+  // =========================================================================
+  // ── 1. Import Colleges ──
+  // =========================================================================
+
   importColleges(csvContent: string, client: DbClient = db): ResultAsync<ImportSummary, AppError> {
     return WithTransaction(client, async (tx) => {
       const parsed = Papa.parse<Record<string, string>>(csvContent, {
@@ -112,14 +204,31 @@ export class BulkImportService implements IBulkImportService {
             });
             continue;
           }
+
+          // 🛡️ Full validation check identical to CollegeService
+          const candidateError = await this.validateDeanCandidate(deanAccountId, tx);
+          if (candidateError) {
+            summary.failed++;
+            summary.errors.push({
+              row: rowNum,
+              identifier: data.initialism,
+              reason: candidateError,
+            });
+            continue;
+          }
         }
 
         const [created] = await tx
           .insert(Colleges)
           .values({ name: data.name, initialism: data.initialism })
           .returning();
+
         if (deanAccountId && created) {
           await tx.insert(CollegeDeans).values({ college_id: created.id, dean_id: deanAccountId });
+
+          // 🚀 Formally grant SUPERVISOR role through UserService
+          const grantResult = await this.userService.grantRole(deanAccountId, "SUPERVISOR", tx);
+          if (grantResult.isErr()) throw grantResult.error;
         }
 
         codeSet.add(data.initialism);
@@ -130,6 +239,10 @@ export class BulkImportService implements IBulkImportService {
       return summary;
     });
   }
+
+  // =========================================================================
+  // ── 2. Import Programs ──
+  // =========================================================================
 
   importPrograms(csvContent: string, client: DbClient = db): ResultAsync<ImportSummary, AppError> {
     return WithTransaction(client, async (tx) => {
@@ -221,16 +334,33 @@ export class BulkImportService implements IBulkImportService {
             });
             continue;
           }
+
+          // 🛡️ Full validation check identical to ProgramService
+          const candidateError = await this.validateChairCandidate(chairAccountId, tx);
+          if (candidateError) {
+            summary.failed++;
+            summary.errors.push({
+              row: rowNum,
+              identifier: data.initialism,
+              reason: candidateError,
+            });
+            continue;
+          }
         }
 
         const [created] = await tx
           .insert(Programs)
           .values({ college_id: collegeId, name: data.name, initialism: data.initialism })
           .returning();
+
         if (chairAccountId && created) {
           await tx
             .insert(ProgramChairs)
             .values({ program_id: created.id, chair_id: chairAccountId });
+
+          // 🚀 Formally grant SUPERVISOR role through UserService
+          const grantResult = await this.userService.grantRole(chairAccountId, "SUPERVISOR", tx);
+          if (grantResult.isErr()) throw grantResult.error;
         }
 
         codeSet.add(data.initialism);
@@ -241,6 +371,10 @@ export class BulkImportService implements IBulkImportService {
       return summary;
     });
   }
+
+  // =========================================================================
+  // ── 3. Import Courses ──
+  // =========================================================================
 
   importCourses(csvContent: string, client: DbClient = db): ResultAsync<ImportSummary, AppError> {
     return WithTransaction(client, async (tx) => {
@@ -327,6 +461,10 @@ export class BulkImportService implements IBulkImportService {
       return summary;
     });
   }
+
+  // =========================================================================
+  // ── 4. Import Curriculums ──
+  // =========================================================================
 
   importCurriculums(
     csvContent: string,
@@ -424,6 +562,10 @@ export class BulkImportService implements IBulkImportService {
     });
   }
 
+  // =========================================================================
+  // ── 5. Import Classes ──
+  // =========================================================================
+
   importClasses(csvContent: string, client: DbClient = db): ResultAsync<ImportSummary, AppError> {
     return WithTransaction(client, async (tx) => {
       const parsed = Papa.parse<Record<string, string>>(csvContent, {
@@ -495,7 +637,10 @@ export class BulkImportService implements IBulkImportService {
     });
   }
 
-  // ── 🚀 User Accounts Bulk CSV Import ──
+  // =========================================================================
+  // ── 6. Import Users (Async Hashed) ──
+  // =========================================================================
+
   importUsers(csvContent: string, client: DbClient = db): ResultAsync<ImportSummary, AppError> {
     return WithTransaction(client, async (tx) => {
       const parsed = Papa.parse<Record<string, string>>(csvContent, {
@@ -573,7 +718,7 @@ export class BulkImportService implements IBulkImportService {
           continue;
         }
 
-        // Generate temporary password
+        // Generate temporary password with non-blocking async bcrypt
         const rawPassword =
           data.password && data.password.trim().length >= 6
             ? data.password.trim()
