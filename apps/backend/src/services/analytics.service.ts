@@ -313,65 +313,45 @@ export class AnalyticsService implements IAnalyticsService {
         ? inArray(Colleges.id, deanCollegeIds)
         : isNull(Colleges.deleted_at);
 
-      const allColleges = await tx
+      const collegeParticipation = await tx
         .select({
-          id: Colleges.id,
-          name: Colleges.name,
-          initialism: Colleges.initialism,
+          collegeId: Colleges.id,
+          collegeName: Colleges.name,
+          collegeCode: Colleges.initialism,
+          totalExpected: sql<number>`COUNT(DISTINCT ${StudentClasses.id})::int`,
+          completed: sql<number>`COUNT(DISTINCT ${StudentEvaluations.id}) FILTER (WHERE ${StudentEvaluations.submitted_at} IS NOT NULL)::int`,
+          percentage: sql<number>`
+      ROUND(
+        COALESCE(
+          (COUNT(DISTINCT ${StudentEvaluations.id}) FILTER (WHERE ${StudentEvaluations.submitted_at} IS NOT NULL)::numeric / 
+           NULLIF(COUNT(DISTINCT ${StudentClasses.id}), 0)::numeric) * 100, 
+          0
+        ), 1
+      )::float
+    `,
         })
         .from(Colleges)
-        .where(collegeQueryCondition);
-
-      const collegeParticipation = await Promise.all(
-        allColleges.map(async (col) => {
-          const [expected] = await tx
-            .select({ total: count(StudentClasses.id) })
-            .from(StudentClasses)
-            .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
-            .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
-            .innerJoin(Programs, eq(Classes.program_id, Programs.id))
-            .where(
-              and(
-                eq(CourseOfferings.semester_id, activeSemester.id),
-                eq(Programs.college_id, col.id),
-                isNotNull(CourseOfferings.faculty_id),
-                isNull(CourseOfferings.deleted_at),
-                isNull(StudentClasses.deleted_at),
-              ),
-            );
-
-          const [done] = await tx
-            .select({ total: count(StudentEvaluations.id) })
-            .from(StudentEvaluations)
-            .innerJoin(StudentClasses, eq(StudentEvaluations.student_class_id, StudentClasses.id))
-            .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
-            .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
-            .innerJoin(Programs, eq(Classes.program_id, Programs.id))
-            .where(
-              and(
-                eq(CourseOfferings.semester_id, activeSemester.id),
-                eq(Programs.college_id, col.id),
-                isNotNull(CourseOfferings.faculty_id),
-                isNull(CourseOfferings.deleted_at),
-                isNull(StudentClasses.deleted_at),
-                isNotNull(StudentEvaluations.submitted_at),
-              ),
-            );
-
-          const expTotal = expected?.total ?? 0;
-          const doneTotal = done?.total ?? 0;
-          const pct = expTotal > 0 ? Number(((doneTotal / expTotal) * 100).toFixed(1)) : 0;
-
-          return {
-            collegeId: col.id,
-            collegeName: col.name,
-            collegeCode: col.initialism,
-            totalExpected: expTotal,
-            completed: doneTotal,
-            percentage: pct,
-          };
-        }),
-      );
+        .innerJoin(Programs, eq(Programs.college_id, Colleges.id))
+        .innerJoin(Classes, eq(Classes.program_id, Programs.id))
+        .innerJoin(
+          CourseOfferings,
+          and(
+            eq(CourseOfferings.class_id, Classes.id),
+            eq(CourseOfferings.semester_id, activeSemester.id),
+            isNull(CourseOfferings.deleted_at),
+            isNotNull(CourseOfferings.faculty_id),
+          ),
+        )
+        .leftJoin(
+          StudentClasses,
+          and(
+            eq(StudentClasses.course_offering_id, CourseOfferings.id),
+            isNull(StudentClasses.deleted_at),
+          ),
+        )
+        .leftJoin(StudentEvaluations, eq(StudentEvaluations.student_class_id, StudentClasses.id))
+        .where(collegeQueryCondition)
+        .groupBy(Colleges.id, Colleges.name, Colleges.initialism);
 
       // 6. Recent Pulses Initial State (Combined SET & SEF submissions, strictly anonymized)
       const recentStudentSubmissions = await tx
