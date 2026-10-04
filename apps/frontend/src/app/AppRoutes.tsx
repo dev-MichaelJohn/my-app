@@ -1,34 +1,59 @@
-import { createBrowserRouter } from "react-router";
+import { lazy, Suspense, type ComponentType } from "react";
+import { createBrowserRouter, RouterProvider } from "react-router";
+import { PageLoader } from "@/components/ui/spinner";
 import { AuthGuard, GuestGuard, PermissionGuard, RoleGuard } from "@/components/route-guards";
-import LandingPage from "@/features/landing/page/LandingPage";
-import LoginPage from "@/features/auth/page/LoginPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import CollegePage from "@/features/colleges/page/CollegePage";
-import ProgramPage from "@/features/programs/page/ProgramPage";
-import CoursePage from "@/features/courses/page/CoursePage";
-import CurriculumPage from "@/features/curriculums/page/CurriculumPage";
-import ClassPage from "@/features/classes/page/ClassPage";
-import SemesterPage from "@/features/semesters/page/SemesterPage";
-import OfferingPage from "@/features/offerings/page/OfferingPage";
-import ClassStudentPage from "@/features/class-students/page/ClassStudentPage";
-import StudentClassPage from "@/features/student-classes/page/StudentClassPage";
-import EvaluationInstrumentsPage from "@/features/evaluations/page/EvaluationInstrumentsPage";
-import EvaluationFormBuilderPage from "@/features/evaluations/page/EvaluationFormBuilderPage";
-import EvaluationSchedulesPage from "@/features/evaluation-schedules/page/EvaluationSchedulesPage";
-import StudentEvaluationPage from "@/features/evaluations/page/StudentEvaluationPage";
-import SupervisorEvaluationPage from "@/features/evaluations/page/SupervisorEvaluationPage";
-import UserPage from "@/features/users/page/UserPage";
-import FacultyTeachingPage from "@/features/evaluations/page/FacultyTeachingPage";
-import AnnexCReportPage from "@/features/evaluations/page/AnnexCReportPage";
-import AnalyticsDashboardPage from "@/features/analytics/page/AnalyticsDashboardPage";
-import AccountSettingsPage from "@/features/users/page/AccountSettingsPage";
-import DashboardPage from "@/features/dashboard/page/DashboardPage";
 import { PERMISSIONS } from "@my-app/shared";
 
-export const AppRoutes = createBrowserRouter([
+// ── Lazy-Loaded Pages ──
+const LandingPage = lazy(() => import("@/features/landing/page/LandingPage"));
+const LoginPage = lazy(() => import("@/features/auth/page/LoginPage"));
+const DashboardPage = lazy(() => import("@/features/dashboard/page/DashboardPage"));
+const AccountSettingsPage = lazy(() => import("@/features/users/page/AccountSettingsPage"));
+const UserPage = lazy(() => import("@/features/users/page/UserPage"));
+const CollegePage = lazy(() => import("@/features/colleges/page/CollegePage"));
+const ProgramPage = lazy(() => import("@/features/programs/page/ProgramPage"));
+const CoursePage = lazy(() => import("@/features/courses/page/CoursePage"));
+const CurriculumPage = lazy(() => import("@/features/curriculums/page/CurriculumPage"));
+const ClassPage = lazy(() => import("@/features/classes/page/ClassPage"));
+const SemesterPage = lazy(() => import("@/features/semesters/page/SemesterPage"));
+const OfferingPage = lazy(() => import("@/features/offerings/page/OfferingPage"));
+const ClassStudentPage = lazy(() => import("@/features/class-students/page/ClassStudentPage"));
+const StudentClassPage = lazy(() => import("@/features/student-classes/page/StudentClassPage"));
+const EvaluationInstrumentsPage = lazy(
+  () => import("@/features/evaluations/page/EvaluationInstrumentsPage"),
+);
+const EvaluationFormBuilderPage = lazy(
+  () => import("@/features/evaluations/page/EvaluationFormBuilderPage"),
+);
+const EvaluationSchedulesPage = lazy(
+  () => import("@/features/evaluation-schedules/page/EvaluationSchedulesPage"),
+);
+const StudentEvaluationPage = lazy(
+  () => import("@/features/evaluations/page/StudentEvaluationPage"),
+);
+const SupervisorEvaluationPage = lazy(
+  () => import("@/features/evaluations/page/SupervisorEvaluationPage"),
+);
+const FacultyTeachingPage = lazy(() => import("@/features/evaluations/page/FacultyTeachingPage"));
+const AnnexCReportPage = lazy(() => import("@/features/evaluations/page/AnnexCReportPage"));
+const AnalyticsDashboardPage = lazy(
+  () => import("@/features/analytics/page/AnalyticsDashboardPage"),
+);
+
+// ── Type-Safe Suspense Route Component ──
+function LazyRoute({ Component }: { Component: ComponentType }) {
+  return (
+    <Suspense fallback={<PageLoader text="Loading page..." />}>
+      <Component />
+    </Suspense>
+  );
+}
+
+const router = createBrowserRouter([
   {
     path: "/",
-    element: <LandingPage />,
+    element: <LazyRoute Component={LandingPage} />,
   },
   // ── Public / Guest Routes ──
   {
@@ -36,7 +61,7 @@ export const AppRoutes = createBrowserRouter([
     children: [
       {
         path: "/login",
-        element: <LoginPage />,
+        element: <LazyRoute Component={LoginPage} />,
       },
     ],
   },
@@ -50,13 +75,11 @@ export const AppRoutes = createBrowserRouter([
         children: [
           {
             path: "/dashboard",
-            element: <DashboardPage />,
+            element: <LazyRoute Component={DashboardPage} />,
           },
-
-          // Account Settings (Available to all logged-in users)
           {
             path: "/settings/account",
-            element: <AccountSettingsPage />,
+            element: <LazyRoute Component={AccountSettingsPage} />,
           },
 
           // ── 1. User Management (SYS_ADMIN & ADMIN only) ──
@@ -65,7 +88,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/admin/users",
-                element: <UserPage />,
+                element: <LazyRoute Component={UserPage} />,
               },
             ],
           },
@@ -76,15 +99,15 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/admin/evaluation-forms",
-                element: <EvaluationInstrumentsPage />,
+                element: <LazyRoute Component={EvaluationInstrumentsPage} />,
               },
               {
                 path: "/admin/evaluation-forms/:type/:id/builder",
-                element: <EvaluationFormBuilderPage />,
+                element: <LazyRoute Component={EvaluationFormBuilderPage} />,
               },
               {
                 path: "/admin/evaluation-periods",
-                element: <EvaluationSchedulesPage />,
+                element: <LazyRoute Component={EvaluationSchedulesPage} />,
               },
             ],
           },
@@ -95,7 +118,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/admin/semesters",
-                element: <SemesterPage />,
+                element: <LazyRoute Component={SemesterPage} />,
               },
             ],
           },
@@ -104,7 +127,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/admin/colleges",
-                element: <CollegePage />,
+                element: <LazyRoute Component={CollegePage} />,
               },
             ],
           },
@@ -113,7 +136,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/admin/programs",
-                element: <ProgramPage />,
+                element: <LazyRoute Component={ProgramPage} />,
               },
             ],
           },
@@ -122,7 +145,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/admin/courses",
-                element: <CoursePage />,
+                element: <LazyRoute Component={CoursePage} />,
               },
             ],
           },
@@ -131,7 +154,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/admin/curriculums",
-                element: <CurriculumPage />,
+                element: <LazyRoute Component={CurriculumPage} />,
               },
             ],
           },
@@ -140,7 +163,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/admin/classes",
-                element: <ClassPage />,
+                element: <LazyRoute Component={ClassPage} />,
               },
             ],
           },
@@ -151,7 +174,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/faculty/classes",
-                element: <FacultyTeachingPage />,
+                element: <LazyRoute Component={FacultyTeachingPage} />,
               },
             ],
           },
@@ -160,7 +183,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/admin/offerings",
-                element: <OfferingPage />,
+                element: <LazyRoute Component={OfferingPage} />,
               },
             ],
           },
@@ -169,7 +192,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/admin/rosters",
-                element: <ClassStudentPage />,
+                element: <LazyRoute Component={ClassStudentPage} />,
               },
             ],
           },
@@ -178,7 +201,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/admin/student-classes",
-                element: <StudentClassPage />,
+                element: <LazyRoute Component={StudentClassPage} />,
               },
             ],
           },
@@ -189,7 +212,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/evaluations/student",
-                element: <StudentEvaluationPage />,
+                element: <LazyRoute Component={StudentEvaluationPage} />,
               },
             ],
           },
@@ -200,7 +223,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/evaluations/supervisor",
-                element: <SupervisorEvaluationPage />,
+                element: <LazyRoute Component={SupervisorEvaluationPage} />,
               },
             ],
           },
@@ -216,7 +239,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/reports/faculty",
-                element: <AnnexCReportPage />,
+                element: <LazyRoute Component={AnnexCReportPage} />,
               },
             ],
           },
@@ -236,7 +259,7 @@ export const AppRoutes = createBrowserRouter([
             children: [
               {
                 path: "/analytics",
-                element: <AnalyticsDashboardPage />,
+                element: <LazyRoute Component={AnalyticsDashboardPage} />,
               },
             ],
           },
@@ -245,3 +268,7 @@ export const AppRoutes = createBrowserRouter([
     ],
   },
 ]);
+
+export function AppRoutes() {
+  return <RouterProvider router={router} />;
+}

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { Outlet } from "react-router";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { PageLoader } from "@/components/ui/spinner";
 import { X } from "lucide-react";
 
 export default function DashboardLayout() {
@@ -9,12 +10,11 @@ export default function DashboardLayout() {
 
   return (
     <div className="min-h-screen w-full flex bg-background text-foreground">
-      {/* ── 1. Desktop Sidebar (Sticky) ── */}
       <div className="hidden md:block sticky top-0 h-screen shrink-0">
         <AppSidebar />
       </div>
 
-      {/* ── 2. Mobile Drawer Overlay ── */}
+      {/* Mobile Drawer */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex">
           <div
@@ -33,11 +33,12 @@ export default function DashboardLayout() {
         </div>
       )}
 
-      {/* ── 3. Main Content Area ── */}
       <div className="flex-1 flex flex-col min-w-0">
         <AppHeader onOpenMobileMenu={() => setMobileMenuOpen(true)} />
         <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto animate-in fade-in duration-150">
-          <Outlet />
+          <Suspense fallback={<PageLoader text="Loading content..." />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>
