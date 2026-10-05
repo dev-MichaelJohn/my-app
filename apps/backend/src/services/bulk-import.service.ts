@@ -1,6 +1,6 @@
 import Papa from "papaparse";
 import { and, eq, isNull } from "drizzle-orm";
-import { ResultAsync } from "neverthrow";
+import { okAsync, ResultAsync } from "neverthrow";
 import db, { type PgTransaction } from "@/configs/db.config.js";
 import {
   Accounts,
@@ -14,6 +14,7 @@ import {
   Programs,
   Roles,
   AccountRoles,
+  type WelcomeEmailOpts,
 } from "@my-app/shared";
 import { AppError } from "@/libs/error.lib.js";
 import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
@@ -29,6 +30,10 @@ import {
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { UserService, type IUserService } from "./user.service.js";
+import { logger } from "@/libs/logger.lib.js";
+import { env } from "node:process";
+import { WelcomeEmailTemplate, WelcomeTextTemplate } from "@/libs/email.lib.js";
+import { EmailService, type IEmailService } from "./email.service.js";
 
 export interface IBulkImportService {
   importColleges(csvContent: string, client?: DbClient): ResultAsync<ImportSummary, AppError>;
@@ -40,7 +45,10 @@ export interface IBulkImportService {
 }
 
 export class BulkImportService implements IBulkImportService {
-  constructor(private userService: IUserService = new UserService()) {}
+  constructor(
+    private userService: IUserService = new UserService(),
+    private emailService: IEmailService = new EmailService(),
+  ) {}
 
   // =========================================================================
   // ── Candidate Validations (Aligned with CollegeService & ProgramService) ──
@@ -671,6 +679,13 @@ export class BulkImportService implements IBulkImportService {
       const roles = await tx.select().from(Roles).where(isNull(Roles.deleted_at));
       const roleMap = new Map(roles.map((r) => [r.system_role, r.id]));
 
+      // Collection for background credential emails
+      const emailsToSend: Array<{
+        email: string;
+        recipientName: string;
+        password?: string;
+      }> = [];
+
       for (let i = 0; i < rows.length; i++) {
         const rowNum = i + 2;
         const validation = UserCsvRowSchema.safeParse(rows[i]);
@@ -718,12 +733,13 @@ export class BulkImportService implements IBulkImportService {
           continue;
         }
 
-        // Generate temporary password with non-blocking async bcrypt
+        // 🔑 Use provided password from CSV if given; otherwise auto-generate temporary password
         const rawPassword =
           data.password && data.password.trim().length >= 6
             ? data.password.trim()
             : this.generateTemporaryPassword();
-        const passwordHash = await bcrypt.hash(rawPassword, 10);
+
+        const passwordHash = bcrypt.hashSync(rawPassword, 10);
 
         // 1. Insert Personal Details
         const [details] = await tx
@@ -744,7 +760,7 @@ export class BulkImportService implements IBulkImportService {
             personal_details_id: details!.id,
             email: data.email,
             password: passwordHash,
-            is_verified: false,
+            is_verified: Boolean(data.password && data.password.trim().length >= 6),
           })
           .returning();
 
@@ -754,13 +770,72 @@ export class BulkImportService implements IBulkImportService {
           role_id: roleId,
         });
 
+        // Queue welcome credentials email
+        emailsToSend.push({
+          email: data.email,
+          recipientName: `${data.first_name} ${data.last_name}`,
+          password: rawPassword,
+        });
+
         idSet.add(data.institutional_id);
         emailSet.add(data.email);
         summary.successful++;
       }
 
-      return summary;
+      return { summary, emailsToSend };
+    }).andThen(({ summary, emailsToSend }) => {
+      // 🚀 Dispatch emails in background so the HTTP response returns immediately
+      this.dispatchWelcomeEmails(emailsToSend);
+      return okAsync(summary);
     });
+  }
+
+  private async dispatchWelcomeEmails(
+    recipients: Array<{
+      email: string;
+      recipientName: string;
+      password?: string;
+    }>,
+  ): Promise<void> {
+    if (recipients.length === 0) return;
+
+    logger.info(
+      `Starting background credentials email delivery for ${recipients.length} user(s)...`,
+    );
+
+    for (const item of recipients) {
+      const emailPayload: WelcomeEmailOpts = {
+        recipientName: item.recipientName,
+        email: item.email,
+        generatedPassword: item.password || "",
+        url: env.CLIENT_URL || "https://pit-fes.pages.dev",
+      };
+
+      await new Promise<void>((resolve) => {
+        this.emailService
+          .sendEmail({
+            to: item.email,
+            options: {
+              subject: "PIT-FES Account Credentials Notice",
+              text: WelcomeTextTemplate(emailPayload),
+              html: WelcomeEmailTemplate(emailPayload),
+            },
+          })
+          .match(
+            () => {
+              logger.info(`Credentials email delivered to ${item.email}`);
+              resolve();
+            },
+            (err) => {
+              logger.warn(`Failed to deliver credentials email to ${item.email}: ${err.message}`);
+              resolve(); // Continue with next recipient without crashing
+            },
+          );
+      });
+
+      // Small 100ms throttle to prevent Brevo 429 concurrency spikes
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
   }
 
   private generateTemporaryPassword(): string {
