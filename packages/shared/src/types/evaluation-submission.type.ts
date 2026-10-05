@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { GetOffering } from "./offering.type.js";
+import type { GetUser } from "./user.type.js";
 import type {
   GetStudentEvaluationForm,
   GetSupervisorEvaluationForm,
@@ -19,6 +20,7 @@ export const SubmitStudentEvaluationSchema = z.object({
   is_draft: z.boolean().default(false),
 });
 
+// ── 🔑 SEF Submission Payload (Evaluates Faculty for the Term) ──
 export const SubmitSupervisorEvaluationSchema = z.object({
   schedule_id: z.number().int().positive("Schedule ID is required."),
   faculty_id: z.number().int().positive("Faculty ID is required."),
@@ -40,7 +42,7 @@ export interface AspectBreakdown {
 }
 
 export interface SentimentAnalysisResult {
-  score: number; // Normalized score strictly between -1.00 and 1.00 (fits decimal(5, 2))
+  score: number;
   rawScore: number;
   comparative: number;
   classification: SentimentClassification;
@@ -62,13 +64,25 @@ export interface EvaluableStudentSubject {
   evaluation_id: number | null;
 }
 
-export interface EvaluableSupervisorOffering {
-  offering: GetOffering;
+// ── 🔑 Course Load Context Item (Shown to supervisor while assessing faculty) ──
+export interface SupervisorTeachingLoadItem {
+  offering_id: number;
+  course_code: string;
+  course_name: string;
+  year_level: string;
+  section: string;
+  program_code: string;
+}
+
+// ── 🔑 Evaluable Faculty for Supervisors ──
+export interface EvaluableSupervisorFaculty {
+  faculty: GetUser;
   has_submitted: boolean;
   is_draft: boolean;
   submitted_at: Date | string | null;
   computed_rating: number | null;
   evaluation_id: number | null;
+  teaching_classes: SupervisorTeachingLoadItem[];
 }
 
 export interface StudentEvaluationFormView {
@@ -82,11 +96,13 @@ export interface StudentEvaluationFormView {
   submitted_at: Date | string | null;
 }
 
+// ── 🔑 Supervisor Questionnaire View ──
 export interface SupervisorEvaluationFormView {
   schedule_id: number;
-  course_offering_id: number;
+  faculty_id: number;
+  faculty: GetUser;
+  teaching_classes: SupervisorTeachingLoadItem[];
   form: GetSupervisorEvaluationForm;
-  offering: GetOffering;
   saved_ratings: Record<number, number>;
   saved_comment: string | null;
   is_submitted: boolean;
@@ -101,7 +117,7 @@ export interface TeachingStudentItem {
   middle_name: string | null;
   suffix: string | null;
   email: string;
-  has_evaluated: boolean; // 🔒 Status only! Anonymity preserved (scores & comments hidden)
+  has_evaluated: boolean;
   evaluated_at: Date | string | null;
 }
 
@@ -109,6 +125,6 @@ export interface FacultyTeachingOffering {
   offering: GetOffering;
   total_students: number;
   total_evaluated: number;
-  completion_rate: number; // e.g. 85.5%
+  completion_rate: number;
   students: TeachingStudentItem[];
 }
