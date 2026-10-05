@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useStudentSubjects,
   useStudentFormView,
@@ -154,15 +154,11 @@ function StudentEvaluationFormViewComponent({
   const { data: viewData, isLoading } = useStudentFormView(studentClassId);
   const submitMutation = useSubmitStudentEvaluation();
 
-  const [ratings, setRatings] = useState<Record<number, number>>({});
-  const [comment, setComment] = useState("");
+  const [ratings, setRatings] = useState<Record<number, number>>(
+    () => viewData?.saved_ratings ?? {},
+  );
+  const [comment, setComment] = useState(() => viewData?.saved_comment ?? "");
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
-
-  // Initialize saved ratings/comment
-  useState(() => {
-    if (viewData?.saved_ratings) setRatings(viewData.saved_ratings);
-    if (viewData?.saved_comment) setComment(viewData.saved_comment);
-  });
 
   if (isLoading || !viewData) {
     return (
