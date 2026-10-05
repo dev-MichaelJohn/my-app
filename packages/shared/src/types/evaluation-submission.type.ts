@@ -21,7 +21,7 @@ export const SubmitStudentEvaluationSchema = z.object({
 
 export const SubmitSupervisorEvaluationSchema = z.object({
   schedule_id: z.number().int().positive("Schedule ID is required."),
-  course_offering_id: z.number().int().positive("Course offering ID is required."),
+  faculty_id: z.number().int().positive("Faculty ID is required."),
   ratings: z.array(EvaluationRatingItemSchema).min(1, "At least one rating is required."),
   comment: z.string().trim().max(1000, "Comment cannot exceed 1000 characters.").optional(),
   is_draft: z.boolean().default(false),

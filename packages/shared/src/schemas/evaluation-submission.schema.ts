@@ -82,7 +82,7 @@ export const SupervisorEvaluations = pgTable(
     evaluator_id: integer("evaluator_id")
       .notNull()
       .references(() => Accounts.id),
-    course_offering_id: integer("course_offering_id")
+    faculty_id: integer("faculty_id")
       .notNull()
       .references(() => CourseOfferings.id),
     comment: text("comment"),
@@ -94,14 +94,14 @@ export const SupervisorEvaluations = pgTable(
   (t) => [
     index("idx_supervisor_eval_schedule_id").on(t.schedule_id),
     index("idx_supervisor_eval_evaluator_id").on(t.evaluator_id),
-    index("idx_supervisor_eval_course_offering_id").on(t.course_offering_id),
+    index("idx_supervisor_eval_faculty_id").on(t.faculty_id),
     index("idx_supervisor_eval_sentiment").on(t.comment_sentiment),
     uniqueIndex("uidx_unique_supervisor_submission").on(
       t.schedule_id,
       t.evaluator_id,
-      t.course_offering_id,
+      t.faculty_id,
     ),
-    index("idx_supervisor_eval_offering_submitted").on(t.course_offering_id, t.submitted_at),
+    index("idx_supervisor_eval_offering_submitted").on(t.faculty_id, t.submitted_at),
     index("idx_supervisor_eval_evaluator_schedule").on(t.evaluator_id, t.schedule_id),
   ],
 );
