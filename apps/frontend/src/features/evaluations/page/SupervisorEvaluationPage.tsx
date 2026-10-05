@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  useSupervisorOfferings,
+  useSupervisorFaculty,
   useSupervisorFormView,
   useSubmitSupervisorEvaluation,
 } from "../hooks/useEvaluationSubmissions";
@@ -19,15 +19,15 @@ import {
   ArrowLeft,
   MessageSquare,
   FileText,
+  GraduationCap,
+  BookOpen,
 } from "lucide-react";
-import type { EvaluableSupervisorOffering } from "@my-app/shared";
+import type { EvaluableSupervisorFaculty } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
 
 export default function SupervisorEvaluationPage() {
-  const { data: offerings, isLoading } = useSupervisorOfferings();
-  const [selectedOffering, setSelectedOffering] = useState<EvaluableSupervisorOffering | null>(
-    null,
-  );
+  const { data: facultyList, isLoading } = useSupervisorFaculty();
+  const [selectedFaculty, setSelectedFaculty] = useState<EvaluableSupervisorFaculty | null>(null);
 
   if (isLoading) {
     return (
@@ -42,11 +42,11 @@ export default function SupervisorEvaluationPage() {
     );
   }
 
-  if (selectedOffering) {
+  if (selectedFaculty) {
     return (
       <SupervisorEvaluationFormViewComponent
-        offeringId={selectedOffering.offering.id}
-        onBack={() => setSelectedOffering(null)}
+        facultyId={selectedFaculty.faculty.account.id}
+        onBack={() => setSelectedFaculty(null)}
       />
     );
   }
@@ -58,46 +58,46 @@ export default function SupervisorEvaluationPage() {
           Supervisor Evaluation of Faculty (SEF)
         </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Conduct dean and program chair performance assessments based on Means of Verification
-          (MOVs).
+          Conduct comprehensive semester performance appraisals for faculty under your supervision
+          (Annex B).
         </p>
       </div>
 
-      {!offerings || offerings.length === 0 ? (
+      {!facultyList || facultyList.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-border rounded-2xl bg-card">
           <UserCheck className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
           <h3 className="font-semibold text-foreground text-lg">
-            No Faculty Offerings Available for Evaluation
+            No Faculty Members Found for Supervision
           </h3>
           <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1">
-            There is currently no open supervisor evaluation period, or no faculty offerings
-            assigned under your college/program.
+            Either the supervisor evaluation period is currently closed, or you have no subordinate
+            faculty members assigned to your department for this term.
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {offerings.map((item) => {
-            const facultyName = item.offering.faculty
-              ? `${item.offering.faculty.details.first_name} ${item.offering.faculty.details.last_name}`
-              : "Faculty Instructor";
+          {facultyList.map((item) => {
+            const facultyName = `${item.faculty.details.first_name} ${item.faculty.details.last_name}${
+              item.faculty.details.suffix ? ` ${item.faculty.details.suffix}` : ""
+            }`;
 
             return (
               <Card
-                key={item.offering.id}
+                key={item.faculty.account.id}
                 className="border-border bg-card text-card-foreground shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
               >
                 <CardHeader className="flex flex-row items-start justify-between pb-2">
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      variant="outline"
-                      className="font-mono font-bold text-primary border-primary/20"
-                    >
-                      {item.offering.course_curriculum.course.initialism}
-                    </Badge>
-                    <Badge variant="secondary" className="font-mono text-xs">
-                      {item.offering.class.program.initialism} {item.offering.class.year_level}-
-                      {item.offering.class.section}
-                    </Badge>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
+                      {item.faculty.details.first_name[0]}
+                      {item.faculty.details.last_name[0]}
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-foreground">{facultyName}</h3>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {item.faculty.details.institutional_id}
+                      </p>
+                    </div>
                   </div>
 
                   {item.has_submitted ? (
@@ -110,36 +110,52 @@ export default function SupervisorEvaluationPage() {
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="text-muted-foreground text-[11px]">
-                      Pending
+                      Pending Review
                     </Badge>
                   )}
                 </CardHeader>
 
-                <CardContent className="space-y-3 pt-1">
-                  <div>
-                    <h3 className="font-bold text-base text-foreground leading-snug line-clamp-1">
-                      {item.offering.course_curriculum.course.name}
-                    </h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Faculty: <strong className="text-foreground">{facultyName}</strong>
+                <CardContent className="space-y-3 pt-2">
+                  {/* Teaching Load Context Chips */}
+                  <div className="p-2.5 bg-muted/40 border border-border/60 rounded-xl space-y-1.5 text-xs">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                      <BookOpen className="w-3 h-3 text-primary" />
+                      <span>Term Teaching Load ({item.teaching_classes.length} classes):</span>
                     </p>
+                    {item.teaching_classes.length === 0 ? (
+                      <p className="text-[11px] text-muted-foreground italic">
+                        No assigned classes this term.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {item.teaching_classes.map((cls) => (
+                          <Badge
+                            key={cls.offering_id}
+                            variant="secondary"
+                            className="text-[10px] font-mono px-1.5 py-0"
+                          >
+                            {cls.course_code} ({cls.year_level}-{cls.section})
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </CardContent>
 
                 <CardFooter className="pt-2 border-t border-border/50 flex items-center justify-between">
                   <span className="text-[11px] text-muted-foreground">
                     {item.has_submitted
-                      ? `Submitted on ${new Date(item.submitted_at!).toLocaleDateString()}`
-                      : "Supervisory Review"}
+                      ? `Evaluated on ${new Date(item.submitted_at!).toLocaleDateString()}`
+                      : "Semester Appraisal"}
                   </span>
                   <Button
                     size="sm"
-                    onClick={() => setSelectedOffering(item)}
+                    onClick={() => setSelectedFaculty(item)}
                     className="gap-1.5 h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                   >
                     <span>
                       {item.has_submitted
-                        ? "View Response"
+                        ? "View Appraisal"
                         : item.is_draft
                           ? "Continue Draft"
                           : "Evaluate Faculty"}
@@ -156,14 +172,15 @@ export default function SupervisorEvaluationPage() {
   );
 }
 
+// ── 1. Container: Handles loading & mounts content with a unique key ──
 function SupervisorEvaluationFormViewComponent({
-  offeringId,
+  facultyId,
   onBack,
 }: {
-  offeringId: number;
+  facultyId: number;
   onBack: () => void;
 }) {
-  const { data: viewData, isLoading } = useSupervisorFormView(offeringId);
+  const { data: viewData, isLoading } = useSupervisorFormView(facultyId);
 
   if (isLoading || !viewData) {
     return (
@@ -174,32 +191,38 @@ function SupervisorEvaluationFormViewComponent({
   }
 
   return (
-    <SupervisorEvaluationFormContent offeringId={offeringId} viewData={viewData} onBack={onBack} />
+    <SupervisorEvaluationFormContent
+      key={facultyId}
+      facultyId={facultyId}
+      viewData={viewData}
+      onBack={onBack}
+    />
   );
 }
 
+// ── 2. Content Form: Directly initializes ratings and comments without linter warnings ──
 function SupervisorEvaluationFormContent({
-  offeringId,
+  facultyId,
   viewData,
   onBack,
 }: {
-  offeringId: number;
+  facultyId: number;
   viewData: NonNullable<ReturnType<typeof useSupervisorFormView>["data"]>;
   onBack: () => void;
 }) {
   const submitMutation = useSubmitSupervisorEvaluation();
 
-  // ✅ Initialized directly on mount — no useEffect, no cascading renders
+  // ✅ Initialized directly on mount — zero useEffect, zero cascading renders
   const [ratings, setRatings] = useState<Record<number, number>>(
     () => viewData.saved_ratings ?? {},
   );
   const [comment, setComment] = useState<string>(() => viewData.saved_comment ?? "");
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
 
-  const { form, offering, is_submitted } = viewData;
-  const facultyName = offering.faculty
-    ? `${offering.faculty.details.first_name} ${offering.faculty.details.last_name}`
-    : "Faculty Member";
+  const { form, faculty, teaching_classes, is_submitted } = viewData;
+  const facultyName = `${faculty.details.first_name} ${faculty.details.last_name}${
+    faculty.details.suffix ? ` ${faculty.details.suffix}` : ""
+  }`;
 
   const allQuestions = form.categories.flatMap((c) => c.questions);
   const totalRated = allQuestions.filter((q) => ratings[q.id] !== undefined).length;
@@ -224,14 +247,14 @@ function SupervisorEvaluationFormContent({
     try {
       await submitMutation.mutateAsync({
         schedule_id: viewData.schedule_id,
-        course_offering_id: offeringId,
+        faculty_id: facultyId,
         ratings: ratingItems,
         comment: comment.trim() || undefined,
         is_draft: isDraft,
       });
 
       if (isDraft) {
-        toast.success("Supervisor draft saved.");
+        toast.success("Supervisor evaluation draft saved.");
       } else {
         toast.success("Supervisor evaluation submitted successfully.");
         setConfirmSubmitOpen(false);
@@ -257,9 +280,8 @@ function SupervisorEvaluationFormContent({
       {/* ── Form Header ── */}
       <div className="p-6 border border-border rounded-2xl bg-card shadow-xs space-y-3">
         <div className="flex items-center justify-between">
-          <Badge variant="outline" className="font-mono font-bold text-primary border-primary/20">
-            {offering.course_curriculum.course.initialism} -{" "}
-            {offering.course_curriculum.course.name}
+          <Badge variant="outline" className="font-mono font-bold text-success border-success/20">
+            Annex B Instrument
           </Badge>
           {is_submitted && (
             <Badge className="bg-success/15 text-success border-success/20 font-semibold gap-1 text-xs">
@@ -269,8 +291,8 @@ function SupervisorEvaluationFormContent({
         </div>
         <h1 className="text-2xl font-extrabold text-foreground">{form.title}</h1>
         <p className="text-sm text-muted-foreground">
-          Assessing: <strong className="text-foreground">{facultyName}</strong> (
-          {offering.class.program.initialism} {offering.class.year_level}-{offering.class.section})
+          Evaluating Faculty: <strong className="text-foreground">{facultyName}</strong> (
+          {faculty.details.institutional_id})
         </p>
         {form.description && (
           <p className="text-xs text-muted-foreground pt-2 border-t border-border/50">
@@ -278,11 +300,30 @@ function SupervisorEvaluationFormContent({
           </p>
         )}
 
+        {/* ── Instructional Reference Audit Banner ── */}
+        <div className="p-3 bg-muted/40 border border-border/70 rounded-xl space-y-1.5 text-xs">
+          <p className="font-bold text-foreground flex items-center gap-1.5">
+            <GraduationCap className="w-4 h-4 text-primary" />
+            <span>Assigned Teaching Load This Semester (Reference for MOVs):</span>
+          </p>
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {teaching_classes.map((cls) => (
+              <span
+                key={cls.offering_id}
+                className="px-2 py-0.5 rounded-md bg-background border border-border/80 font-mono text-[11px] text-foreground"
+              >
+                <strong>{cls.course_code}</strong>: {cls.course_name} ({cls.program_code}{" "}
+                {cls.year_level}-{cls.section})
+              </span>
+            ))}
+          </div>
+        </div>
+
         {/* Progress */}
         {!is_submitted && (
           <div className="pt-2">
             <div className="flex justify-between text-xs font-semibold mb-1">
-              <span className="text-muted-foreground">Assessment Progress</span>
+              <span className="text-muted-foreground">Appraisal Progress</span>
               <span className="text-primary font-mono">
                 {totalRated} / {allQuestions.length} Criteria Rated
               </span>
@@ -362,14 +403,14 @@ function SupervisorEvaluationFormContent({
             value={comment}
             disabled={is_submitted}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="Provide specific notes regarding verification compliance, instructional strengths, and supervisory recommendations..."
+            placeholder="Document overall semester performance, grade sheet timeliness, syllabus compliance, and development recommendations..."
             className="min-h-[100px] text-sm bg-background border-input"
             maxLength={1000}
           />
           <div className="flex justify-between text-[11px] text-muted-foreground">
             <span>
-              Remarks are evaluated for sentiment and integrated into institutional performance
-              reports.
+              Remarks are analyzed for sentiment and directly feed into the faculty member's
+              development plan (Annex D).
             </span>
             <span>{comment.length}/1000</span>
           </div>
@@ -396,7 +437,7 @@ function SupervisorEvaluationFormContent({
             {submitMutation.isPending ? (
               <Spinner size="sm" className="text-white" />
             ) : (
-              "Submit Supervisory Assessment"
+              "Submit Semester Appraisal"
             )}
           </Button>
         </div>
@@ -405,14 +446,15 @@ function SupervisorEvaluationFormContent({
       <ConfirmActionDialog
         open={confirmSubmitOpen}
         onOpenChange={setConfirmSubmitOpen}
-        title="Submit Supervisory Evaluation?"
+        title="Submit Supervisor Evaluation?"
         description={
           <span>
-            Are you sure you want to finalize the assessment for <strong>{facultyName}</strong>?
-            Once submitted, the scores and remarks are sealed for reporting.
+            Are you sure you want to finalize the semester evaluation for{" "}
+            <strong>{facultyName}</strong>? Once submitted, the ratings and remarks are sealed for
+            the official Annex C and FEDAF reports.
           </span>
         }
-        confirmLabel="Yes, Submit Assessment"
+        confirmLabel="Yes, Submit Appraisal"
         variant="primary"
         isLoading={submitMutation.isPending}
         onConfirm={() => handleSave(false)}

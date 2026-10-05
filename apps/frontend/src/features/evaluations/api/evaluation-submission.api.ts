@@ -4,7 +4,7 @@ import type {
   AnnexCFacultyReport,
   BatchConsolidationSummary,
   EvaluableStudentSubject,
-  EvaluableSupervisorOffering,
+  EvaluableSupervisorFaculty,
   FacultyTeachingOffering,
   InstitutionalFERReport,
   PaginatedData,
@@ -41,13 +41,17 @@ export class EvaluationSubmissionAPI {
   }
 
   // ── Supervisor (SEF) ──
-  getSupervisorOfferings(): ResultAsync<EvaluableSupervisorOffering[], ApiError> {
-    return http.get<EvaluableSupervisorOffering[]>("/evaluation-submissions/supervisor/offerings");
+  getSupervisorFaculty(): ResultAsync<EvaluableSupervisorFaculty[], ApiError> {
+    return http.get<EvaluableSupervisorFaculty[]>("/evaluation-submissions/supervisor/faculty");
   }
 
-  getSupervisorFormView(offeringId: number): ResultAsync<SupervisorEvaluationFormView, ApiError> {
+  getSupervisorOfferings(): ResultAsync<EvaluableSupervisorFaculty[], ApiError> {
+    return this.getSupervisorFaculty();
+  }
+
+  getSupervisorFormView(facultyId: number): ResultAsync<SupervisorEvaluationFormView, ApiError> {
     return http.get<SupervisorEvaluationFormView>(
-      `/evaluation-submissions/supervisor/form/${offeringId}`,
+      `/evaluation-submissions/supervisor/form/${facultyId}`,
     );
   }
 

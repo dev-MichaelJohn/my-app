@@ -15,8 +15,10 @@ export const SUBMISSION_KEYS = {
   all: ["evaluation-submissions"] as const,
   studentSubjects: () => [...SUBMISSION_KEYS.all, "student", "subjects"] as const,
   studentFormView: (id: number) => [...SUBMISSION_KEYS.all, "student", "form", id] as const,
-  supervisorOfferings: () => [...SUBMISSION_KEYS.all, "supervisor", "offerings"] as const,
-  supervisorFormView: (id: number) => [...SUBMISSION_KEYS.all, "supervisor", "form", id] as const,
+  supervisorFaculty: () => [...SUBMISSION_KEYS.all, "supervisor", "faculty"] as const,
+  supervisorOfferings: () => [...SUBMISSION_KEYS.all, "supervisor", "faculty"] as const,
+  supervisorFormView: (facultyId: number) =>
+    [...SUBMISSION_KEYS.all, "supervisor", "form", facultyId] as const,
   reportsList: (query?: unknown) => ["evaluation-reports", "list", query] as const,
   reportDetail: (semesterId?: number, facultyId?: number) =>
     ["evaluation-reports", "annex-c", semesterId, facultyId] as const,
@@ -57,19 +59,22 @@ export const useSubmitStudentEvaluation = () => {
 };
 
 // ── Supervisor SEF Hooks ──
-export const useSupervisorOfferings = () => {
+export const useSupervisorFaculty = () => {
   return useQuery({
-    queryKey: SUBMISSION_KEYS.supervisorOfferings(),
-    queryFn: () => toQuery(submissionApi.getSupervisorOfferings()),
+    queryKey: SUBMISSION_KEYS.supervisorFaculty(),
+    queryFn: () => toQuery(submissionApi.getSupervisorFaculty()),
     staleTime: 60 * 1000,
   });
 };
 
-export const useSupervisorFormView = (offeringId: number, enabled = true) => {
+// Backward-compatible alias
+export const useSupervisorOfferings = useSupervisorFaculty;
+
+export const useSupervisorFormView = (facultyId: number, enabled = true) => {
   return useQuery({
-    queryKey: SUBMISSION_KEYS.supervisorFormView(offeringId),
-    queryFn: () => toQuery(submissionApi.getSupervisorFormView(offeringId)),
-    enabled: Boolean(offeringId) && enabled,
+    queryKey: SUBMISSION_KEYS.supervisorFormView(facultyId),
+    queryFn: () => toQuery(submissionApi.getSupervisorFormView(facultyId)),
+    enabled: Boolean(facultyId) && enabled,
     staleTime: 60 * 1000,
   });
 };
@@ -80,9 +85,9 @@ export const useSubmitSupervisorEvaluation = () => {
     mutationFn: (payload: SubmitSupervisorEvaluation) =>
       toQuery(submissionApi.submitSupervisorEvaluation(payload)),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: SUBMISSION_KEYS.supervisorOfferings() });
+      queryClient.invalidateQueries({ queryKey: SUBMISSION_KEYS.supervisorFaculty() });
       queryClient.invalidateQueries({
-        queryKey: SUBMISSION_KEYS.supervisorFormView(variables.course_offering_id),
+        queryKey: SUBMISSION_KEYS.supervisorFormView(variables.faculty_id),
       });
     },
   });

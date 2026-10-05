@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, UserCheck, ChevronRight, GraduationCap } from "lucide-react";
 import {
-  useSupervisorOfferings,
   useFacultyTeachingOfferings,
+  useSupervisorFaculty,
 } from "@/features/evaluations/hooks/useEvaluationSubmissions";
 import type { DashboardOverviewStats, LiveEvaluationPulseEvent, GetUser } from "@my-app/shared";
 
@@ -22,13 +22,13 @@ interface Props {
 
 export function DeanChairDashboardView({ user, data, pulses, isDean }: Props) {
   const navigate = useNavigate();
-  const { data: supervisorOfferings } = useSupervisorOfferings();
+  const { data: supervisorFaculty } = useSupervisorFaculty();
   const { data: myTeachingClasses } = useFacultyTeachingOfferings();
 
   const { activeSchedule, metrics } = data;
 
   // Filter pending supervisor evaluations (SEF)
-  const pendingSefOfferings = (supervisorOfferings ?? []).filter((o) => !o.has_submitted);
+  const pendingSefFaculty = (supervisorFaculty ?? []).filter((o) => !o.has_submitted);
 
   return (
     <div className="space-y-6">
@@ -71,40 +71,37 @@ export function DeanChairDashboardView({ user, data, pulses, isDean }: Props) {
                 <span>Supervisory Evaluations (SEF) Pending</span>
               </CardTitle>
               <CardDescription className="text-xs">
-                Faculty members awaiting your supervisory assessment.
+                Faculty members awaiting your semester appraisal.
               </CardDescription>
             </div>
             <Badge
               variant="outline"
               className={
-                pendingSefOfferings.length > 0
+                pendingSefFaculty.length > 0
                   ? "text-warning border-warning/30 font-bold"
                   : "text-success font-bold"
               }
             >
-              {pendingSefOfferings.length} Pending
+              {pendingSefFaculty.length} Pending
             </Badge>
           </CardHeader>
           <CardContent className="pt-3 divide-y divide-border/60">
-            {pendingSefOfferings.length === 0 ? (
+            {pendingSefFaculty.length === 0 ? (
               <p className="text-xs text-muted-foreground italic py-6 text-center">
                 All supervisory evaluations for this term have been completed!
               </p>
             ) : (
-              pendingSefOfferings.slice(0, 5).map((item) => (
+              pendingSefFaculty.slice(0, 5).map((item) => (
                 <div
-                  key={item.offering.id}
+                  key={item.faculty.account.id}
                   className="py-2.5 flex items-center justify-between gap-3 text-xs"
                 >
                   <div>
                     <p className="font-bold text-foreground">
-                      {item.offering.faculty?.details.first_name}{" "}
-                      {item.offering.faculty?.details.last_name}
+                      {item.faculty.details.first_name} {item.faculty.details.last_name}
                     </p>
                     <p className="text-[11px] text-muted-foreground font-mono">
-                      {item.offering.course_curriculum.course.initialism} (
-                      {item.offering.class.program.initialism} {item.offering.class.year_level}-
-                      {item.offering.class.section})
+                      {item.teaching_classes.map((c) => c.course_code).join(", ")}
                     </p>
                   </div>
                   <Button
@@ -112,7 +109,7 @@ export function DeanChairDashboardView({ user, data, pulses, isDean }: Props) {
                     onClick={() => navigate("/evaluations/supervisor")}
                     className="h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                   >
-                    Evaluate Now
+                    Evaluate
                   </Button>
                 </div>
               ))
