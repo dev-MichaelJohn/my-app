@@ -164,13 +164,6 @@ function SupervisorEvaluationFormViewComponent({
   onBack: () => void;
 }) {
   const { data: viewData, isLoading } = useSupervisorFormView(offeringId);
-  const submitMutation = useSubmitSupervisorEvaluation();
-
-  const [ratings, setRatings] = useState<Record<number, number>>(
-    () => viewData?.saved_ratings ?? {},
-  );
-  const [comment, setComment] = useState(() => viewData?.saved_comment ?? "");
-  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
 
   if (isLoading || !viewData) {
     return (
@@ -179,6 +172,29 @@ function SupervisorEvaluationFormViewComponent({
       </div>
     );
   }
+
+  return (
+    <SupervisorEvaluationFormContent offeringId={offeringId} viewData={viewData} onBack={onBack} />
+  );
+}
+
+function SupervisorEvaluationFormContent({
+  offeringId,
+  viewData,
+  onBack,
+}: {
+  offeringId: number;
+  viewData: NonNullable<ReturnType<typeof useSupervisorFormView>["data"]>;
+  onBack: () => void;
+}) {
+  const submitMutation = useSubmitSupervisorEvaluation();
+
+  // ✅ Initialized directly on mount — no useEffect, no cascading renders
+  const [ratings, setRatings] = useState<Record<number, number>>(
+    () => viewData.saved_ratings ?? {},
+  );
+  const [comment, setComment] = useState<string>(() => viewData.saved_comment ?? "");
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
 
   const { form, offering, is_submitted } = viewData;
   const facultyName = offering.faculty

@@ -172,7 +172,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
         .innerJoin(Programs, eq(Classes.program_id, Programs.id))
         .innerJoin(Semesters, eq(CourseOfferings.semester_id, Semesters.id))
-        .leftJoin(
+        .innerJoin(
           Accounts,
           and(eq(CourseOfferings.faculty_id, Accounts.id), isNull(Accounts.deleted_at)),
         )
@@ -181,6 +181,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           and(
             eq(StudentClasses.student_account_id, studentAccountId),
             eq(CourseOfferings.semester_id, activeSchedule.semester_id),
+            isNotNull(CourseOfferings.faculty_id),
             isNull(StudentClasses.deleted_at),
             isNull(CourseOfferings.deleted_at),
           ),
@@ -339,7 +340,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
         .innerJoin(Programs, eq(Classes.program_id, Programs.id))
         .innerJoin(Semesters, eq(CourseOfferings.semester_id, Semesters.id))
-        .leftJoin(
+        .innerJoin(
           Accounts,
           and(eq(CourseOfferings.faculty_id, Accounts.id), isNull(Accounts.deleted_at)),
         )
@@ -349,6 +350,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
             eq(StudentClasses.id, studentClassId),
             eq(StudentClasses.student_account_id, studentAccountId),
             eq(CourseOfferings.semester_id, schedule.semester_id),
+            isNotNull(CourseOfferings.faculty_id),
             isNull(StudentClasses.deleted_at),
           ),
         );
@@ -755,6 +757,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           and(
             eq(CourseOfferings.semester_id, activeSchedule.semester_id),
             isNull(CourseOfferings.deleted_at),
+            isNotNull(CourseOfferings.faculty_id),
             ne(CourseOfferings.faculty_id, evaluatorAccountId),
           ),
         );
@@ -927,6 +930,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           and(
             eq(CourseOfferings.id, courseOfferingId),
             eq(CourseOfferings.semester_id, schedule.semester_id),
+            isNotNull(CourseOfferings.faculty_id),
             isNull(CourseOfferings.deleted_at),
           ),
         );

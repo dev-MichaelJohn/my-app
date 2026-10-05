@@ -152,13 +152,6 @@ function StudentEvaluationFormViewComponent({
   onBack: () => void;
 }) {
   const { data: viewData, isLoading } = useStudentFormView(studentClassId);
-  const submitMutation = useSubmitStudentEvaluation();
-
-  const [ratings, setRatings] = useState<Record<number, number>>(
-    () => viewData?.saved_ratings ?? {},
-  );
-  const [comment, setComment] = useState(() => viewData?.saved_comment ?? "");
-  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
 
   if (isLoading || !viewData) {
     return (
@@ -167,6 +160,32 @@ function StudentEvaluationFormViewComponent({
       </div>
     );
   }
+
+  return (
+    <StudentEvaluationFormContent
+      studentClassId={studentClassId}
+      viewData={viewData}
+      onBack={onBack}
+    />
+  );
+}
+
+function StudentEvaluationFormContent({
+  studentClassId,
+  viewData,
+  onBack,
+}: {
+  studentClassId: number;
+  viewData: NonNullable<ReturnType<typeof useStudentFormView>["data"]>;
+  onBack: () => void;
+}) {
+  const submitMutation = useSubmitStudentEvaluation();
+
+  const [ratings, setRatings] = useState<Record<number, number>>(
+    () => viewData.saved_ratings ?? {},
+  );
+  const [comment, setComment] = useState<string>(() => viewData.saved_comment ?? "");
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
 
   const { form, offering, is_submitted } = viewData;
   const facultyName = offering.faculty
