@@ -45,7 +45,7 @@ SubmissionRouter.get(
 );
 
 SubmissionRouter.get(
-  "/supervisor/form/:offering_id",
+  "/supervisor/form/:faculty_id",
   RequirePermission(PERMISSIONS.EVALUATION_SUBMIT_SEF),
   controller.getSupervisorEvaluationFormView,
 );
