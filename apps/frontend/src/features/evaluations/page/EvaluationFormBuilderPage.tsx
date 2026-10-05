@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
 import { useStudentForm, useSupervisorForm } from "../hooks/useEvaluationInstruments";
 import {
@@ -70,6 +71,15 @@ export default function EvaluationFormBuilderPage() {
   const deleteSupervisorQ = useDeleteSupervisorQuestion(formId);
   const addMeans = useAddMeansDescriptor(formId);
   const deleteMeans = useDeleteMeansDescriptor(formId);
+
+  // ── Loading Flags ──
+  const isSavingCat = addStudentCat.isPending || addSupervisorCat.isPending;
+  const isUpdatingCat = updateStudentCat.isPending || updateSupervisorCat.isPending;
+  const isSavingQ = addStudentQ.isPending || addSupervisorQ.isPending;
+  const isUpdatingQ = updateStudentQ.isPending || updateSupervisorQ.isPending;
+  const isSavingMeans = addMeans.isPending;
+  const isDeletingCat = deleteStudentCat.isPending || deleteSupervisorCat.isPending;
+  const isDeletingQ = deleteStudentQ.isPending || deleteSupervisorQ.isPending;
 
   // ── In-Place Creation States ──
   const [newCatName, setNewCatName] = useState("");
@@ -244,7 +254,6 @@ export default function EvaluationFormBuilderPage() {
     const targetIdx = direction === "up" ? qIdx - 1 : qIdx + 1;
     if (targetIdx < 0 || targetIdx >= questions.length) return;
 
-    // Swap
     const temp = questions[qIdx]!;
     questions[qIdx] = questions[targetIdx]!;
     questions[targetIdx] = temp;
@@ -332,16 +341,18 @@ export default function EvaluationFormBuilderPage() {
                 </span>
 
                 {editingCatId === cat.id ? (
-                  /* Inline Edit Category */
+                  /* Inline Edit Category with Spinner */
                   <div className="flex-1 space-y-2 py-1">
                     <Input
                       value={editCatName}
+                      disabled={isUpdatingCat}
                       onChange={(e) => setEditCatName(e.target.value)}
                       placeholder="Category Name"
                       className="text-sm h-8 bg-background"
                     />
                     <Input
                       value={editCatDesc}
+                      disabled={isUpdatingCat}
                       onChange={(e) => setEditCatDesc(e.target.value)}
                       placeholder="Optional description"
                       className="text-xs h-7 bg-background"
@@ -349,14 +360,26 @@ export default function EvaluationFormBuilderPage() {
                     <div className="flex gap-1.5 pt-1">
                       <Button
                         size="sm"
-                        className="h-7 text-xs gap-1"
+                        disabled={isUpdatingCat || !editCatName.trim()}
+                        className="h-7 text-xs gap-1.5"
                         onClick={() => handleSaveEditCategory(cat.id)}
                       >
-                        <Check className="w-3.5 h-3.5" /> Save
+                        {isUpdatingCat ? (
+                          <>
+                            <Spinner size="xs" className="text-primary-foreground" />
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Save</span>
+                          </>
+                        )}
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
+                        disabled={isUpdatingCat}
                         className="h-7 text-xs"
                         onClick={() => setEditingCatId(null)}
                       >
@@ -438,24 +461,37 @@ export default function EvaluationFormBuilderPage() {
                       </span>
 
                       {editingQId === q.id ? (
-                        /* Inline Edit Question */
+                        /* Inline Edit Question with Spinner */
                         <div className="flex-1 space-y-2">
                           <Textarea
                             value={editQText}
+                            disabled={isUpdatingQ}
                             onChange={(e) => setEditQText(e.target.value)}
                             className="text-sm min-h-[60px] bg-card"
                           />
                           <div className="flex gap-1.5">
                             <Button
                               size="sm"
-                              className="h-7 text-xs gap-1"
+                              disabled={isUpdatingQ || !editQText.trim()}
+                              className="h-7 text-xs gap-1.5"
                               onClick={() => handleSaveEditQuestion(q.id)}
                             >
-                              <Check className="w-3.5 h-3.5" /> Save Revision
+                              {isUpdatingQ ? (
+                                <>
+                                  <Spinner size="xs" className="text-primary-foreground" />
+                                  <span>Saving...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Save Revision</span>
+                                </>
+                              )}
                             </Button>
                             <Button
                               size="sm"
                               variant="ghost"
+                              disabled={isUpdatingQ}
                               className="h-7 text-xs"
                               onClick={() => setEditingQId(null)}
                             >
@@ -481,14 +517,14 @@ export default function EvaluationFormBuilderPage() {
                       )}
                     </div>
 
-                    {/* Question Actions & Reorder Up/Down */}
+                    {/* Question Actions & Reorder */}
                     {editingQId !== q.id && (
                       <div className="flex items-center gap-0.5 shrink-0">
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-muted-foreground disabled:opacity-20"
-                          disabled={qIdx === 0}
+                          disabled={qIdx === 0 || reorderStudentQ.isPending}
                           onClick={() => handleMoveQuestion(cat.id, qIdx, "up")}
                           title="Move Up"
                         >
@@ -498,7 +534,7 @@ export default function EvaluationFormBuilderPage() {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-muted-foreground disabled:opacity-20"
-                          disabled={qIdx === cat.questions.length - 1}
+                          disabled={qIdx === cat.questions.length - 1 || reorderStudentQ.isPending}
                           onClick={() => handleMoveQuestion(cat.id, qIdx, "down")}
                           title="Move Down"
                         >
@@ -563,6 +599,7 @@ export default function EvaluationFormBuilderPage() {
                             </span>
                             <button
                               type="button"
+                              disabled={deleteMeans.isPending}
                               onClick={() => deleteMeans.mutate(m.id)}
                               className="text-destructive hover:underline text-[11px]"
                             >
@@ -572,25 +609,35 @@ export default function EvaluationFormBuilderPage() {
                         ))}
                       </div>
 
-                      {/* Add MOV Input */}
+                      {/* Add MOV Input with Spinner */}
                       {activeAddingMeansQId === q.id ? (
                         <div className="flex items-center gap-2 pt-1">
                           <Input
                             value={newMeansText}
+                            disabled={isSavingMeans}
                             onChange={(e) => setNewMeansText(e.target.value)}
                             placeholder="Type MOV descriptor (e.g. Syllabus, Lesson Plan)..."
                             className="h-8 text-xs bg-card"
                           />
                           <Button
                             size="sm"
-                            className="h-8 text-xs"
+                            disabled={isSavingMeans || !newMeansText.trim()}
+                            className="h-8 text-xs gap-1.5"
                             onClick={() => handleCreateMeans(q.id)}
                           >
-                            Save
+                            {isSavingMeans ? (
+                              <>
+                                <Spinner size="xs" className="text-primary-foreground" />
+                                <span>Saving...</span>
+                              </>
+                            ) : (
+                              "Save"
+                            )}
                           </Button>
                           <Button
                             size="sm"
                             variant="ghost"
+                            disabled={isSavingMeans}
                             className="h-8 text-xs"
                             onClick={() => setActiveAddingMeansQId(null)}
                           >
@@ -611,11 +658,12 @@ export default function EvaluationFormBuilderPage() {
                 </div>
               ))}
 
-              {/* Add Question Button / Inline Form */}
+              {/* Add Question Button / Inline Form with Spinner */}
               {activeAddingQuestionCatId === cat.id ? (
                 <div className="p-3 border border-dashed border-primary/40 rounded-xl bg-primary/5 space-y-2">
                   <Input
                     value={newQuestionText}
+                    disabled={isSavingQ}
                     onChange={(e) => setNewQuestionText(e.target.value)}
                     placeholder="Enter questionnaire question text..."
                     className="bg-card text-sm"
@@ -624,12 +672,25 @@ export default function EvaluationFormBuilderPage() {
                     <Button
                       size="sm"
                       variant="ghost"
+                      disabled={isSavingQ}
                       onClick={() => setActiveAddingQuestionCatId(null)}
                     >
                       Cancel
                     </Button>
-                    <Button size="sm" onClick={() => handleCreateQuestion(cat.id)}>
-                      Save Question
+                    <Button
+                      size="sm"
+                      disabled={isSavingQ || !newQuestionText.trim()}
+                      onClick={() => handleCreateQuestion(cat.id)}
+                      className="gap-1.5"
+                    >
+                      {isSavingQ ? (
+                        <>
+                          <Spinner size="xs" className="text-primary-foreground" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        "Save Question"
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -648,28 +709,47 @@ export default function EvaluationFormBuilderPage() {
           </div>
         ))}
 
-        {/* ── Add Category Section ── */}
+        {/* ── Add Category Section with Spinner ── */}
         {activeAddingCat ? (
           <div className="p-5 border border-primary/40 rounded-2xl bg-card shadow-sm space-y-3">
             <h4 className="font-bold text-sm text-foreground">Add New Category</h4>
             <Input
               value={newCatName}
+              disabled={isSavingCat}
               onChange={(e) => setNewCatName(e.target.value)}
               placeholder="Category Name (e.g. Instructional Competence, Professionalism)"
               className="text-sm"
             />
             <Textarea
               value={newCatDesc}
+              disabled={isSavingCat}
               onChange={(e) => setNewCatDesc(e.target.value)}
               placeholder="Optional category description / instructions..."
               className="text-xs min-h-[60px]"
             />
             <div className="flex justify-end gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setActiveAddingCat(false)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isSavingCat}
+                onClick={() => setActiveAddingCat(false)}
+              >
                 Cancel
               </Button>
-              <Button size="sm" onClick={handleCreateCategory}>
-                Save Category
+              <Button
+                size="sm"
+                disabled={isSavingCat || !newCatName.trim()}
+                onClick={handleCreateCategory}
+                className="gap-1.5"
+              >
+                {isSavingCat ? (
+                  <>
+                    <Spinner size="xs" className="text-primary-foreground" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  "Save Category"
+                )}
               </Button>
             </div>
           </div>
@@ -685,7 +765,7 @@ export default function EvaluationFormBuilderPage() {
         )}
       </div>
 
-      {/* ── 🚀 FRICTION MODAL 1: Confirm Category Delete ── */}
+      {/* ── FRICTION MODAL 1: Confirm Category Delete ── */}
       <ConfirmActionDialog
         open={Boolean(deleteCatTarget)}
         onOpenChange={(open) => !open && setDeleteCatTarget(null)}
@@ -700,10 +780,11 @@ export default function EvaluationFormBuilderPage() {
         }
         confirmLabel="Archive Category"
         variant="destructive"
+        isLoading={isDeletingCat}
         onConfirm={handleConfirmDeleteCategory}
       />
 
-      {/* ── 🚀 FRICTION MODAL 2: Confirm Question Delete ── */}
+      {/* ── FRICTION MODAL 2: Confirm Question Delete ── */}
       <ConfirmActionDialog
         open={Boolean(deleteQTarget)}
         onOpenChange={(open) => !open && setDeleteQTarget(null)}
@@ -715,6 +796,7 @@ export default function EvaluationFormBuilderPage() {
         }
         confirmLabel="Archive Question"
         variant="destructive"
+        isLoading={isDeletingQ}
         onConfirm={handleConfirmDeleteQuestion}
       />
 
