@@ -33,9 +33,15 @@ SubmissionRouter.post(
 
 // ── Supervisor (SEF) Routes ──
 SubmissionRouter.get(
+  "/supervisor/faculty",
+  RequirePermission(PERMISSIONS.EVALUATION_SUBMIT_SEF),
+  controller.getEvaluableSupervisorFaculty,
+);
+
+SubmissionRouter.get(
   "/supervisor/offerings",
   RequirePermission(PERMISSIONS.EVALUATION_SUBMIT_SEF),
-  controller.getEvaluableSupervisorOfferings,
+  controller.getEvaluableSupervisorFaculty,
 );
 
 SubmissionRouter.get(

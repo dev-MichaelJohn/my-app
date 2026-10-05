@@ -52,25 +52,25 @@ export class EvaluationSubmissionController {
   });
 
   // ── Supervisor (SEF) ──
-  getEvaluableSupervisorOfferings = runAsync((req) => {
+  getEvaluableSupervisorFaculty = runAsync((req) => {
     if (!req.user) return errAsync(new AppError(401, "Authentication required."));
     return this.submissionService
-      .getEvaluableSupervisorOfferings(req.user.account.id)
+      .getEvaluableSupervisorFaculty(req.user.account.id)
       .map((data) => ({
         status: 200,
-        message: "Supervisor evaluable faculty offerings retrieved.",
+        message: "Supervisor evaluable faculty members retrieved.",
         data,
       }));
   });
 
   getSupervisorEvaluationFormView = runAsync((req) => {
     if (!req.user) return errAsync(new AppError(401, "Authentication required."));
-    return ValidateSchema(this.idSchema, req.params.offering_id).asyncAndThen((offeringId) => {
+    return ValidateSchema(this.idSchema, req.params.faculty_id).asyncAndThen((facultyId) => {
       return this.submissionService
-        .getSupervisorEvaluationFormView(req.user!.account.id, offeringId)
+        .getSupervisorEvaluationFormView(req.user!.account.id, facultyId)
         .map((data) => ({
           status: 200,
-          message: "Supervisor evaluation form retrieved.",
+          message: "Supervisor evaluation questionnaire retrieved.",
           data,
         }));
     });

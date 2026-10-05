@@ -954,52 +954,48 @@ export class EvaluationReportService implements IEvaluationReportService {
       totalWeightedScore: grandTotalWeightedScore,
     });
 
-    const offeringIds = offerings.map((o) => o.offeringId);
     let overallSefRating: number | null = null;
     const supervisorCommentsList: SupervisorFeedbackComment[] = [];
     const allSupervisorEvaluationIds: number[] = [];
 
-    if (offeringIds.length > 0) {
-      const sefSubmissions = await tx
-        .select({
-          id: SupervisorEvaluations.id,
-          setRating: SupervisorEvaluations.set_rating,
-          comment: SupervisorEvaluations.comment,
-          submittedAt: SupervisorEvaluations.submitted_at,
-          evaluatorFirst: PersonalDetails.first_name,
-          evaluatorLast: PersonalDetails.last_name,
-        })
-        .from(SupervisorEvaluations)
-        .innerJoin(Accounts, eq(SupervisorEvaluations.evaluator_id, Accounts.id))
-        .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
-        .where(
-          and(
-            inArray(SupervisorEvaluations.course_offering_id, offeringIds),
-            isNotNull(SupervisorEvaluations.submitted_at),
-          ),
-        );
+    const sefSubmissions = await tx
+      .select({
+        id: SupervisorEvaluations.id,
+        setRating: SupervisorEvaluations.set_rating,
+        comment: SupervisorEvaluations.comment,
+        submittedAt: SupervisorEvaluations.submitted_at,
+        evaluatorFirst: PersonalDetails.first_name,
+        evaluatorLast: PersonalDetails.last_name,
+      })
+      .from(SupervisorEvaluations)
+      .innerJoin(
+        SupervisorEvaluationSchedules,
+        eq(SupervisorEvaluations.schedule_id, SupervisorEvaluationSchedules.id),
+      )
+      .innerJoin(Accounts, eq(SupervisorEvaluations.evaluator_id, Accounts.id))
+      .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
+      .where(
+        and(
+          eq(SupervisorEvaluations.faculty_id, facultyId),
+          eq(SupervisorEvaluationSchedules.semester_id, semesterId),
+          isNotNull(SupervisorEvaluations.submitted_at),
+        ),
+      );
 
-      if (sefSubmissions.length > 0) {
-        sefSubmissions.forEach((s) => allSupervisorEvaluationIds.push(s.id));
+    if (sefSubmissions.length > 0) {
+      const sef = sefSubmissions[0]!;
+      overallSefRating = sef.setRating !== null ? Number(sef.setRating) : null;
+      allSupervisorEvaluationIds.push(sef.id);
 
-        const sum = sefSubmissions.reduce(
-          (acc, curr) => acc + (curr.setRating ? Number(curr.setRating) : 0),
-          0,
-        );
-        overallSefRating = Number((sum / sefSubmissions.length).toFixed(2));
-
-        for (const sef of sefSubmissions) {
-          if (sef.comment && sef.comment.trim().length > 3) {
-            supervisorCommentsList.push({
-              evaluator_name: `${sef.evaluatorFirst} ${sef.evaluatorLast}`,
-              evaluator_role: "Academic Supervisor",
-              comment: sef.comment.trim(),
-              submitted_at: sef.submittedAt
-                ? new Date(sef.submittedAt).toISOString()
-                : new Date().toISOString(),
-            });
-          }
-        }
+      if (sef.comment && sef.comment.trim().length > 3) {
+        supervisorCommentsList.push({
+          evaluator_name: `${sef.evaluatorFirst} ${sef.evaluatorLast}`,
+          evaluator_role: "Academic Supervisor",
+          comment: sef.comment.trim(),
+          submitted_at: sef.submittedAt
+            ? new Date(sef.submittedAt).toISOString()
+            : new Date().toISOString(),
+        });
       }
     }
 
