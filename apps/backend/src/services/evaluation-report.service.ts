@@ -123,7 +123,7 @@ export class EvaluationReportService implements IEvaluationReportService {
     client: DbClient = db,
   ): ResultAsync<AnnexCFacultyReport, AppError> {
     return WithTransaction(client, async (tx) => {
-      this.enforceReportReadAccess(facultyId, semesterId, actorUser, tx);
+      await this.enforceReportReadAccess(facultyId, semesterId, actorUser, tx);
 
       const actorRoles = actorUser.roles ?? [];
       const isPlainFaculty =
@@ -161,6 +161,8 @@ export class EvaluationReportService implements IEvaluationReportService {
           "No published evaluation report is currently available for this semester.",
         );
       }
+
+      await this.validateEvaluationWindowsConcluded(semesterId, tx);
 
       return this.computeAndUpsertReport(semesterId, facultyId, "ANNEX_C_WEIGHTED", tx);
     });
@@ -939,6 +941,10 @@ export class EvaluationReportService implements IEvaluationReportService {
         courseCode: `Subject #${i + 1}`,
         courseName: `Subject #${i + 1}`,
         yearSection: `Class #${i + 1}`,
+        programId: off.programId,
+        programCode: off.programCode,
+        collegeId: off.collegeId,
+        collegeCode: off.collegeCode,
         noOfStudents: classEvaluatedStudents,
         averageSetRating,
         weightedScore,

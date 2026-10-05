@@ -36,13 +36,14 @@ const mergePulses = (...pulseGroups: LiveEvaluationPulseEvent[][]): LiveEvaluati
   );
 };
 
-/**
- * Real-Time Socket.io hook that listens to 'evaluation:pulse' events
- * and prepends them to the live feed.
- */
 export function useLiveEvaluationPulse(initialPulses: LiveEvaluationPulseEvent[] = []) {
   const [livePulses, setLivePulses] = useState<LiveEvaluationPulseEvent[]>([]);
   const socketRef = useRef<Socket | null>(null);
+
+  const initialPulsesRef = useRef(initialPulses);
+  useEffect(() => {
+    initialPulsesRef.current = initialPulses;
+  }, [initialPulses]);
 
   const pulses = useMemo(
     () => mergePulses(initialPulses, livePulses).slice(0, 25),
@@ -53,13 +54,12 @@ export function useLiveEvaluationPulse(initialPulses: LiveEvaluationPulseEvent[]
     const token = localStorage.getItem("access_token");
     if (!token) return;
 
-    // Resolve socket URL from Vite env or fallback to current origin
     const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
     let socketBaseUrl = "http://localhost:5000";
     try {
       socketBaseUrl = new URL(apiUrl).origin;
     } catch {
-      // Keep default
+      // Fallback
     }
 
     const socket: Socket = io(socketBaseUrl, {
@@ -74,7 +74,7 @@ export function useLiveEvaluationPulse(initialPulses: LiveEvaluationPulseEvent[]
 
     socket.on("evaluation:pulse", (event: LiveEvaluationPulseEvent) => {
       setLivePulses((prev) => {
-        const existingIds = new Set([...initialPulses, ...prev].map((pulse) => pulse.id));
+        const existingIds = new Set([...initialPulsesRef.current, ...prev].map((p) => p.id));
         if (existingIds.has(event.id)) return prev;
         return [event, ...prev].slice(0, 25);
       });
@@ -83,7 +83,7 @@ export function useLiveEvaluationPulse(initialPulses: LiveEvaluationPulseEvent[]
     return () => {
       socket.disconnect();
     };
-  }, [initialPulses]);
+  }, []);
 
   return pulses;
 }

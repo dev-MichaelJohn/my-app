@@ -739,7 +739,7 @@ export class BulkImportService implements IBulkImportService {
             ? data.password.trim()
             : this.generateTemporaryPassword();
 
-        const passwordHash = bcrypt.hashSync(rawPassword, 10);
+        const passwordHash = await bcrypt.hash(rawPassword, 10);
 
         // 1. Insert Personal Details
         const [details] = await tx

@@ -17,7 +17,7 @@ import {
   StudentEvaluationQuestions,
   SupervisorEvaluationQuestions,
 } from "./evaluation-instrument.schema.js";
-import { CourseOfferings, StudentClasses } from "./institution.schema.js";
+import { StudentClasses } from "./institution.schema.js";
 import { Accounts } from "./auth.schema.js";
 
 export const SentimentClassificationEnum = pgEnum("sentiment_classification", [
@@ -84,7 +84,7 @@ export const SupervisorEvaluations = pgTable(
       .references(() => Accounts.id),
     faculty_id: integer("faculty_id")
       .notNull()
-      .references(() => CourseOfferings.id),
+      .references(() => Accounts.id),
     comment: text("comment"),
     comment_score: decimal("comment_score", { precision: 5, scale: 2 }), // Normalized polarity (-1.00 to 1.00)
     comment_sentiment: SentimentClassificationEnum("comment_sentiment"), // POSITIVE | NEUTRAL | NEGATIVE | MIXED

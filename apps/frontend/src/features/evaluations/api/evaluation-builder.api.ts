@@ -254,7 +254,7 @@ export class EvaluationBuilderAPI {
   }
 
   reorderMeansDescriptors(questionId: number, orderedIds: number[]): ResultAsync<void, ApiError> {
-    return http.put<void>(`/evaluation-builder/supervisor/questions/${questionId}/reorder-means`, {
+    return http.put<void>(`/evaluation-builder/supervisor/questions/${questionId}/means/reorder`, {
       orderedIds,
     });
   }

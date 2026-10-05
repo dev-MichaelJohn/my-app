@@ -34,6 +34,6 @@ export class OfferingAPI {
   }
 
   restoreOffering(id: number): ResultAsync<GetOffering, ApiError> {
-    return http.delete<GetOffering>(`/offerings/${id}`);
+    return http.put<GetOffering>(`/offerings/${id}/restore`);
   }
 }

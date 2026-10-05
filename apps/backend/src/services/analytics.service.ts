@@ -111,7 +111,7 @@ export class AnalyticsService implements IAnalyticsService {
         );
 
       const allFacultyIds = Array.from(new Set(allReports.map((r) => r.faculty_id)));
-      const affiliationMap = await this.getFacultyAffiliations(allFacultyIds, tx);
+      const affiliationMap = await this.getFacultyAffiliations(allFacultyIds, semesterIds, tx);
 
       const currentSemesterReports = allReports.filter((r) => r.semester_id === activeSemester.id);
 
@@ -519,6 +519,7 @@ export class AnalyticsService implements IAnalyticsService {
   // ==========================================
   private async getFacultyAffiliations(
     facultyIds: number[],
+    semesterIds: number[],
     tx: PgTransaction,
   ): Promise<Map<number, { collegeIds: Set<number>; programIds: Set<number> }>> {
     const map = new Map<number, { collegeIds: Set<number>; programIds: Set<number> }>();
@@ -536,7 +537,11 @@ export class AnalyticsService implements IAnalyticsService {
       .innerJoin(Programs, eq(Courses.program_id, Programs.id))
       .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
       .where(
-        and(inArray(CourseOfferings.faculty_id, facultyIds), isNull(CourseOfferings.deleted_at)),
+        and(
+          inArray(CourseOfferings.faculty_id, facultyIds),
+          inArray(CourseOfferings.semester_id, semesterIds),
+          isNull(CourseOfferings.deleted_at),
+        ),
       );
 
     for (const r of rows) {

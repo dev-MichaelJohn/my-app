@@ -27,9 +27,10 @@ export const EVALUATION_FORMULAS: Record<string, FormulaDefinition> = {
     name: "CHED CMO 19 S. 2025",
     description: "CHED Formula: scales total score against 75 points to 100%",
     formulaDisplay: "(Total Score / 75) × 100",
-    calculate: ({ totalScore }) => {
+    calculate: ({ totalScore, maxPossibleScore }) => {
       if (totalScore <= 0) return 0;
-      const result = (totalScore / 75) * 100;
+      const divisor = maxPossibleScore > 0 ? maxPossibleScore : 75;
+      const result = (totalScore / divisor) * 100;
       return Number(Math.min(100, Math.max(0, result)).toFixed(2));
     },
   },

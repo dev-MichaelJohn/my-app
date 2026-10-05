@@ -511,15 +511,14 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
               eq(StudentEvaluations.schedule_id, data.schedule_id),
               eq(StudentEvaluations.student_class_id, data.student_class_id),
             ),
-          );
+          )
+          .for("update");
 
         if (existing && existing.submitted_at !== null) {
           throw new AppError(409, "You have already submitted an evaluation for this subject.");
         }
 
-        // ══════════════════════════════════════════════════════════════════
-        // 🔌 PLUG-AND-PLAY FORMULA CALCULATION (SET)
-        // ══════════════════════════════════════════════════════════════════
+        // Calculate Likert Mean
         let computedRating: number | null = null;
         if (data.ratings.length > 0) {
           const [formRecord] = await tx
@@ -545,7 +544,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
             maxRating: maxRatingPerQ,
           });
         }
-        // ══════════════════════════════════════════════════════════════════
 
         const sentiment = data.comment ? analyzeCommentSentiment(data.comment) : null;
         const commentScore = sentiment ? sentiment.score : null;
@@ -596,9 +594,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           await tx.insert(StudentEvaluationRatings).values(ratingInserts);
         }
 
-        // ══════════════════════════════════════════════════════════════════
-        // 📡 REAL-TIME PULSE BROADCAST (Only when finalized, strictly anonymous)
-        // ══════════════════════════════════════════════════════════════════
         if (!data.is_draft) {
           const [offeringMeta] = await tx
             .select({
@@ -1017,7 +1012,8 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
               eq(SupervisorEvaluations.evaluator_id, evaluatorAccountId),
               eq(SupervisorEvaluations.faculty_id, data.faculty_id),
             ),
-          );
+          )
+          .for("update");
 
         if (existing && existing.submitted_at !== null) {
           throw new AppError(

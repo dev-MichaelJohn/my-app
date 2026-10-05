@@ -45,7 +45,7 @@ ClassStudentRouter.delete(
 ClassStudentRouter.put(
   "/:id/restore",
   RequirePermission(PERMISSIONS.CLASS_STUDENT_UPDATE),
-  classStudentController.updateClassStudent,
+  classStudentController.restoreClassStudent,
 );
 
 export default ClassStudentRouter;

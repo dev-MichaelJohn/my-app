@@ -24,9 +24,26 @@ apiClient.interceptors.request.use((config) => {
   if (inMemoryToken) {
     config.headers.Authorization = `Bearer ${inMemoryToken}`;
   }
-
   return config;
 });
+
+// ── 🛡️ In-Flight Mutex & Queue to prevent Refresh Token Race Conditions ──
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (error: any) => void;
+}> = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else if (token) {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
 
 apiClient.interceptors.response.use(
   (response) => {
@@ -36,21 +53,71 @@ apiClient.interceptors.response.use(
     }
     return response;
   },
-  (error: AxiosError) => {
-    const requestUrl = error.config?.url || "";
+  async (error: AxiosError) => {
+    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
+    const requestUrl = originalRequest?.url || "";
+
     const isAuthRequest =
       requestUrl.includes("/auth/login") ||
       requestUrl.includes("/auth/verify-otp") ||
       requestUrl.includes("/auth/me");
 
     const isAuthPage =
-      window.location.pathname === "/" ||
-      window.location.pathname.includes("/login") ||
-      window.location.pathname.includes("/auth");
+      typeof window !== "undefined" &&
+      (window.location.pathname === "/" ||
+        window.location.pathname.includes("/login") ||
+        window.location.pathname.includes("/auth"));
+
+    // Check if error is 401 and request hasn't been retried yet
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {
+      if (isRefreshing) {
+        // Queue this request until the in-flight refresh completes
+        return new Promise<string>((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${token}`;
+            }
+            return apiClient.request(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        // Trigger a single /auth/me call with withCredentials: true so the backend rotates the cookie
+        const refreshResponse = await apiClient.get<APIResponse<any>>("/auth/me");
+        const newAccessToken =
+          refreshResponse.headers["x-access-token"] || localStorage.getItem("access_token");
+
+        if (newAccessToken) {
+          setAccessToken(newAccessToken);
+          processQueue(null, newAccessToken);
+          if (originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+          }
+          return apiClient.request(originalRequest);
+        }
+      } catch (refreshErr) {
+        processQueue(refreshErr, null);
+        setAccessToken(null);
+        if (!isAuthPage && typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+        return Promise.reject(refreshErr);
+      } finally {
+        isRefreshing = false;
+      }
+    }
 
     if (error.response?.status === 401 && !isAuthRequest && !isAuthPage) {
       setAccessToken(null);
-      window.location.href = "/login";
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
     }
 
     return Promise.reject(error);
