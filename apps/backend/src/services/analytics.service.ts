@@ -16,6 +16,8 @@ import {
   StudentEvaluations,
   StudentEvaluationSchedules,
   SupervisorEvaluations,
+  SupervisorEvaluationSchedules,
+  ProgramChairs,
   type AnalyticsQuery,
   type ComprehensiveAnalyticsReport,
   type LongitudinalPoint,
@@ -40,6 +42,7 @@ import {
   SQL,
   count,
   countDistinct,
+  ne,
 } from "drizzle-orm";
 import { type ResultAsync } from "neverthrow";
 
@@ -247,7 +250,7 @@ export class AnalyticsService implements IAnalyticsService {
         scopeConditions.push(inArray(Programs.id, chairProgramIds));
       }
 
-      // 4. Compute High-Level Metrics
+      // 4. Compute High-Level Metrics (SET)
       const [enrolledCount] = await tx
         .select({ total: count(StudentClasses.id) })
         .from(StudentClasses)
@@ -295,16 +298,72 @@ export class AnalyticsService implements IAnalyticsService {
 
       const totalFacultyEvaluated = distinctFacultyCount?.total ?? 0;
 
+      // ── 🔑 SEF Submissions Count (Updated: Faculty-centric, exactly 1 SEF per faculty) ──
+      let sefFacultyScopeFilter: SQL | undefined = undefined;
+
+      if (isDean) {
+        // Chairs under Dean's colleges
+        const chairAccounts = await tx
+          .select({ chairId: ProgramChairs.chair_id })
+          .from(ProgramChairs)
+          .innerJoin(Programs, eq(ProgramChairs.program_id, Programs.id))
+          .where(
+            and(
+              inArray(Programs.college_id, deanCollegeIds),
+              isNull(ProgramChairs.deleted_at),
+              isNull(Programs.deleted_at),
+            ),
+          );
+        const targetIds = chairAccounts.map((c) => c.chairId);
+        sefFacultyScopeFilter =
+          targetIds.length > 0 ? inArray(SupervisorEvaluations.faculty_id, targetIds) : sql`false`;
+      } else if (isChair) {
+        // Regular faculty teaching in Chair's programs
+        const allChairs = await tx
+          .select({ chairId: ProgramChairs.chair_id })
+          .from(ProgramChairs)
+          .where(isNull(ProgramChairs.deleted_at));
+        const allChairIds = new Set(allChairs.map((c) => c.chairId));
+
+        const deptOfferings = await tx
+          .selectDistinct({ facultyId: CourseOfferings.faculty_id })
+          .from(CourseOfferings)
+          .innerJoin(
+            CourseCurriculums,
+            eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+          )
+          .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+          .where(
+            and(
+              inArray(Courses.program_id, chairProgramIds),
+              eq(CourseOfferings.semester_id, activeSemester.id),
+              isNotNull(CourseOfferings.faculty_id),
+              isNull(CourseOfferings.deleted_at),
+            ),
+          );
+        const targetIds = deptOfferings
+          .map((d) => d.facultyId)
+          .filter((id): id is number => Boolean(id && !allChairIds.has(id)));
+
+        sefFacultyScopeFilter =
+          targetIds.length > 0 ? inArray(SupervisorEvaluations.faculty_id, targetIds) : sql`false`;
+      }
+
       const [supervisorCount] = await tx
         .select({ total: count(SupervisorEvaluations.id) })
         .from(SupervisorEvaluations)
         .innerJoin(
-          CourseOfferings,
-          eq(SupervisorEvaluations.course_offering_id, CourseOfferings.id),
+          SupervisorEvaluationSchedules,
+          eq(SupervisorEvaluations.schedule_id, SupervisorEvaluationSchedules.id),
         )
-        .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
-        .innerJoin(Programs, eq(Classes.program_id, Programs.id))
-        .where(and(...scopeConditions, isNotNull(SupervisorEvaluations.submitted_at)));
+        .where(
+          and(
+            eq(SupervisorEvaluationSchedules.semester_id, activeSemester.id),
+            isNotNull(SupervisorEvaluations.submitted_at),
+            sefFacultyScopeFilter,
+            ne(SupervisorEvaluations.faculty_id, actorUser.account.id), // Cannot evaluate self
+          ),
+        );
 
       const totalSupervisorSubmissions = supervisorCount?.total ?? 0;
 
@@ -321,14 +380,14 @@ export class AnalyticsService implements IAnalyticsService {
           totalExpected: sql<number>`COUNT(DISTINCT ${StudentClasses.id})::int`,
           completed: sql<number>`COUNT(DISTINCT ${StudentEvaluations.id}) FILTER (WHERE ${StudentEvaluations.submitted_at} IS NOT NULL)::int`,
           percentage: sql<number>`
-      ROUND(
-        COALESCE(
-          (COUNT(DISTINCT ${StudentEvaluations.id}) FILTER (WHERE ${StudentEvaluations.submitted_at} IS NOT NULL)::numeric / 
-           NULLIF(COUNT(DISTINCT ${StudentClasses.id}), 0)::numeric) * 100, 
-          0
-        ), 1
-      )::float
-    `,
+            ROUND(
+              COALESCE(
+                (COUNT(DISTINCT ${StudentEvaluations.id}) FILTER (WHERE ${StudentEvaluations.submitted_at} IS NOT NULL)::numeric / 
+                 NULLIF(COUNT(DISTINCT ${StudentClasses.id}), 0)::numeric) * 100, 
+                0
+              ), 1
+            )::float
+          `,
         })
         .from(Colleges)
         .innerJoin(Programs, eq(Programs.college_id, Colleges.id))
@@ -353,7 +412,7 @@ export class AnalyticsService implements IAnalyticsService {
         .where(collegeQueryCondition)
         .groupBy(Colleges.id, Colleges.name, Colleges.initialism);
 
-      // 6. Recent Pulses Initial State (Combined SET & SEF submissions, strictly anonymized)
+      // 6. Recent Pulses: Recent Student (SET) Submissions
       const recentStudentSubmissions = await tx
         .select({
           id: StudentEvaluations.id,
@@ -382,33 +441,29 @@ export class AnalyticsService implements IAnalyticsService {
         .orderBy(desc(StudentEvaluations.submitted_at))
         .limit(15);
 
+      // ── 🔑 Recent Pulses: Recent Supervisor (SEF) Submissions (Updated) ──
       const recentSupervisorSubmissions = await tx
         .select({
           id: SupervisorEvaluations.id,
           submittedAt: SupervisorEvaluations.submitted_at,
-          courseCode: Courses.initialism,
-          courseName: Courses.name,
-          programCode: Programs.initialism,
-          programId: Programs.id,
-          collegeCode: Colleges.initialism,
-          collegeId: Colleges.id,
-          yearLevel: Classes.year_level,
-          section: Classes.section,
+          facultyFirstName: PersonalDetails.first_name,
+          facultyLastName: PersonalDetails.last_name,
         })
         .from(SupervisorEvaluations)
         .innerJoin(
-          CourseOfferings,
-          eq(SupervisorEvaluations.course_offering_id, CourseOfferings.id),
+          SupervisorEvaluationSchedules,
+          eq(SupervisorEvaluations.schedule_id, SupervisorEvaluationSchedules.id),
         )
-        .innerJoin(
-          CourseCurriculums,
-          eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+        .innerJoin(Accounts, eq(SupervisorEvaluations.faculty_id, Accounts.id))
+        .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
+        .where(
+          and(
+            eq(SupervisorEvaluationSchedules.semester_id, activeSemester.id),
+            isNotNull(SupervisorEvaluations.submitted_at),
+            sefFacultyScopeFilter,
+            ne(SupervisorEvaluations.faculty_id, actorUser.account.id),
+          ),
         )
-        .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
-        .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
-        .innerJoin(Programs, eq(Classes.program_id, Programs.id))
-        .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
-        .where(and(...scopeConditions, isNotNull(SupervisorEvaluations.submitted_at)))
         .orderBy(desc(SupervisorEvaluations.submitted_at))
         .limit(10);
 
@@ -430,14 +485,14 @@ export class AnalyticsService implements IAnalyticsService {
           id: `pulse-sef-${r.id}`,
           type: "SEF" as const,
           timestamp: r.submittedAt ? new Date(r.submittedAt).toISOString() : now.toISOString(),
-          courseCode: r.courseCode,
-          courseName: r.courseName,
-          programCode: r.programCode,
-          programId: r.programId,
-          collegeCode: r.collegeCode,
-          collegeId: r.collegeId,
-          yearLevel: r.yearLevel,
-          section: r.section,
+          courseCode: "SEF",
+          courseName: `Semester Appraisal: ${r.facultyFirstName} ${r.facultyLastName}`,
+          programCode: "SUPERVISORY",
+          programId: 0,
+          collegeCode: "ACADEMICS",
+          collegeId: 0,
+          yearLevel: "N/A",
+          section: "TERM",
         })),
       ]
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
