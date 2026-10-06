@@ -421,7 +421,7 @@ export class UserService implements IUserService {
 
       let plainPassword = info.account.password;
       if (!plainPassword || plainPassword.trim().length === 0) {
-        plainPassword = this.generatePassword();
+        plainPassword = this.generatePassword(12);
       }
 
       return WithTransaction(client, async (tx) => {
@@ -682,7 +682,7 @@ export class UserService implements IUserService {
             updatedFieldsList.push({
               label: "Password",
               oldValue: "••••••••",
-              newValue: "•••••••• (Updated)",
+              newValue: `${a.password} (Updated)`,
             });
           }
 
