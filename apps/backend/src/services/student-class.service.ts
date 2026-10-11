@@ -6,6 +6,7 @@ import {
   CourseCurriculums,
   CourseOfferings,
   Courses,
+  Faculties,
   PersonalDetails,
   Programs,
   Semesters,
@@ -14,6 +15,7 @@ import {
   StudentClassQuerySchema,
   StudentClassUpdate,
   type GetStudentClass,
+  type GetUser,
   type IStudentClassInsert,
   type IStudentClassUpdate,
   type PaginatedData,
@@ -59,13 +61,18 @@ export interface IStudentClassService {
   createStudentClass(
     info: IStudentClassInsert,
     client?: DbClient,
+    actorUser?: GetUser,
   ): ResultAsync<GetStudentClass, AppError>;
   updateStudentClass(
     id: number,
     info: IStudentClassUpdate,
     client?: DbClient,
   ): ResultAsync<GetStudentClass, AppError>;
-  deleteStudentClass(id: number, client?: DbClient): ResultAsync<void, AppError>;
+  deleteStudentClass(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+  ): ResultAsync<void, AppError>;
   restoreStudentClass(id: number, client?: DbClient): ResultAsync<GetStudentClass, AppError>;
 }
 
@@ -359,22 +366,48 @@ export class StudentClassService implements IStudentClassService {
   createStudentClass(
     info: IStudentClassInsert,
     client: DbClient = db,
+    actorUser?: GetUser,
   ): ResultAsync<GetStudentClass, AppError> {
     return ValidateSchema(StudentClassInsert, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
         const isStudent = await this.userService.hasRole(parsed.student_account_id, "STUDENT", tx);
         if (isStudent.isErr()) throw isStudent.error;
-        if (!isStudent.value)
+        if (!isStudent.value) {
           throw new AppError(400, "The selected account does not have a STUDENT role.");
+        }
 
         const offeringResult = await this.offeringService.getOfferingById(
           parsed.course_offering_id,
           tx,
         );
         if (offeringResult.isErr()) throw offeringResult.error;
-
         const offering = offeringResult.value;
+
         await this.semesterService.validateSemesterOpen(offering.semester.id, tx);
+
+        // 🛡️ Scope check: If actor is FACULTY, verify they are the appointed teacher of this offering
+        if (actorUser) {
+          const roles = actorUser.roles ?? [];
+          const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+          const isSupervisor = roles.includes("SUPERVISOR");
+
+          if (!isPrivileged && !isSupervisor && roles.includes("FACULTY")) {
+            // Check if offering is assigned to this faculty member
+            const [myFaculty] = await tx
+              .select({ id: Faculties.id })
+              .from(Faculties)
+              .where(
+                and(eq(Faculties.account_id, actorUser.account.id), isNull(Faculties.deleted_at)),
+              );
+
+            if (!myFaculty || offering.faculty?.account.id !== actorUser.account.id) {
+              throw new AppError(
+                403,
+                "You can only enroll students into course offerings assigned to you.",
+              );
+            }
+          }
+        }
 
         const [existing] = await tx
           .select()
@@ -472,7 +505,11 @@ export class StudentClassService implements IStudentClassService {
     });
   }
 
-  deleteStudentClass(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteStudentClass(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getStudentClassById(id, tx);
       if (existing.isErr()) throw existing.error;
@@ -480,7 +517,21 @@ export class StudentClassService implements IStudentClassService {
 
       await this.semesterService.validateSemesterOpen(current.offering.semester.id, tx);
 
-      await this.checkStudentClassDependencies(current.student.account.id, current.offering.id, tx);
+      // 🛡️ Scope check: If actor is FACULTY, verify they teach this offering
+      if (actorUser) {
+        const roles = actorUser.roles ?? [];
+        const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+        const isSupervisor = roles.includes("SUPERVISOR");
+
+        if (!isPrivileged && !isSupervisor && roles.includes("FACULTY")) {
+          if (current.offering.faculty?.account.id !== actorUser.account.id) {
+            throw new AppError(
+              403,
+              "You can only unenroll students from course offerings assigned to you.",
+            );
+          }
+        }
+      }
 
       const [deleted] = await tx
         .update(StudentClasses)

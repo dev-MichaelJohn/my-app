@@ -30,11 +30,13 @@ export class StudentClassController {
   });
 
   createStudentClass = runAsync((req, _res) => {
-    return this.studentClassService.createStudentClass(req.body).map((data) => ({
-      status: 200,
-      message: "Student-class created successfully.",
-      data,
-    }));
+    return this.studentClassService
+      .createStudentClass(req.body, undefined, req.user)
+      .map((data) => ({
+        status: 200,
+        message: "Student-class created successfully.",
+        data,
+      }));
   });
 
   updateStudentClass = runAsync((req, _res) => {
@@ -49,11 +51,13 @@ export class StudentClassController {
 
   deleteStudentClass = runAsync((req, _res) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((studentClassId) => {
-      return this.studentClassService.deleteStudentClass(studentClassId).map(() => ({
-        status: 200,
-        message: "Student-class updated successfully.",
-        data: null,
-      }));
+      return this.studentClassService
+        .deleteStudentClass(studentClassId, undefined, req.user)
+        .map(() => ({
+          status: 200,
+          message: "Student-class updated successfully.",
+          data: null,
+        }));
     });
   });
 
