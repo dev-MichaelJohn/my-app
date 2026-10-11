@@ -228,6 +228,32 @@ export const ProgramChairs = pgTable(
   ],
 );
 
+export const Faculties = pgTable(
+  "faculties",
+  {
+    id: serial("id").primaryKey(),
+    account_id: integer("account_id")
+      .notNull()
+      .references(() => Accounts.id),
+    program_id: integer("program_id")
+      .notNull()
+      .references(() => Programs.id),
+    created_at: timestamp("created_at").notNull().defaultNow(),
+    updated_at: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    deleted_at: timestamp("deleted_at"),
+  },
+  (t) => [
+    uniqueIndex("uidx_active_faculty_account")
+      .on(t.account_id)
+      .where(sql`deleted_at IS NULL`),
+    index("idx_faculties_program_id").on(t.program_id),
+    index("idx_faculties_account_id").on(t.account_id),
+  ],
+);
+
 export const CourseOfferings = pgTable(
   "course_offerings",
   {
@@ -241,7 +267,7 @@ export const CourseOfferings = pgTable(
     semester_id: integer("semester_id")
       .notNull()
       .references(() => Semesters.id),
-    faculty_id: integer("faculty_id").references(() => Accounts.id),
+    faculty_id: integer("faculty_id").references(() => Faculties.id),
     created_at: timestamp("created_at").notNull().defaultNow(),
     updated_at: timestamp("updated_at")
       .notNull()

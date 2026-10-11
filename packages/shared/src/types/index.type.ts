@@ -21,3 +21,4 @@ export * from "./evaluation-formula.type.js";
 export * from "./evaluation-report.type.js";
 export * from "./consolidation-formula.type.js";
 export * from "./analytics.type.js";
+export * from "./faculty.type.js";
