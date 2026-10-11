@@ -5,6 +5,7 @@ import { AuthGuard, GuestGuard, PermissionGuard, RoleGuard } from "@/components/
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { PERMISSIONS } from "@my-app/shared";
 import FacultyPage from "@/features/faculties/page/FacultyPage";
+import AuditLogPage from "@/features/audit-logs/page/AuditLogPage";
 
 // ── Lazy-Loaded Pages ──
 const LandingPage = lazy(() => import("@/features/landing/page/LandingPage"));
@@ -90,6 +91,15 @@ const router = createBrowserRouter([
               {
                 path: "/admin/users",
                 element: <LazyRoute Component={UserPage} />,
+              },
+            ],
+          },
+          {
+            element: <RoleGuard allowedRoles={["SYS_ADMIN", "ADMIN"]} />,
+            children: [
+              {
+                path: "/admin/audit-logs",
+                element: <LazyRoute Component={AuditLogPage} />,
               },
             ],
           },

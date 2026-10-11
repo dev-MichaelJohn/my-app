@@ -17,6 +17,7 @@ import {
   Calendar,
   BookOpenCheck,
   TrendingUp,
+  History,
 } from "lucide-react";
 
 interface NavItem {
@@ -167,6 +168,12 @@ const NAVIGATION_SECTIONS: NavSection[] = [
         href: "/admin/users",
         icon: Users,
         permission: PERMISSIONS.ACCOUNT_READ,
+      },
+      {
+        title: "Audit Trail & Rollback",
+        href: "/admin/audit-logs",
+        icon: History,
+        permission: PERMISSIONS.AUDIT_LOG_READ,
       },
     ],
   },
