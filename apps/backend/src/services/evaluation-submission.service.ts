@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lte, gte, isNotNull, desc, asc } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, gte, isNotNull, desc, asc, ne } from "drizzle-orm";
 import { type ResultAsync } from "neverthrow";
 import db from "@/configs/db.config.js";
 import {
@@ -25,6 +25,7 @@ import {
   type TeachingStudentItem,
   SupervisorEvaluationForms,
   type EvaluableSupervisorFaculty,
+  Faculties,
 } from "@my-app/shared";
 import { AppError } from "@/libs/error.lib.js";
 import { ValidateSchema } from "@/libs/result.lib.js";
@@ -696,7 +697,30 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
       // 3. Determine subordinate faculty to evaluate based on scope
       const eligibleFacultyIds = new Set<number>();
 
-      // ── A. COLLEGE DEAN: Evaluates Program Chairs under their college (+ vacant chair programs) ──
+      // ── A. PROGRAM CHAIR: Evaluates regular faculty teaching in their program ──
+      if (chairProgramIds.length > 0) {
+        const allChairs = await tx
+          .select({ chairId: ProgramChairs.chair_id })
+          .from(ProgramChairs)
+          .where(isNull(ProgramChairs.deleted_at));
+        const allChairIds = new Set(allChairs.map((c) => c.chairId));
+
+        const deptOfferings = await tx
+          .select({
+            facultyId: Faculties.id,
+            accountId: Faculties.account_id,
+          })
+          .from(Faculties)
+          .where(and(inArray(Faculties.program_id, chairProgramIds), isNull(Faculties.deleted_at)));
+
+        deptOfferings.forEach((df) => {
+          if (df.accountId !== evaluatorAccountId && !allChairIds.has(df.accountId)) {
+            eligibleFacultyIds.add(df.facultyId);
+          }
+        });
+      }
+
+      // ── B. COLLEGE DEAN: Evaluates Program Chairs under their college (+ vacant chair programs) ──
       if (deanCollegeIds.length > 0) {
         const chairAccounts = await tx
           .select({ chairId: ProgramChairs.chair_id })
@@ -705,10 +729,12 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           .where(
             and(
               inArray(Programs.college_id, deanCollegeIds),
+              ne(ProgramChairs.chair_id, evaluatorAccountId),
               isNull(ProgramChairs.deleted_at),
               isNull(Programs.deleted_at),
             ),
           );
+
         chairAccounts.forEach((c) => eligibleFacultyIds.add(c.chairId));
 
         // Vacant Chair Coverage: Dean evaluates faculty in programs with no chair
@@ -736,38 +762,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           );
         vacantOfferings.forEach((v) => {
           if (v.facultyId) eligibleFacultyIds.add(v.facultyId);
-        });
-      }
-
-      // ── B. PROGRAM CHAIR: Evaluates regular faculty teaching in their program ──
-      if (chairProgramIds.length > 0) {
-        const allChairs = await tx
-          .select({ chairId: ProgramChairs.chair_id })
-          .from(ProgramChairs)
-          .where(isNull(ProgramChairs.deleted_at));
-        const allChairIds = new Set(allChairs.map((c) => c.chairId));
-
-        const deptOfferings = await tx
-          .selectDistinct({ facultyId: CourseOfferings.faculty_id })
-          .from(CourseOfferings)
-          .innerJoin(
-            CourseCurriculums,
-            eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
-          )
-          .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
-          .where(
-            and(
-              inArray(Courses.program_id, chairProgramIds),
-              eq(CourseOfferings.semester_id, activeSchedule.semester_id),
-              isNotNull(CourseOfferings.faculty_id),
-              isNull(CourseOfferings.deleted_at),
-            ),
-          );
-
-        deptOfferings.forEach((d) => {
-          if (d.facultyId && !allChairIds.has(d.facultyId)) {
-            eligibleFacultyIds.add(d.facultyId);
-          }
         });
       }
 
@@ -1022,7 +1016,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           );
         }
 
-        // 🔌 Formula calculation
         let computedRating: number | null = null;
         if (data.ratings.length > 0) {
           const [formRecord] = await tx
