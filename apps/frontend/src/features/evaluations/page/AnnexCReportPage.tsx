@@ -37,6 +37,7 @@ import {
   type ReportStatus,
 } from "@my-app/shared";
 import { Badge } from "@/components/ui/badge";
+import { AnnexCDocument } from "../components/AnnexCDocument";
 
 export default function AnnexCReportPage() {
   const { user, hasAnyPermission, isSysAdmin, isAdmin, isSupervisor, isFaculty, isDean, isChair } =
@@ -547,7 +548,6 @@ export default function AnnexCReportPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Faculty Summary Card */}
               <div className="p-4 bg-muted/40 border border-border rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-extrabold text-foreground">
@@ -580,6 +580,9 @@ export default function AnnexCReportPage() {
                   </div>
                 </div>
               </div>
+
+              {/* 🚀 Render Annex C Document for Supervisors */}
+              <AnnexCDocument report={activeReport} />
 
               {/* Visual Analytics */}
               <ReportAnalyticsCharts report={activeReport} />
