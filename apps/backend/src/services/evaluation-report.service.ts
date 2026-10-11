@@ -126,13 +126,6 @@ export class EvaluationReportService implements IEvaluationReportService {
     return WithTransaction(client, async (tx) => {
       await this.enforceReportReadAccess(facultyId, semesterId, actorUser, tx);
 
-      const actorRoles = actorUser.roles ?? [];
-      const isPlainFaculty =
-        actorRoles.includes("FACULTY") &&
-        !actorRoles.includes("SUPERVISOR") &&
-        !actorRoles.includes("ADMIN") &&
-        !actorRoles.includes("SYS_ADMIN");
-
       const [existing] = await tx
         .select()
         .from(IndividualFacultyReports)
@@ -144,28 +137,17 @@ export class EvaluationReportService implements IEvaluationReportService {
         );
 
       if (existing) {
-        // Plain faculty can only see their report once it is PUBLISHED
-        if (isPlainFaculty && existing.status !== "PUBLISHED") {
-          throw new AppError(
-            403,
-            "Your evaluation report for this semester is currently under supervisory review and has not yet been published.",
-          );
-        }
-
-        return this.hydrateReport(existing, tx);
-      }
-
-      // Plain faculty cannot trigger auto-computation of draft reports
-      if (isPlainFaculty) {
-        throw new AppError(
-          404,
-          "No published evaluation report is currently available for this semester.",
-        );
+        return this.hydrateReport(existing, tx, actorUser.account.id);
       }
 
       await this.validateEvaluationWindowsConcluded(semesterId, tx);
-
-      return this.computeAndUpsertReport(semesterId, facultyId, "ANNEX_C_WEIGHTED", tx);
+      return this.computeAndUpsertReport(
+        semesterId,
+        facultyId,
+        "ANNEX_C_WEIGHTED",
+        tx,
+        actorUser.account.id,
+      );
     });
   }
 
@@ -282,7 +264,7 @@ export class EvaluationReportService implements IEvaluationReportService {
           .where(eq(IndividualFacultyReports.id, reportId))
           .returning();
 
-        return this.hydrateReport(updated!, tx);
+        return this.hydrateReport(updated!, tx, actorUser.account.id);
       });
     });
   }
@@ -345,7 +327,7 @@ export class EvaluationReportService implements IEvaluationReportService {
           .where(eq(IndividualFacultyReports.id, reportId))
           .returning();
 
-        return this.hydrateReport(updated!, tx);
+        return this.hydrateReport(updated!, tx, actorUser.account.id);
       });
     });
   }
@@ -485,7 +467,7 @@ export class EvaluationReportService implements IEvaluationReportService {
         .where(eq(IndividualFacultyReports.id, reportId))
         .returning();
 
-      return this.hydrateReport(updated!, tx);
+      return this.hydrateReport(updated!, tx, actorUser.account.id);
     });
   }
 
@@ -670,7 +652,9 @@ export class EvaluationReportService implements IEvaluationReportService {
 
         if (!paginate) {
           const rows = await baseQuery;
-          const hydrated = await Promise.all(rows.map((r) => this.hydrateReport(r.report, tx)));
+          const hydrated = await Promise.all(
+            rows.map((r) => this.hydrateReport(r.report, tx, actorUser.account.id)),
+          );
           return createPaginatedData({
             data: hydrated,
             currentPage: 1,
@@ -691,7 +675,9 @@ export class EvaluationReportService implements IEvaluationReportService {
 
         const [rows, countRes] = await Promise.all([paginatedQuery, countQuery]);
         const totalItems = countRes[0]?.total ?? 0;
-        const hydrated = await Promise.all(rows.map((r) => this.hydrateReport(r.report, tx)));
+        const hydrated = await Promise.all(
+          rows.map((r) => this.hydrateReport(r.report, tx, actorUser.account.id)),
+        );
 
         return createPaginatedData({
           data: hydrated,
@@ -787,6 +773,7 @@ export class EvaluationReportService implements IEvaluationReportService {
     facultyId: number,
     formulaId: string,
     tx: PgTransaction,
+    actorUserId?: number,
   ): Promise<AnnexCFacultyReport> {
     const [semester] = await tx
       .select()
@@ -806,7 +793,6 @@ export class EvaluationReportService implements IEvaluationReportService {
 
     if (!faculty) throw new AppError(404, "Faculty member was not found.");
 
-    // ── 1. Resolve Teacher's Official Home Department via Faculties ──
     const [facultyAppointment] = await tx
       .select({
         facultyRecordId: Faculties.id,
@@ -826,11 +812,10 @@ export class EvaluationReportService implements IEvaluationReportService {
     if (!facultyAppointment) {
       throw new AppError(
         400,
-        "Cannot generate report: This instructor is not appointed to an academic program in Faculties.",
+        "Cannot generate report: This instructor is not appointed to an academic program.",
       );
     }
 
-    // Dynamic scale bounds from active templates
     const [setTemplate] = await tx
       .select({
         min_rating: StudentEvaluationForms.min_rating,
@@ -843,7 +828,7 @@ export class EvaluationReportService implements IEvaluationReportService {
     const minRating = setTemplate?.min_rating ?? 1;
     const maxRating = setTemplate?.max_rating ?? 5;
 
-    // ── 2. Query ALL Offerings taught by this teacher (using facultyRecordId) ──
+    // Fetch offerings taught by instructor
     const offerings = await tx
       .select({
         offeringId: CourseOfferings.id,
@@ -868,12 +853,11 @@ export class EvaluationReportService implements IEvaluationReportService {
       .where(
         and(
           eq(CourseOfferings.semester_id, semesterId),
-          eq(CourseOfferings.faculty_id, facultyAppointment.facultyRecordId), // 👈 Matches Faculties.id
+          eq(CourseOfferings.faculty_id, facultyAppointment.facultyRecordId),
           isNull(CourseOfferings.deleted_at),
         ),
       );
 
-    // 🔒 Guard: Do not generate an evaluation report if the user has 0 assigned teaching classes
     if (offerings.length === 0) {
       await tx
         .delete(IndividualFacultyReports)
@@ -883,11 +867,7 @@ export class EvaluationReportService implements IEvaluationReportService {
             eq(IndividualFacultyReports.faculty_id, facultyId),
           ),
         );
-
-      throw new AppError(
-        400,
-        "Cannot generate report: This user has no assigned teaching course offerings for this semester.",
-      );
+      throw new AppError(400, "Cannot generate report: No assigned teaching course offerings.");
     }
 
     const classBreakdown: ClassConsolidationInput[] = [];
@@ -910,7 +890,6 @@ export class EvaluationReportService implements IEvaluationReportService {
         );
 
       const enrolledIds = enrolled.map((e) => e.id);
-
       let classEvaluatedStudents = 0;
       let averageSetRating = 0;
       let weightedScore = 0;
@@ -936,7 +915,6 @@ export class EvaluationReportService implements IEvaluationReportService {
 
         if (classEvaluatedStudents > 0) {
           submissions.forEach((s) => allStudentEvaluationIds.push(s.id));
-
           const ratingSum = submissions.reduce(
             (acc, curr) => acc + (curr.setRating ? Number(curr.setRating) : 0),
             0,
@@ -959,13 +937,13 @@ export class EvaluationReportService implements IEvaluationReportService {
       grandTotalStudents += classEvaluatedStudents;
       grandTotalWeightedScore += weightedScore;
 
-      // ── MASKED COURSE AND SECTION (Hides real course code and section for ALL ROLES) ──
+      // Real course code, class section, and student count
       classBreakdown.push({
         seq: i + 1,
         offeringId: off.offeringId,
-        courseCode: `Subject #${i + 1}`,
-        courseName: `Subject #${i + 1}`,
-        yearSection: `Class #${i + 1}`,
+        courseCode: off.courseCode,
+        courseName: off.courseName,
+        yearSection: `${off.yearLevel}-${off.section}`,
         programId: off.programId,
         programCode: off.programCode,
         collegeId: off.collegeId,
@@ -977,7 +955,6 @@ export class EvaluationReportService implements IEvaluationReportService {
     }
 
     grandTotalWeightedScore = Number(grandTotalWeightedScore.toFixed(2));
-
     const consolidationFormula = getConsolidationFormulaById(formulaId);
     const overallSetRating = consolidationFormula.calculate({
       classes: classBreakdown,
@@ -1030,7 +1007,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       }
     }
 
-    // ── Compute Granular Analytics (SET and SEF per-category and per-indicator) dynamically ──
     const { setCategories, setIndicators } = await this.computeSetAnalytics(
       allStudentEvaluationIds,
       minRating,
@@ -1049,10 +1025,8 @@ export class EvaluationReportService implements IEvaluationReportService {
       setCategories,
       sefCategories,
     );
-
     const top5StudentComments = this.curateTop5Comments(allCollectedStudentComments);
 
-    // ── 3. Teacher's Authentic Home Department Name ──
     const homeDepartmentTitle = `${facultyAppointment.programName}, ${facultyAppointment.collegeName}`;
 
     const [existingReport] = await tx
@@ -1132,7 +1106,7 @@ export class EvaluationReportService implements IEvaluationReportService {
       reportRecord,
       faculty.details,
       semester,
-      homeDepartmentTitle, // 👈 Teacher's authentic Home Department
+      homeDepartmentTitle,
       minRating,
       maxRating,
       facultyAppointment.collegeId,
@@ -1140,12 +1114,96 @@ export class EvaluationReportService implements IEvaluationReportService {
       facultyAppointment.programId,
       facultyAppointment.programName,
       facultyAppointment.programCode,
+      actorUserId,
     );
+  }
+
+  private formatReportData(
+    report: typeof IndividualFacultyReports.$inferSelect,
+    details: typeof PersonalDetails.$inferSelect | undefined,
+    semester: typeof Semesters.$inferSelect,
+    departmentCollege: string,
+    minRating = 1,
+    maxRating = 5,
+    collegeId?: number | null,
+    collegeCode?: string | null,
+    programId?: number | null,
+    programName?: string | null,
+    programCode?: string | null,
+    actorUserId?: number,
+  ): AnnexCFacultyReport {
+    const facultyName = details
+      ? `${details.first_name} ${details.middle_name ? `${details.middle_name} ` : ""}${details.last_name}${details.suffix ? ` ${details.suffix}` : ""}`
+      : "Faculty Member";
+
+    const rawPlan = (report.fedaf_plan as FedafPlan) || {
+      areas_for_improvement: "",
+      proposed_activities: "",
+      action_plan: "",
+      supervisor_name: "",
+      supervisor_signed_at: null,
+      faculty_signed_at: null,
+    };
+
+    // 🔒 SELF-VIEW RESTRICTION:
+    // If the viewing user is the faculty member themselves (including a Dean/Chair viewing their own teaching report),
+    // they are ONLY permitted to see Annex D (FEDAF). Annex C breakdown, raw student comments, and class metrics are omitted.
+    const isOwnReport = actorUserId !== undefined && actorUserId === report.faculty_id;
+
+    const rawClassBreakdown = (report.class_breakdown as ClassConsolidationInput[]) || [];
+
+    return {
+      id: report.id,
+      faculty_id: report.faculty_id,
+      semester_id: report.semester_id,
+      faculty_name: facultyName,
+      faculty_rank: "Instructor / Faculty Member",
+      department_college: departmentCollege,
+      min_rating: minRating,
+      max_rating: maxRating,
+      ...(collegeId ? { college_id: collegeId } : {}),
+      ...(departmentCollege ? { college_name: departmentCollege } : {}),
+      ...(collegeCode ? { college_code: collegeCode } : {}),
+      ...(programId ? { program_id: programId } : {}),
+      ...(programName ? { program_name: programName } : {}),
+      ...(programCode ? { program_code: programCode } : {}),
+      semester_term: `${semester.semester_term} Semester`,
+      school_year: `A.Y. ${semester.school_year_start}-${semester.school_year_end}`,
+      overall_set_rating: Number(report.overall_set_rating),
+      overall_sef_rating:
+        report.overall_sef_rating !== null ? Number(report.overall_sef_rating) : null,
+      total_students_evaluated: isOwnReport ? 0 : report.total_students_evaluated,
+      total_classes: isOwnReport ? 0 : report.total_classes,
+      total_weighted_score: isOwnReport ? 0 : Number(report.total_weighted_score),
+      calculation_formula: report.calculation_formula,
+      // 🚀 Supervisors see real breakdown with course code, section & students. Faculty viewing own report get empty breakdown.
+      class_breakdown: isOwnReport ? [] : rawClassBreakdown,
+      student_comments: isOwnReport
+        ? []
+        : (report.student_comments as AnonymousFeedbackComment[]) || [],
+      supervisor_comments: (report.supervisor_comments as SupervisorFeedbackComment[]) || [],
+      set_category_analytics: isOwnReport
+        ? []
+        : (report.set_category_analytics as CategoryAnalytics[]) || [],
+      set_indicator_analytics: isOwnReport
+        ? []
+        : (report.set_indicator_analytics as IndicatorAnalytics[]) || [],
+      sef_category_analytics: (report.sef_category_analytics as CategoryAnalytics[]) || [],
+      sef_indicator_analytics: (report.sef_indicator_analytics as IndicatorAnalytics[]) || [],
+      analytics_summary: isOwnReport
+        ? { highestIndicators: [], lowestIndicators: [], categoryComparison: [] }
+        : (report.analytics_summary as any),
+      fedaf_plan: rawPlan,
+      status: report.status as ReportStatus,
+      created_at: report.created_at.toISOString(),
+      updated_at: report.updated_at.toISOString(),
+    };
   }
 
   private async hydrateReport(
     report: typeof IndividualFacultyReports.$inferSelect,
     tx: PgTransaction,
+    actorUserId?: number,
   ): Promise<AnnexCFacultyReport> {
     const [semester] = await tx
       .select()
@@ -1188,7 +1246,7 @@ export class EvaluationReportService implements IEvaluationReportService {
     const minRating = setTemplate?.min_rating ?? 1;
     const maxRating = setTemplate?.max_rating ?? 5;
 
-    // Teacher's authentic department title (e.g., "Bachelor of Physical Education, College of Arts and Sciences")
+    // Teacher's authentic department title
     const departmentCollege = facultyAppointment
       ? `${facultyAppointment.programName}, ${facultyAppointment.collegeName}`
       : "Academic Affairs";
@@ -1205,6 +1263,7 @@ export class EvaluationReportService implements IEvaluationReportService {
       facultyAppointment?.programId ?? null,
       facultyAppointment?.programName ?? null,
       facultyAppointment?.programCode ?? null,
+      actorUserId, // 👈 Forwards viewer ID to determine if it's a self-view or supervisory view
     );
   }
 
@@ -1592,92 +1651,6 @@ export class EvaluationReportService implements IEvaluationReportService {
     if (ratio >= 0.45) return "Sometimes Manifested (Satisfactory)";
     if (ratio >= 0.25) return "Seldom Manifested (Fair)";
     return "Never/Rarely Manifested (Poor)";
-  }
-
-  private formatReportData(
-    report: typeof IndividualFacultyReports.$inferSelect,
-    details: typeof PersonalDetails.$inferSelect | undefined,
-    semester: typeof Semesters.$inferSelect,
-    departmentCollege: string,
-    minRating = 1,
-    maxRating = 5,
-    collegeId?: number | null,
-    collegeCode?: string | null,
-    programId?: number | null,
-    programName?: string | null,
-    programCode?: string | null,
-    actorUserId?: number,
-  ): AnnexCFacultyReport {
-    const facultyName = details
-      ? `${details.first_name} ${details.middle_name ? `${details.middle_name} ` : ""}${details.last_name}${details.suffix ? ` ${details.suffix}` : ""}`
-      : "Faculty Member";
-
-    const rawPlan = (report.fedaf_plan as FedafPlan) || {
-      areas_for_improvement: "",
-      proposed_activities: "",
-      action_plan: "",
-      supervisor_name: "",
-      supervisor_signed_at: null,
-      faculty_signed_at: null,
-    };
-
-    const isOwnReport = actorUserId === report.faculty_id;
-    const isPublished = report.status === "PUBLISHED" || Boolean(rawPlan.supervisor_signed_at);
-
-    const sanitizedPlan: FedafPlan = {
-      ...rawPlan,
-      areas_for_improvement: isOwnReport && !isPublished ? "" : rawPlan.areas_for_improvement,
-      proposed_activities: isOwnReport && !isPublished ? "" : rawPlan.proposed_activities,
-      action_plan: isOwnReport && !isPublished ? "" : rawPlan.action_plan,
-    };
-
-    const rawClassBreakdown = (report.class_breakdown as ClassConsolidationInput[]) || [];
-    const sanitizedClassBreakdown: ClassConsolidationInput[] = rawClassBreakdown.map((c) => ({
-      ...c,
-      noOfStudents: null as any,
-    }));
-
-    return {
-      id: report.id,
-      faculty_id: report.faculty_id,
-      semester_id: report.semester_id,
-      faculty_name: facultyName,
-      faculty_rank: "Instructor / Faculty Member",
-      department_college: departmentCollege,
-      min_rating: minRating,
-      max_rating: maxRating,
-      ...(collegeId !== undefined && collegeId !== null ? { college_id: collegeId } : {}),
-      ...(departmentCollege ? { college_name: departmentCollege } : {}),
-      ...(collegeCode !== undefined && collegeCode !== null ? { college_code: collegeCode } : {}),
-      ...(programId !== undefined && programId !== null ? { program_id: programId } : {}),
-      ...(programName !== undefined && programName !== null ? { program_name: programName } : {}),
-      ...(programCode !== undefined && programCode !== null ? { program_code: programCode } : {}),
-      semester_term: `${semester.semester_term} Semester`,
-      school_year: `A.Y. ${semester.school_year_start}-${semester.school_year_end}`,
-      overall_set_rating: Number(report.overall_set_rating),
-      overall_sef_rating:
-        report.overall_sef_rating !== null ? Number(report.overall_sef_rating) : null,
-      total_students_evaluated: report.total_students_evaluated,
-      total_classes: report.total_classes,
-      total_weighted_score: Number(report.total_weighted_score),
-      calculation_formula: report.calculation_formula,
-      class_breakdown: sanitizedClassBreakdown,
-      student_comments: (report.student_comments as AnonymousFeedbackComment[]) || [],
-      supervisor_comments: (report.supervisor_comments as SupervisorFeedbackComment[]) || [],
-      set_category_analytics: (report.set_category_analytics as CategoryAnalytics[]) || [],
-      set_indicator_analytics: (report.set_indicator_analytics as IndicatorAnalytics[]) || [],
-      sef_category_analytics: (report.sef_category_analytics as CategoryAnalytics[]) || [],
-      sef_indicator_analytics: (report.sef_indicator_analytics as IndicatorAnalytics[]) || [],
-      analytics_summary: (report.analytics_summary as EvaluationAnalyticsSummary) || {
-        highestIndicators: [],
-        lowestIndicators: [],
-        categoryComparison: [],
-      },
-      fedaf_plan: sanitizedPlan,
-      status: report.status as ReportStatus,
-      created_at: report.created_at.toISOString(),
-      updated_at: report.updated_at.toISOString(),
-    };
   }
 
   private curateTop5Comments(comments: AnonymousFeedbackComment[]): AnonymousFeedbackComment[] {
