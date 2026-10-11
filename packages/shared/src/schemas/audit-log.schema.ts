@@ -24,6 +24,12 @@ export const AuditActionEnum = pgEnum("audit_action", [
   "BULK_IMPORT",
 ]);
 
+export interface AuditDiff {
+  oldValues?: Record<string, any> | undefined;
+  newValues?: Record<string, any> | undefined;
+  changedFields?: string[] | undefined;
+}
+
 export const AuditLogs = pgTable(
   "audit_logs",
   {
@@ -32,21 +38,16 @@ export const AuditLogs = pgTable(
     actor_email: varchar("actor_email", { length: 255 }).notNull(),
     actor_name: varchar("actor_name", { length: 255 }).notNull(),
     action: AuditActionEnum("action").notNull(),
-    entity: varchar("entity", { length: 64 }).notNull(), // e.g. "colleges", "programs", "courses", "classes", "users"
+    entity: varchar("entity", { length: 64 }).notNull(),
     entity_id: integer("entity_id").notNull(),
-    entity_name: varchar("entity_name", { length: 255 }).notNull(), // Human-friendly descriptor (e.g. "BSIT", "04-0204-20")
+    entity_name: varchar("entity_name", { length: 255 }).notNull(),
 
-    // Snapshot payload storing previous and new state
-    diff: jsonb("diff").$type<{
-      oldValues?: Record<string, any>;
-      newValues?: Record<string, any>;
-      changedFields?: string[];
-    }>(),
+    // 🚀 Added | undefined | null to satisfy exactOptionalPropertyTypes
+    diff: jsonb("diff").$type<AuditDiff | null | undefined>(),
 
     ip_address: varchar("ip_address", { length: 64 }),
     user_agent: text("user_agent"),
 
-    // Rollback Tracking
     is_rollbackable: boolean("is_rollbackable").notNull().default(true),
     rolled_back_at: timestamp("rolled_back_at"),
     rolled_back_by: integer("rolled_back_by").references(() => Accounts.id, {

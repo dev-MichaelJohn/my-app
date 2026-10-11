@@ -90,6 +90,7 @@ export const PERMISSIONS = {
 
   SYSTEM_LOG_READ: "log:read",
   AUDIT_LOG_READ: "audit:read",
+  AUDIT_LOG_ROLLBACK: "audit:rollback",
 
   ANALYTICS_VIEW_INSTITUTION: "analytics:view-institution",
   ANALYTICS_VIEW_COLLEGE: "analytics:view-college",

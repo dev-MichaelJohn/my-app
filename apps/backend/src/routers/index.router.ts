@@ -18,6 +18,7 @@ import SubmissionRouter from "./evaluation-submission.router.js";
 import ReportRouter from "./evaluation-report.router.js";
 import AnalyticsRouter from "./analytics.router.js";
 import FacultyRouter from "./faculty.router.js";
+import AuditRouter from "./audit.router.js";
 import { checkSystemHealth } from "@/libs/health.lib.js";
 
 const V1Router: IRouter = Router();
@@ -51,5 +52,6 @@ V1Router.use("/evaluation-submissions", SubmissionRouter);
 V1Router.use("/evaluation-reports", ReportRouter);
 V1Router.use("/analytics", AnalyticsRouter);
 V1Router.use("/faculties", FacultyRouter);
+V1Router.use("/audit-logs", AuditRouter);
 
 export default V1Router;
