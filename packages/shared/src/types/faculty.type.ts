@@ -6,8 +6,8 @@ import z from "zod";
 
 export const FacultySelect = createSelectSchema(Faculties);
 export const FacultyInsert = createInsertSchema(Faculties, {
-  account_id: z.coerce.number().int().positive("Please select a valid user account."),
-  program_id: z.coerce.number().int().positive("Please select a valid program."),
+  account_id: z.number().int().positive("Please select a valid user account."),
+  program_id: z.number().int().positive("Please select a valid program."),
 }).omit({ id: true, created_at: true, updated_at: true, deleted_at: true });
 
 export const FacultyUpdate = createUpdateSchema(Faculties).omit({

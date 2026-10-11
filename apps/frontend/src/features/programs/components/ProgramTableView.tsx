@@ -26,6 +26,7 @@ import {
   BookOpen,
   Layers,
   School,
+  Users,
 } from "lucide-react";
 import { PERMISSIONS, type GetCollege, type GetProgram } from "@my-app/shared";
 import { useNavigate } from "react-router";
@@ -139,10 +140,21 @@ export function ProgramTableView({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent
                         align="end"
-                        className="w-44 border-border bg-popover text-popover-foreground"
+                        className="w-48 border-border bg-popover text-popover-foreground"
                       >
                         {!isArchivedView ? (
                           <>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                navigate(
+                                  `/admin/faculties?program_id=${item.program.id}&college_id=${item.program.college_id}`,
+                                )
+                              }
+                              className="gap-2 cursor-pointer font-medium text-primary focus:bg-primary/10"
+                            >
+                              <Users className="w-4 h-4 text-primary" />
+                              <span>View Faculty Roster</span>
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>
                                 navigate(`/admin/courses?program_id=${item.program.id}`)

@@ -70,6 +70,16 @@ export default function FacultyPage() {
     return programsList.filter((p) => p.program.college_id === effectiveCollegeId);
   }, [programsList, effectiveCollegeId]);
 
+  const selectedCollege = useMemo(
+    () => collegesList.find((c) => c.college.id === effectiveCollegeId),
+    [collegesList, effectiveCollegeId],
+  );
+
+  const selectedProgram = useMemo(
+    () => programsList.find((p) => p.program.id === effectiveProgramId),
+    [programsList, effectiveProgramId],
+  );
+
   const [paginate, setPaginate] = useState(true);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -191,7 +201,18 @@ export default function FacultyPage() {
             onValueChange={handleCollegeFilterChange}
           >
             <SelectTrigger className="w-full bg-card border-border text-xs h-9 shadow-2xs">
-              <SelectValue placeholder="All Colleges" />
+              <SelectValue placeholder="All Colleges">
+                {selectedCollege ? (
+                  <span className="truncate block text-left">
+                    <strong className="font-mono text-primary mr-1">
+                      {selectedCollege.college.initialism}
+                    </strong>
+                    <span className="text-muted-foreground">({selectedCollege.college.name})</span>
+                  </span>
+                ) : (
+                  "All Colleges"
+                )}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="bg-popover border-border text-xs max-w-sm">
               <SelectItem value="all">All Colleges</SelectItem>
@@ -211,7 +232,18 @@ export default function FacultyPage() {
             onValueChange={handleProgramFilterChange}
           >
             <SelectTrigger className="w-full bg-card border-border text-xs h-9 shadow-2xs">
-              <SelectValue placeholder="All Programs" />
+              <SelectValue placeholder="All Programs">
+                {selectedProgram ? (
+                  <span className="truncate block text-left">
+                    <strong className="font-mono text-primary mr-1">
+                      {selectedProgram.program.initialism}
+                    </strong>
+                    <span className="text-muted-foreground">({selectedProgram.program.name})</span>
+                  </span>
+                ) : (
+                  "All Programs"
+                )}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="bg-popover border-border text-xs max-w-sm">
               <SelectItem value="all">All Programs</SelectItem>

@@ -108,7 +108,13 @@ function FormInner({
       program_id: facultyToEdit?.program_id || defaultProgramId || programs[0]?.program.id || 0,
     } as IFacultyInsert,
     validators: {
-      onChange: FacultyInsert,
+      onChange: ({ value }) => {
+        const result = FacultyInsert.safeParse(value);
+        if (!result.success) {
+          return result.error.issues[0]?.message;
+        }
+        return undefined;
+      },
     },
     onSubmit: ({ value }) => {
       setPendingValues({

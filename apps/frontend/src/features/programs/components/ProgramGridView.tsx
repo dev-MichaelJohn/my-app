@@ -20,6 +20,7 @@ import {
   BookOpen,
   Layers,
   School,
+  Users,
 } from "lucide-react";
 import { PERMISSIONS, type GetCollege, type GetProgram } from "@my-app/shared";
 import { useNavigate } from "react-router";
@@ -91,9 +92,20 @@ export function ProgramGridView({
                       <MoreVertical className="w-4 h-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44 border-border bg-popover">
+                  <DropdownMenuContent align="end" className="w-48 border-border bg-popover">
                     {!isArchivedView ? (
                       <>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            navigate(
+                              `/admin/faculties?program_id=${item.program.id}&college_id=${item.program.college_id}`,
+                            )
+                          }
+                          className="gap-2 cursor-pointer font-medium text-primary focus:bg-primary/10"
+                        >
+                          <Users className="w-4 h-4 text-primary" />
+                          <span>View Faculty Roster</span>
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => navigate(`/admin/courses?program_id=${item.program.id}`)}
                           className="gap-2 cursor-pointer"
@@ -194,31 +206,44 @@ export function ProgramGridView({
                 )}
               </div>
 
+              {/* 🚀 4-Button Action Grid (Courses, Syllabus, Classes, Faculty) */}
               {!isArchivedView && (
-                <div className="grid grid-cols-3 gap-1 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      navigate(
+                        `/admin/faculties?program_id=${item.program.id}&college_id=${item.program.college_id}`,
+                      )
+                    }
+                    className="text-[11px] px-1.5 h-7 border-border bg-card hover:bg-muted text-foreground"
+                  >
+                    <Users className="w-3 h-3 text-primary mr-1 shrink-0" /> Faculty
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => navigate(`/admin/courses?program_id=${item.program.id}`)}
-                    className="text-[11px] px-2 h-7 border-border bg-card hover:bg-muted text-foreground"
+                    className="text-[11px] px-1.5 h-7 border-border bg-card hover:bg-muted text-foreground"
                   >
-                    <BookOpen className="w-3 h-3 text-primary mr-1" /> Courses
+                    <BookOpen className="w-3 h-3 text-primary mr-1 shrink-0" /> Courses
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => navigate(`/admin/curriculums?program_id=${item.program.id}`)}
-                    className="text-[11px] px-2 h-7 border-border bg-card hover:bg-muted text-foreground"
+                    className="text-[11px] px-1.5 h-7 border-border bg-card hover:bg-muted text-foreground"
                   >
-                    <Layers className="w-3 h-3 text-primary mr-1" /> Syllabus
+                    <Layers className="w-3 h-3 text-primary mr-1 shrink-0" /> Syllabus
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => navigate(`/admin/classes?program_id=${item.program.id}`)}
-                    className="text-[11px] px-2 h-7 border-border bg-card hover:bg-muted text-foreground"
+                    className="text-[11px] px-1.5 h-7 border-border bg-card hover:bg-muted text-foreground"
                   >
-                    <School className="w-3 h-3 text-primary mr-1" /> Classes
+                    <School className="w-3 h-3 text-primary mr-1 shrink-0" /> Classes
                   </Button>
                 </div>
               )}
