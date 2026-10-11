@@ -27,7 +27,7 @@ export class CollegeController {
   });
 
   createCollege = runAsync((req, _res) => {
-    return this.collegeService.createCollege(req.body).map((data) => ({
+    return this.collegeService.createCollege(req.body, undefined, req.user).map((data) => ({
       status: 201,
       message: "College created successfully.",
       data,
@@ -36,17 +36,19 @@ export class CollegeController {
 
   updateCollege = runAsync((req, _res) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((collegeId) => {
-      return this.collegeService.updateCollege(collegeId, req.body).map((data) => ({
-        status: 200,
-        message: "College updated successfully.",
-        data,
-      }));
+      return this.collegeService
+        .updateCollege(collegeId, req.body, undefined, req.user)
+        .map((data) => ({
+          status: 200,
+          message: "College updated successfully.",
+          data,
+        }));
     });
   });
 
   deleteCollege = runAsync((req, _res) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((collegeId) => {
-      return this.collegeService.deleteCollege(collegeId).map(() => ({
+      return this.collegeService.deleteCollege(collegeId, undefined, req.user).map(() => ({
         status: 200,
         message: "College archived successfully!",
         data: null,
@@ -56,7 +58,7 @@ export class CollegeController {
 
   restoreCollege = runAsync((req, _res) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((collegeId) => {
-      return this.collegeService.restoreCollege(collegeId).map((data) => ({
+      return this.collegeService.restoreCollege(collegeId, undefined, req.user).map((data) => ({
         status: 200,
         message: "College restored successfully!",
         data,

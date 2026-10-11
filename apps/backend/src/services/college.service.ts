@@ -41,6 +41,7 @@ import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import { createPaginatedData } from "@/libs/response.lib.js";
 import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
 import { UserService, type IUserService } from "./user.service.js";
+import { logAuditEvent } from "@/libs/audit.lib.js";
 
 export interface ICollegeService {
   getCollegeById(
@@ -53,14 +54,23 @@ export interface ICollegeService {
     client?: DbClient,
     actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetCollege[]>, AppError>;
-  createCollege(collegeInfo: CreateCollege, client?: DbClient): ResultAsync<GetCollege, AppError>;
+  createCollege(
+    collegeInfo: CreateCollege,
+    client?: DbClient,
+    actorUser?: GetUser,
+  ): ResultAsync<GetCollege, AppError>;
   updateCollege(
     id: number,
     collegeInfo: UpdateCollege,
     client?: DbClient,
+    actorUser?: GetUser,
   ): ResultAsync<GetCollege, AppError>;
-  deleteCollege(id: number, client?: DbClient): ResultAsync<void, AppError>;
-  restoreCollege(id: number, client?: DbClient): ResultAsync<GetCollege, AppError>;
+  deleteCollege(id: number, client?: DbClient, actorUser?: GetUser): ResultAsync<void, AppError>;
+  restoreCollege(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+  ): ResultAsync<GetCollege, AppError>;
   hasDeanships(accountId: number, tx: PgTransaction, excludeCollegeId?: number): Promise<boolean>;
   hasProgramChairRecords(
     accountId: number,
@@ -285,6 +295,7 @@ export class CollegeService implements ICollegeService {
   createCollege(
     collegeInfo: CreateCollege,
     client: DbClient = db,
+    actorUser?: GetUser,
   ): ResultAsync<GetCollege, AppError> {
     return ValidateSchema(CreateCollegeSchema, collegeInfo).asyncAndThen(({ college, dean }) => {
       return WithTransaction(client, async (tx) => {
@@ -328,6 +339,16 @@ export class CollegeService implements ICollegeService {
           .returning();
         if (!deanAssignment) throw new AppError(500, "Failed to assign dean to the college.");
 
+        await logAuditEvent({
+          actor: actorUser,
+          action: "CREATE",
+          entity: "colleges",
+          entityId: collegeRecord.id,
+          entityName: `${collegeRecord.initialism} - ${collegeRecord.name}`,
+          newRecord: collegeRecord,
+          tx,
+        });
+
         return {
           college: collegeRecord,
           dean: deanUser,
@@ -340,6 +361,7 @@ export class CollegeService implements ICollegeService {
     id: number,
     collegeInfo: UpdateCollege,
     client: DbClient = db,
+    actorUser?: GetUser,
   ): ResultAsync<GetCollege, AppError> {
     return ValidateSchema(UpdateCollegeSchema, collegeInfo).asyncAndThen(({ college, dean }) => {
       const hasCollegeInfo = Boolean(college && Object.keys(college).length > 0);
@@ -366,6 +388,17 @@ export class CollegeService implements ICollegeService {
 
           if (!updated) throw new AppError(500, "Failed to update college record.");
           updatedCollegeRecord = updated;
+
+          await logAuditEvent({
+            actor: actorUser,
+            action: "UPDATE",
+            entity: "colleges",
+            entityId: updated.id,
+            entityName: `${updated.initialism} - ${updated.name}`,
+            oldRecord: existingCollege.college,
+            newRecord: updated,
+            tx,
+          });
         }
 
         if (hasDeanInfo) {
@@ -467,7 +500,11 @@ export class CollegeService implements ICollegeService {
     });
   }
 
-  deleteCollege(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteCollege(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const result = await this.getCollegeById(id, tx);
       if (result.isErr()) throw result.error;
@@ -515,10 +552,24 @@ export class CollegeService implements ICollegeService {
         .returning();
       if (!deletedCollege)
         throw new AppError(404, "College was not found or has already been archived.");
+
+      await logAuditEvent({
+        actor: actorUser,
+        action: "DELETE",
+        entity: "colleges",
+        entityId: existingCollege.college.id,
+        entityName: `${existingCollege.college.initialism} - ${existingCollege.college.name}`,
+        oldRecord: existingCollege.college,
+        tx,
+      });
     });
   }
 
-  restoreCollege(id: number, client: DbClient = db): ResultAsync<GetCollege, AppError> {
+  restoreCollege(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+  ): ResultAsync<GetCollege, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getCollegeById(id, tx, true);
       if (existing.isErr()) throw existing.error;
@@ -558,6 +609,16 @@ export class CollegeService implements ICollegeService {
       if (!restored) {
         throw new AppError(500, "Failed to restore college.");
       }
+
+      await logAuditEvent({
+        actor: actorUser,
+        action: "RESTORE",
+        entity: "colleges",
+        entityId: restored.id,
+        entityName: `${restored.initialism} - ${restored.name}`,
+        newRecord: restored,
+        tx,
+      });
 
       return {
         college: restored,

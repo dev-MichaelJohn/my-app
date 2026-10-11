@@ -42,6 +42,7 @@ import {
 } from "drizzle-orm";
 import { ValidateSchema } from "@/libs/result.lib.js";
 import { createPaginatedData } from "@/libs/response.lib.js";
+import { logAuditEvent } from "@/libs/audit.lib.js";
 
 export interface IProgramService {
   getProgramById(
@@ -54,14 +55,23 @@ export interface IProgramService {
     client?: DbClient,
     actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetProgram[]>, AppError>;
-  createProgram(programInfo: CreateProgram, client?: DbClient): ResultAsync<GetProgram, AppError>;
+  createProgram(
+    programInfo: CreateProgram,
+    client?: DbClient,
+    actorUser?: GetUser,
+  ): ResultAsync<GetProgram, AppError>;
   updateProgram(
     id: number,
     programInfo: UpdateProgram,
     client?: DbClient,
+    actorUser?: GetUser,
   ): ResultAsync<GetProgram, AppError>;
-  deleteProgram(id: number, client?: DbClient): ResultAsync<void, AppError>;
-  restoreProgram(id: number, client?: DbClient): ResultAsync<GetProgram, AppError>;
+  deleteProgram(id: number, client?: DbClient, actorUser?: GetUser): ResultAsync<void, AppError>;
+  restoreProgram(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+  ): ResultAsync<GetProgram, AppError>;
 }
 
 export class ProgramService implements IProgramService {
@@ -291,6 +301,7 @@ export class ProgramService implements IProgramService {
   createProgram(
     programInfo: CreateProgram,
     client: DbClient = db,
+    actorUser?: GetUser,
   ): ResultAsync<GetProgram, AppError> {
     return ValidateSchema(CreateProgramSchema, programInfo).asyncAndThen(({ program, chair }) => {
       return WithTransaction(client, async (tx) => {
@@ -338,6 +349,16 @@ export class ProgramService implements IProgramService {
         if (!chairAssignment)
           throw new AppError(500, "Failed to assign program chair to the program.");
 
+        await logAuditEvent({
+          actor: actorUser,
+          action: "CREATE",
+          entity: "programs",
+          entityId: programRecord.id,
+          entityName: `${programRecord.initialism} - ${programRecord.name}`,
+          newRecord: programRecord,
+          tx,
+        });
+
         return {
           program: programRecord,
           chair: chairUser,
@@ -350,6 +371,7 @@ export class ProgramService implements IProgramService {
     id: number,
     programInfo: UpdateProgram,
     client: DbClient = db,
+    actorUser?: GetUser,
   ): ResultAsync<GetProgram, AppError> {
     return ValidateSchema(UpdateProgramSchema, programInfo).asyncAndThen(({ program, chair }) => {
       const hasProgramInfo = Boolean(program && Object.keys(program).length > 0);
@@ -378,6 +400,17 @@ export class ProgramService implements IProgramService {
             .where(and(eq(Programs.id, existingProgram.program.id), isNull(Programs.deleted_at)))
             .returning();
           if (!updated) throw new AppError(500, "Failed to update program record.");
+
+          await logAuditEvent({
+            actor: actorUser,
+            action: "UPDATE",
+            entity: "programs",
+            entityId: updated.id,
+            entityName: `${updated.initialism} - ${updated.name}`,
+            oldRecord: existingProgram.program,
+            newRecord: updated,
+            tx,
+          });
 
           updatedProgramRecord = updated;
         }
@@ -489,7 +522,11 @@ export class ProgramService implements IProgramService {
     });
   }
 
-  deleteProgram(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteProgram(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const getProgram = await this.getProgramById(id, tx);
       if (getProgram.isErr()) throw getProgram.error;
@@ -528,10 +565,24 @@ export class ProgramService implements IProgramService {
 
       if (!deletedProgram)
         throw new AppError(404, "Program record was not found or has already been archived.");
+
+      await logAuditEvent({
+        actor: actorUser,
+        action: "DELETE",
+        entity: "programs",
+        entityId: existingProgram.program.id,
+        entityName: `${existingProgram.program.initialism} - ${existingProgram.program.name}`,
+        oldRecord: existingProgram.program,
+        tx,
+      });
     });
   }
 
-  restoreProgram(id: number, client: DbClient = db): ResultAsync<GetProgram, AppError> {
+  restoreProgram(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+  ): ResultAsync<GetProgram, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getProgramById(id, tx, true);
       if (existing.isErr()) throw existing.error;
@@ -579,6 +630,16 @@ export class ProgramService implements IProgramService {
       if (!restored) {
         throw new AppError(500, "Failed to restore program.");
       }
+
+      await logAuditEvent({
+        actor: actorUser,
+        action: "RESTORE",
+        entity: "programs",
+        entityId: restored.id,
+        entityName: `${restored.initialism} - ${restored.name}`,
+        newRecord: restored,
+        tx,
+      });
 
       return {
         program: restored,

@@ -27,7 +27,7 @@ export class ProgramController {
   });
 
   createProgram = runAsync((req, _res) => {
-    return this.programService.createProgram(req.body).map((data) => ({
+    return this.programService.createProgram(req.body, undefined, req.user).map((data) => ({
       status: 201,
       message: "Program created successfully.",
       data,
@@ -36,17 +36,19 @@ export class ProgramController {
 
   updateProgram = runAsync((req, _res) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((programId) => {
-      return this.programService.updateProgram(programId, req.body).map((data) => ({
-        status: 200,
-        message: "Program updated successfully.",
-        data,
-      }));
+      return this.programService
+        .updateProgram(programId, req.body, undefined, req.user)
+        .map((data) => ({
+          status: 200,
+          message: "Program updated successfully.",
+          data,
+        }));
     });
   });
 
   deleteProgram = runAsync((req, _res) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((programId) => {
-      return this.programService.deleteProgram(programId).map(() => ({
+      return this.programService.deleteProgram(programId, undefined, req.user).map(() => ({
         status: 200,
         message: "College archived successfully.",
         data: null,
@@ -56,7 +58,7 @@ export class ProgramController {
 
   restoreProgram = runAsync((req, _res) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((programId) => {
-      return this.programService.restoreProgram(programId).map((data) => ({
+      return this.programService.restoreProgram(programId, undefined, req.user).map((data) => ({
         status: 200,
         message: "College restored successfully.",
         data,
