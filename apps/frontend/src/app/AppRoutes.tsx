@@ -4,6 +4,7 @@ import { PageLoader } from "@/components/ui/spinner";
 import { AuthGuard, GuestGuard, PermissionGuard, RoleGuard } from "@/components/route-guards";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { PERMISSIONS } from "@my-app/shared";
+import FacultyPage from "@/features/faculties/page/FacultyPage";
 
 // ── Lazy-Loaded Pages ──
 const LandingPage = lazy(() => import("@/features/landing/page/LandingPage"));
@@ -164,6 +165,15 @@ const router = createBrowserRouter([
               {
                 path: "/admin/classes",
                 element: <LazyRoute Component={ClassPage} />,
+              },
+            ],
+          },
+          {
+            element: <PermissionGuard permission={PERMISSIONS.FACULTY_READ} />,
+            children: [
+              {
+                path: "/admin/faculties",
+                element: <LazyRoute Component={FacultyPage} />,
               },
             ],
           },

@@ -156,6 +156,9 @@ export function AppBreadcrumbs() {
     } else {
       segments.push({ label: "Student List", isCurrent: true });
     }
+  } else if (pathname.includes("/admin/faculties")) {
+    segments.push({ label: "Programs", href: "/admin/programs" });
+    segments.push({ label: "Department Faculty", isCurrent: true });
   } else if (pathname.includes("/admin/semesters")) {
     segments.push({ label: "Semesters", isCurrent: true });
   } else {

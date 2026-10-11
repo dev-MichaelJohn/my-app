@@ -72,6 +72,12 @@ const NAVIGATION_SECTIONS: NavSection[] = [
         icon: School,
         permission: PERMISSIONS.CLASS_READ,
       },
+      {
+        title: "Department Faculty",
+        href: "/admin/faculties",
+        icon: UserCheck,
+        permission: PERMISSIONS.FACULTY_READ,
+      },
     ],
   },
   {
