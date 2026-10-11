@@ -5,6 +5,7 @@ import {
   CourseCurriculums,
   CourseOfferings,
   Courses,
+  Faculties,
   IndividualFacultyReports,
   PersonalDetails,
   ProgramChairs,
@@ -805,6 +806,30 @@ export class EvaluationReportService implements IEvaluationReportService {
 
     if (!faculty) throw new AppError(404, "Faculty member was not found.");
 
+    // ── 1. Resolve Teacher's Official Home Department via Faculties ──
+    const [facultyAppointment] = await tx
+      .select({
+        facultyRecordId: Faculties.id,
+        programId: Programs.id,
+        programName: Programs.name,
+        programCode: Programs.initialism,
+        collegeId: Colleges.id,
+        collegeName: Colleges.name,
+        collegeCode: Colleges.initialism,
+      })
+      .from(Faculties)
+      .innerJoin(Programs, eq(Faculties.program_id, Programs.id))
+      .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
+      .where(and(eq(Faculties.account_id, facultyId), isNull(Faculties.deleted_at)))
+      .limit(1);
+
+    if (!facultyAppointment) {
+      throw new AppError(
+        400,
+        "Cannot generate report: This instructor is not appointed to an academic program in Faculties.",
+      );
+    }
+
     // Dynamic scale bounds from active templates
     const [setTemplate] = await tx
       .select({
@@ -818,7 +843,7 @@ export class EvaluationReportService implements IEvaluationReportService {
     const minRating = setTemplate?.min_rating ?? 1;
     const maxRating = setTemplate?.max_rating ?? 5;
 
-    // Offerings anchored: CourseOffering -> CourseCurriculum -> Course -> Program -> College
+    // ── 2. Query ALL Offerings taught by this teacher (using facultyRecordId) ──
     const offerings = await tx
       .select({
         offeringId: CourseOfferings.id,
@@ -838,12 +863,12 @@ export class EvaluationReportService implements IEvaluationReportService {
       .innerJoin(CourseCurriculums, eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id))
       .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
       .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
-      .innerJoin(Programs, eq(Courses.program_id, Programs.id))
+      .innerJoin(Programs, eq(Classes.program_id, Programs.id))
       .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
       .where(
         and(
           eq(CourseOfferings.semester_id, semesterId),
-          eq(CourseOfferings.faculty_id, facultyId),
+          eq(CourseOfferings.faculty_id, facultyAppointment.facultyRecordId), // 👈 Matches Faculties.id
           isNull(CourseOfferings.deleted_at),
         ),
       );
@@ -1026,8 +1051,9 @@ export class EvaluationReportService implements IEvaluationReportService {
     );
 
     const top5StudentComments = this.curateTop5Comments(allCollectedStudentComments);
-    const primaryOffering = offerings[0];
-    const primaryCollegeName = primaryOffering?.collegeName || "Academic Affairs";
+
+    // ── 3. Teacher's Authentic Home Department Name ──
+    const homeDepartmentTitle = `${facultyAppointment.programName}, ${facultyAppointment.collegeName}`;
 
     const [existingReport] = await tx
       .select()
@@ -1106,14 +1132,14 @@ export class EvaluationReportService implements IEvaluationReportService {
       reportRecord,
       faculty.details,
       semester,
-      primaryCollegeName,
+      homeDepartmentTitle, // 👈 Teacher's authentic Home Department
       minRating,
       maxRating,
-      primaryOffering?.collegeId ?? null,
-      primaryOffering?.collegeCode ?? null,
-      primaryOffering?.programId ?? null,
-      primaryOffering?.programName ?? null,
-      primaryOffering?.programCode ?? null,
+      facultyAppointment.collegeId,
+      facultyAppointment.collegeCode,
+      facultyAppointment.programId,
+      facultyAppointment.programName,
+      facultyAppointment.programCode,
     );
   }
 
@@ -1134,7 +1160,8 @@ export class EvaluationReportService implements IEvaluationReportService {
       .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
       .where(eq(Accounts.id, report.faculty_id));
 
-    const [primaryOffering] = await tx
+    // ── 🔗 Query Official Home Department via Faculties ──
+    const [facultyAppointment] = await tx
       .select({
         collegeId: Colleges.id,
         collegeName: Colleges.name,
@@ -1143,18 +1170,10 @@ export class EvaluationReportService implements IEvaluationReportService {
         programName: Programs.name,
         programCode: Programs.initialism,
       })
-      .from(CourseOfferings)
-      .innerJoin(CourseCurriculums, eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id))
-      .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
-      .innerJoin(Programs, eq(Courses.program_id, Programs.id))
+      .from(Faculties)
+      .innerJoin(Programs, eq(Faculties.program_id, Programs.id))
       .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
-      .where(
-        and(
-          eq(CourseOfferings.semester_id, report.semester_id),
-          eq(CourseOfferings.faculty_id, report.faculty_id),
-          isNull(CourseOfferings.deleted_at),
-        ),
-      )
+      .where(and(eq(Faculties.account_id, report.faculty_id), isNull(Faculties.deleted_at)))
       .limit(1);
 
     const [setTemplate] = await tx
@@ -1168,7 +1187,11 @@ export class EvaluationReportService implements IEvaluationReportService {
 
     const minRating = setTemplate?.min_rating ?? 1;
     const maxRating = setTemplate?.max_rating ?? 5;
-    const departmentCollege = primaryOffering?.collegeName || "Academic Affairs";
+
+    // Teacher's authentic department title (e.g., "Bachelor of Physical Education, College of Arts and Sciences")
+    const departmentCollege = facultyAppointment
+      ? `${facultyAppointment.programName}, ${facultyAppointment.collegeName}`
+      : "Academic Affairs";
 
     return this.formatReportData(
       report,
@@ -1177,11 +1200,11 @@ export class EvaluationReportService implements IEvaluationReportService {
       departmentCollege,
       minRating,
       maxRating,
-      primaryOffering?.collegeId ?? null,
-      primaryOffering?.collegeCode ?? null,
-      primaryOffering?.programId ?? null,
-      primaryOffering?.programName ?? null,
-      primaryOffering?.programCode ?? null,
+      facultyAppointment?.collegeId ?? null,
+      facultyAppointment?.collegeCode ?? null,
+      facultyAppointment?.programId ?? null,
+      facultyAppointment?.programName ?? null,
+      facultyAppointment?.programCode ?? null,
     );
   }
 
