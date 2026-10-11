@@ -6,6 +6,7 @@ import {
   CourseCurriculums,
   CourseOfferings,
   Courses,
+  Faculties,
   OfferingInsert,
   OfferingQuerySchema,
   OfferingUpdate,
@@ -123,25 +124,31 @@ export class OfferingService implements IOfferingService {
     `,
 
     faculty: sql<GetOffering["faculty"] | null>`
-      CASE
-        WHEN ${Accounts.id} IS NULL THEN NULL
-        ELSE JSON_BUILD_OBJECT(
-          'account', JSON_BUILD_OBJECT(
-            'id', ${Accounts.id},
-            'personal_details_id', ${Accounts.personal_details_id},
-            'email', ${Accounts.email},
-            'is_verified', ${Accounts.is_verified}
-          ),
-          'details', JSON_BUILD_OBJECT(
-            'id', ${PersonalDetails.id},
-            'institutional_id', ${PersonalDetails.institutional_id},
-            'first_name', ${PersonalDetails.first_name},
-            'last_name', ${PersonalDetails.last_name},
-            'middle_name', ${PersonalDetails.middle_name},
-            'suffix', ${PersonalDetails.suffix}
-          )
+    CASE
+      WHEN ${Faculties.id} IS NULL THEN NULL
+      ELSE JSON_BUILD_OBJECT(
+        'faculty_id', ${Faculties.id},
+        'home_program', JSON_BUILD_OBJECT(
+          'id', ${Programs.id},
+          'name', ${Programs.name},
+          'initialism', ${Programs.initialism}
+        ),
+        'account', JSON_BUILD_OBJECT(
+          'id', ${Accounts.id},
+          'personal_details_id', ${Accounts.personal_details_id},
+          'email', ${Accounts.email},
+          'is_verified', ${Accounts.is_verified}
+        ),
+        'details', JSON_BUILD_OBJECT(
+          'id', ${PersonalDetails.id},
+          'institutional_id', ${PersonalDetails.institutional_id},
+          'first_name', ${PersonalDetails.first_name},
+          'last_name', ${PersonalDetails.last_name},
+          'middle_name', ${PersonalDetails.middle_name},
+          'suffix', ${PersonalDetails.suffix}
         )
-      END
+      )
+    END
     `,
   };
 
@@ -163,9 +170,10 @@ export class OfferingService implements IOfferingService {
         .innerJoin(Programs, eq(Classes.program_id, Programs.id))
         .innerJoin(Semesters, eq(CourseOfferings.semester_id, Semesters.id))
         .leftJoin(
-          Accounts,
-          and(eq(CourseOfferings.faculty_id, Accounts.id), isNull(Accounts.deleted_at)),
+          Faculties,
+          and(eq(CourseOfferings.faculty_id, Faculties.id), isNull(Faculties.deleted_at)),
         )
+        .leftJoin(Accounts, and(eq(Faculties.account_id, Accounts.id), isNull(Accounts.deleted_at)))
         .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
         .where(
           and(
@@ -180,6 +188,7 @@ export class OfferingService implements IOfferingService {
           Classes.id,
           Programs.id,
           Semesters.id,
+          Faculties.id,
           Accounts.id,
           PersonalDetails.id,
         );
@@ -283,8 +292,12 @@ export class OfferingService implements IOfferingService {
           .innerJoin(Programs, eq(Classes.program_id, Programs.id))
           .innerJoin(Semesters, eq(CourseOfferings.semester_id, Semesters.id))
           .leftJoin(
+            Faculties,
+            and(eq(CourseOfferings.faculty_id, Faculties.id), isNull(Faculties.deleted_at)),
+          )
+          .leftJoin(
             Accounts,
-            and(eq(CourseOfferings.faculty_id, Accounts.id), isNull(Accounts.deleted_at)),
+            and(eq(Faculties.account_id, Accounts.id), isNull(Accounts.deleted_at)),
           )
           .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
           .where(whereCondition)
@@ -295,6 +308,7 @@ export class OfferingService implements IOfferingService {
             Classes.id,
             Programs.id,
             Semesters.id,
+            Faculties.id,
             Accounts.id,
             PersonalDetails.id,
           )
@@ -645,6 +659,17 @@ export class OfferingService implements IOfferingService {
   }
 
   private async validateFaculty(facultyId: number, tx: PgTransaction): Promise<void> {
+    const [faculty] = await tx
+      .select({ id: Faculties.id })
+      .from(Faculties)
+      .where(and(eq(Faculties.id, facultyId), isNull(Faculties.deleted_at)));
+
+    if (!faculty)
+      throw new AppError(
+        400,
+        "The selected faculty member does not have an active departmental appointment in Faculties.",
+      );
+
     const isFaculty = await this.userService.hasRole(facultyId, "FACULTY", tx);
     const isSupervisor = await this.userService.hasRole(facultyId, "SUPERVISOR", tx);
 
