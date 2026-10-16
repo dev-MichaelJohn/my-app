@@ -2,17 +2,19 @@ import type { Request } from "express";
 import { AuditLogs } from "@my-app/shared";
 import type { DbClient } from "./transaction.lib.js";
 import type { AuditAction, AuditDiff, GetUser } from "@my-app/shared";
+import crypto from "node:crypto";
 
 export interface LogAuditParams {
   actor?: GetUser | null | undefined;
   req?: Request | undefined;
   action: AuditAction;
-  entity: string; // e.g. "colleges", "programs", "courses", "classes", "curriculums", "faculties", "offerings", "class_students", "student_classes", "users", "semesters", "evaluation_reports"
+  entity: string;
   entityId: number;
   entityName: string;
   oldRecord?: Record<string, any> | null | undefined;
   newRecord?: Record<string, any> | null | undefined;
   isRollbackable?: boolean | undefined;
+  transactionId?: string | undefined;
   tx: DbClient;
 }
 
@@ -26,6 +28,7 @@ export async function logAuditEvent({
   oldRecord,
   newRecord,
   isRollbackable = true,
+  transactionId,
   tx,
 }: LogAuditParams): Promise<void> {
   const currentActor = actor ?? req?.user;
@@ -77,6 +80,13 @@ export async function logAuditEvent({
     };
   }
 
+  // Bind or reuse existing request-scoped transaction UUID
+  const reqWithTx = req as (Request & { __auditTxId?: string }) | undefined;
+  const finalTransactionId = transactionId || reqWithTx?.__auditTxId || crypto.randomUUID();
+  if (reqWithTx && !reqWithTx.__auditTxId) {
+    reqWithTx.__auditTxId = finalTransactionId;
+  }
+
   const ipAddress = (req?.headers?.["x-forwarded-for"] as string) || req?.ip || null;
   const userAgent = req?.get ? req.get("user-agent") || null : null;
 
@@ -89,6 +99,7 @@ export async function logAuditEvent({
     entity_id: entityId,
     entity_name: entityName,
     diff,
+    transaction_id: finalTransactionId,
     ip_address: ipAddress,
     user_agent: userAgent,
     is_rollbackable: isRollbackable,
