@@ -27,7 +27,7 @@ export class FacultyController {
   });
 
   createFaculty = runAsync((req) => {
-    return this.facultyService.createFaculty(req.body).map((data) => ({
+    return this.facultyService.createFaculty(req.body, undefined, req.user, req).map((data) => ({
       status: 201,
       message: "Instructor appointed to academic program successfully.",
       data,
@@ -36,17 +36,19 @@ export class FacultyController {
 
   updateFaculty = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
-      return this.facultyService.updateFaculty(id, req.body).map((data) => ({
-        status: 200,
-        message: "Faculty appointment updated.",
-        data,
-      }));
+      return this.facultyService
+        .updateFaculty(id, req.body, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Faculty appointment updated.",
+          data,
+        }));
     });
   });
 
   deleteFaculty = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
-      return this.facultyService.deleteFaculty(id).map(() => ({
+      return this.facultyService.deleteFaculty(id, undefined, req.user, req).map(() => ({
         status: 200,
         message: "Faculty appointment archived.",
         data: null,
@@ -56,7 +58,7 @@ export class FacultyController {
 
   restoreFaculty = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
-      return this.facultyService.restoreFaculty(id).map((data) => ({
+      return this.facultyService.restoreFaculty(id, undefined, req.user, req).map((data) => ({
         status: 200,
         message: "Faculty appointment restored.",
         data,

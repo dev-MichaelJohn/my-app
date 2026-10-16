@@ -35,6 +35,8 @@ import {
 import { errAsync, type ResultAsync } from "neverthrow";
 import { CourseService, type ICourseService } from "./course.service.js";
 import { ProgramService, type IProgramService } from "./program.service.js";
+import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
 export interface ICurriculumService {
   getCurriculumById(
@@ -50,14 +52,28 @@ export interface ICurriculumService {
   createCurriculum(
     info: ICurriculumInsert,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetCurriculum, AppError>;
   updateCurriculum(
     id: number,
     info: ICurriculumUpdate,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetCurriculum, AppError>;
-  deleteCurriculum(id: number, client?: DbClient): ResultAsync<void, AppError>;
-  restoreCurriculum(id: number, client?: DbClient): ResultAsync<GetCurriculum, AppError>;
+  deleteCurriculum(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
+  restoreCurriculum(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetCurriculum, AppError>;
 }
 
 export class CurriculumService implements ICurriculumService {
@@ -145,11 +161,9 @@ export class CurriculumService implements ICurriculumService {
         const chairships = actorUser.offices?.chairships || [];
 
         if (chairships.length > 0) {
-          // Chair: Lock strictly to their program(s)
           const chairProgramIds = chairships.map((c) => c.id);
           filters.push(inArray(Programs.id, chairProgramIds));
         } else if (deanships.length > 0) {
-          // Dean: Lock strictly to programs in their college(s)
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Programs.college_id, deanCollegeIds));
         }
@@ -248,6 +262,8 @@ export class CurriculumService implements ICurriculumService {
   createCurriculum(
     info: ICurriculumInsert,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetCurriculum, AppError> {
     return ValidateSchema(CurriculumInsert, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -300,6 +316,17 @@ export class CurriculumService implements ICurriculumService {
         const fullRecord = await this.getCurriculumById(curriculumId, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "curriculums",
+          entityId: fullRecord.value.id,
+          entityName: `${fullRecord.value.course.initialism} (${fullRecord.value.program.initialism} Yr ${fullRecord.value.year_level})`,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
@@ -309,6 +336,8 @@ export class CurriculumService implements ICurriculumService {
     id: number,
     info: ICurriculumUpdate,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetCurriculum, AppError> {
     return ValidateSchema(CurriculumUpdate, info).asyncAndThen((parsed) => {
       const hasUpdates = Boolean(parsed && Object.keys(parsed).length > 0);
@@ -343,12 +372,29 @@ export class CurriculumService implements ICurriculumService {
         const fullRecord = await this.getCurriculumById(id, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "UPDATE",
+          entity: "curriculums",
+          entityId: fullRecord.value.id,
+          entityName: `${fullRecord.value.course.initialism} (${fullRecord.value.program.initialism} Yr ${fullRecord.value.year_level})`,
+          oldRecord: existing.value,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
   }
 
-  deleteCurriculum(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteCurriculum(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getCurriculumById(id, tx);
       if (existing.isErr()) throw existing.error;
@@ -378,11 +424,27 @@ export class CurriculumService implements ICurriculumService {
         throw new AppError(404, "Curriculum mapping record was not found or already archived.");
       }
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "DELETE",
+        entity: "curriculums",
+        entityId: existing.value.id,
+        entityName: `${existing.value.course.initialism} (${existing.value.program.initialism} Yr ${existing.value.year_level})`,
+        oldRecord: existing.value,
+        tx,
+      });
+
       return undefined;
     });
   }
 
-  restoreCurriculum(id: number, client: DbClient = db): ResultAsync<GetCurriculum, AppError> {
+  restoreCurriculum(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetCurriculum, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getCurriculumById(id, tx, true);
       if (existing.isErr()) throw existing.error;
@@ -432,6 +494,17 @@ export class CurriculumService implements ICurriculumService {
 
       const fullRecord = await this.getCurriculumById(id, tx);
       if (fullRecord.isErr()) throw fullRecord.error;
+
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "RESTORE",
+        entity: "curriculums",
+        entityId: fullRecord.value.id,
+        entityName: `${fullRecord.value.course.initialism} (${fullRecord.value.program.initialism} Yr ${fullRecord.value.year_level})`,
+        newRecord: fullRecord.value,
+        tx,
+      });
 
       return fullRecord.value;
     });

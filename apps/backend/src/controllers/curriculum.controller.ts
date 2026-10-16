@@ -8,7 +8,7 @@ export class CurriculumController {
 
   private idSchema = z.coerce.number().int().positive("Invalid Curriculum ID provided.");
 
-  getCurriculumById = runAsync((req, _res) => {
+  getCurriculumById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((curriculumId) => {
       return this.curriculumService.getCurriculumById(curriculumId).map((data) => ({
         status: 200,
@@ -18,7 +18,7 @@ export class CurriculumController {
     });
   });
 
-  getCurriculums = runAsync((req, _res) => {
+  getCurriculums = runAsync((req) => {
     return this.curriculumService.getCurriculums(req.query, undefined, req.user).map((data) => ({
       status: 200,
       message: "Curriculums retrieved successfully.",
@@ -26,41 +26,49 @@ export class CurriculumController {
     }));
   });
 
-  createCurriculum = runAsync((req, _res) => {
-    return this.curriculumService.createCurriculum(req.body).map((data) => ({
-      status: 201,
-      message: "Curriculum created successfully.",
-      data,
-    }));
-  });
-
-  updateCurriculum = runAsync((req, _res) => {
-    return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((curriculumId) => {
-      return this.curriculumService.updateCurriculum(curriculumId, req.body).map((data) => ({
-        status: 200,
-        message: "Curriculum updated successfully.",
+  createCurriculum = runAsync((req) => {
+    return this.curriculumService
+      .createCurriculum(req.body, undefined, req.user, req)
+      .map((data) => ({
+        status: 201,
+        message: "Curriculum created successfully.",
         data,
       }));
+  });
+
+  updateCurriculum = runAsync((req) => {
+    return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((curriculumId) => {
+      return this.curriculumService
+        .updateCurriculum(curriculumId, req.body, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Curriculum updated successfully.",
+          data,
+        }));
     });
   });
 
-  deleteCurriculum = runAsync((req, _res) => {
+  deleteCurriculum = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((curriculumId) => {
-      return this.curriculumService.deleteCurriculum(curriculumId).map(() => ({
-        status: 200,
-        message: "Curriculum archived successfully.",
-        data: null,
-      }));
+      return this.curriculumService
+        .deleteCurriculum(curriculumId, undefined, req.user, req)
+        .map(() => ({
+          status: 200,
+          message: "Curriculum archived successfully.",
+          data: null,
+        }));
     });
   });
 
-  restoreCurriculum = runAsync((req, _res) => {
+  restoreCurriculum = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((curriculumId) => {
-      return this.curriculumService.restoreCurriculum(curriculumId).map(() => ({
-        status: 200,
-        message: "Curriculum restored successfully.",
-        data: null,
-      }));
+      return this.curriculumService
+        .restoreCurriculum(curriculumId, undefined, req.user, req)
+        .map(() => ({
+          status: 200,
+          message: "Curriculum restored successfully.",
+          data: null,
+        }));
     });
   });
 }

@@ -13,7 +13,6 @@ export class EvaluationScheduleController {
 
   private idSchema = z.coerce.number().int().positive("Invalid Schedule ID provided.");
 
-  // ── Student Schedule (SET) Handlers ──
   getStudentScheduleById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
       return this.scheduleService.getStudentScheduleById(id).map((data) => ({
@@ -44,26 +43,30 @@ export class EvaluationScheduleController {
   });
 
   createStudentSchedule = runAsync((req) => {
-    return this.scheduleService.createStudentSchedule(req.body).map((data) => ({
-      status: 201,
-      message: "Student evaluation schedule created successfully.",
-      data,
-    }));
+    return this.scheduleService
+      .createStudentSchedule(req.body, undefined, req.user, req)
+      .map((data) => ({
+        status: 201,
+        message: "Student evaluation schedule created successfully.",
+        data,
+      }));
   });
 
   updateStudentSchedule = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
-      return this.scheduleService.updateStudentSchedule(id, req.body).map((data) => ({
-        status: 200,
-        message: "Student evaluation schedule updated.",
-        data,
-      }));
+      return this.scheduleService
+        .updateStudentSchedule(id, req.body, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Student evaluation schedule updated.",
+          data,
+        }));
     });
   });
 
   deleteStudentSchedule = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
-      return this.scheduleService.deleteStudentSchedule(id).map(() => ({
+      return this.scheduleService.deleteStudentSchedule(id, undefined, req.user, req).map(() => ({
         status: 200,
         message: "Student evaluation schedule archived.",
         data: null,
@@ -73,25 +76,28 @@ export class EvaluationScheduleController {
 
   restoreStudentSchedule = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
-      return this.scheduleService.restoreStudentSchedule(id).map((data) => ({
-        status: 200,
-        message: "Student evaluation schedule restored.",
-        data,
-      }));
+      return this.scheduleService
+        .restoreStudentSchedule(id, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Student evaluation schedule restored.",
+          data,
+        }));
     });
   });
 
   forceStopStudentSchedule = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
-      return this.scheduleService.forceStopStudentSchedule(id).map((data) => ({
-        status: 200,
-        message: "Student evaluation window concluded immediately.",
-        data,
-      }));
+      return this.scheduleService
+        .forceStopStudentSchedule(id, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Student evaluation window concluded immediately.",
+          data,
+        }));
     });
   });
 
-  // ── Supervisor Schedule (SEF) Handlers ──
   getSupervisorScheduleById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
       return this.scheduleService.getSupervisorScheduleById(id).map((data) => ({
@@ -122,50 +128,60 @@ export class EvaluationScheduleController {
   });
 
   createSupervisorSchedule = runAsync((req) => {
-    return this.scheduleService.createSupervisorSchedule(req.body).map((data) => ({
-      status: 201,
-      message: "Supervisor evaluation schedule created successfully.",
-      data,
-    }));
+    return this.scheduleService
+      .createSupervisorSchedule(req.body, undefined, req.user, req)
+      .map((data) => ({
+        status: 201,
+        message: "Supervisor evaluation schedule created successfully.",
+        data,
+      }));
   });
 
   updateSupervisorSchedule = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
-      return this.scheduleService.updateSupervisorSchedule(id, req.body).map((data) => ({
-        status: 200,
-        message: "Supervisor evaluation schedule updated.",
-        data,
-      }));
+      return this.scheduleService
+        .updateSupervisorSchedule(id, req.body, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Supervisor evaluation schedule updated.",
+          data,
+        }));
     });
   });
 
   deleteSupervisorSchedule = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
-      return this.scheduleService.deleteSupervisorSchedule(id).map(() => ({
-        status: 200,
-        message: "Supervisor evaluation schedule archived.",
-        data: null,
-      }));
+      return this.scheduleService
+        .deleteSupervisorSchedule(id, undefined, req.user, req)
+        .map(() => ({
+          status: 200,
+          message: "Supervisor evaluation schedule archived.",
+          data: null,
+        }));
     });
   });
 
   restoreSupervisorSchedule = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
-      return this.scheduleService.restoreSupervisorSchedule(id).map((data) => ({
-        status: 200,
-        message: "Supervisor evaluation schedule restored.",
-        data,
-      }));
+      return this.scheduleService
+        .restoreSupervisorSchedule(id, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Supervisor evaluation schedule restored.",
+          data,
+        }));
     });
   });
 
   forceStopSupervisorSchedule = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
-      return this.scheduleService.forceStopSupervisorSchedule(id).map((data) => ({
-        status: 200,
-        message: "Supervisor evaluation window concluded immediately.",
-        data,
-      }));
+      return this.scheduleService
+        .forceStopSupervisorSchedule(id, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Supervisor evaluation window concluded immediately.",
+          data,
+        }));
     });
   });
 }

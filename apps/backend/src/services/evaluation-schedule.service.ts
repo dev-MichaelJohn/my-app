@@ -35,10 +35,12 @@ import {
   type ISupervisorScheduleInsert,
   type ISupervisorScheduleUpdate,
   type PaginatedData,
+  type GetUser,
 } from "@my-app/shared";
+import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
 export interface IEvaluationScheduleService {
-  // Student Schedules (SET)
   getStudentScheduleById(
     id: number,
     includeArchived?: boolean,
@@ -55,20 +57,35 @@ export interface IEvaluationScheduleService {
   createStudentSchedule(
     info: IStudentScheduleInsert,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetStudentSchedule, AppError>;
   updateStudentSchedule(
     id: number,
     info: IStudentScheduleUpdate,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetStudentSchedule, AppError>;
-  deleteStudentSchedule(id: number, client?: DbClient): ResultAsync<void, AppError>;
-  restoreStudentSchedule(id: number, client?: DbClient): ResultAsync<GetStudentSchedule, AppError>;
+  deleteStudentSchedule(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
+  restoreStudentSchedule(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetStudentSchedule, AppError>;
   forceStopStudentSchedule(
     id: number,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetStudentSchedule, AppError>;
 
-  // Supervisor Schedules (SEF)
   getSupervisorScheduleById(
     id: number,
     includeArchived?: boolean,
@@ -85,28 +102,37 @@ export interface IEvaluationScheduleService {
   createSupervisorSchedule(
     info: ISupervisorScheduleInsert,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetSupervisorSchedule, AppError>;
   updateSupervisorSchedule(
     id: number,
     info: ISupervisorScheduleUpdate,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetSupervisorSchedule, AppError>;
-  deleteSupervisorSchedule(id: number, client?: DbClient): ResultAsync<void, AppError>;
+  deleteSupervisorSchedule(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
   restoreSupervisorSchedule(
     id: number,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetSupervisorSchedule, AppError>;
   forceStopSupervisorSchedule(
     id: number,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetSupervisorSchedule, AppError>;
 }
 
 export class EvaluationScheduleService implements IEvaluationScheduleService {
-  // =========================================================================
-  // 1. STUDENT EVALUATION SCHEDULES (SET)
-  // =========================================================================
-
   getStudentScheduleById(
     id: number,
     includeArchived = false,
@@ -276,6 +302,8 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
   createStudentSchedule(
     info: IStudentScheduleInsert,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetStudentSchedule, AppError> {
     return ValidateSchema(StudentScheduleInsert, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -320,6 +348,17 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
         const fullRecord = await this.getStudentScheduleById(created.id, false, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "student_evaluation_schedules",
+          entityId: fullRecord.value.id,
+          entityName: `SET Window: ${fullRecord.value.form.title} (${fullRecord.value.semester.semester_term} Sem)`,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
@@ -329,6 +368,8 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
     id: number,
     info: IStudentScheduleUpdate,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetStudentSchedule, AppError> {
     return ValidateSchema(StudentScheduleUpdate, info).asyncAndThen((parsed) => {
       const hasUpdates = Boolean(parsed && Object.keys(parsed).length > 0);
@@ -354,12 +395,29 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
         const fullRecord = await this.getStudentScheduleById(id, false, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "UPDATE",
+          entity: "student_evaluation_schedules",
+          entityId: fullRecord.value.id,
+          entityName: `SET Window: ${fullRecord.value.form.title} (${fullRecord.value.semester.semester_term} Sem)`,
+          oldRecord: existing.value,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
   }
 
-  deleteStudentSchedule(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteStudentSchedule(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getStudentScheduleById(id, false, tx);
       if (existing.isErr()) throw existing.error;
@@ -370,15 +428,30 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
         .where(
           and(eq(StudentEvaluationSchedules.id, id), isNull(StudentEvaluationSchedules.deleted_at)),
         )
-        .returning({ id: StudentEvaluationSchedules.id });
+        .returning();
 
       if (!deleted) throw new AppError(404, "Schedule not found or already archived.");
+
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "DELETE",
+        entity: "student_evaluation_schedules",
+        entityId: existing.value.id,
+        entityName: `SET Window: ${existing.value.form.title} (${existing.value.semester.semester_term} Sem)`,
+        oldRecord: existing.value,
+        tx,
+      });
+
+      return undefined;
     });
   }
 
   restoreStudentSchedule(
     id: number,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetStudentSchedule, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getStudentScheduleById(id, true, tx);
@@ -398,6 +471,17 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
       const fullRecord = await this.getStudentScheduleById(id, false, tx);
       if (fullRecord.isErr()) throw fullRecord.error;
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "RESTORE",
+        entity: "student_evaluation_schedules",
+        entityId: fullRecord.value.id,
+        entityName: `SET Window: ${fullRecord.value.form.title} (${fullRecord.value.semester.semester_term} Sem)`,
+        newRecord: fullRecord.value,
+        tx,
+      });
+
       return fullRecord.value;
     });
   }
@@ -405,6 +489,8 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
   forceStopStudentSchedule(
     id: number,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetStudentSchedule, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getStudentScheduleById(id, false, tx);
@@ -436,13 +522,21 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
       const fullRecord = await this.getStudentScheduleById(id, false, tx);
       if (fullRecord.isErr()) throw fullRecord.error;
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "STATUS_CHANGE",
+        entity: "student_evaluation_schedules",
+        entityId: fullRecord.value.id,
+        entityName: `SET Window: ${fullRecord.value.form.title} (Force Concluded)`,
+        oldRecord: existing.value,
+        newRecord: fullRecord.value,
+        tx,
+      });
+
       return fullRecord.value;
     });
   }
-
-  // =========================================================================
-  // 2. SUPERVISOR EVALUATION SCHEDULES (SEF)
-  // =========================================================================
 
   getSupervisorScheduleById(
     id: number,
@@ -613,6 +707,8 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
   createSupervisorSchedule(
     info: ISupervisorScheduleInsert,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetSupervisorSchedule, AppError> {
     return ValidateSchema(SupervisorScheduleInsert, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -657,6 +753,17 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
         const fullRecord = await this.getSupervisorScheduleById(created.id, false, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "supervisor_evaluation_schedules",
+          entityId: fullRecord.value.id,
+          entityName: `SEF Window: ${fullRecord.value.form.title} (${fullRecord.value.semester.semester_term} Sem)`,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
@@ -666,6 +773,8 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
     id: number,
     info: ISupervisorScheduleUpdate,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetSupervisorSchedule, AppError> {
     return ValidateSchema(SupervisorScheduleUpdate, info).asyncAndThen((parsed) => {
       const hasUpdates = Boolean(parsed && Object.keys(parsed).length > 0);
@@ -691,12 +800,29 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
         const fullRecord = await this.getSupervisorScheduleById(id, false, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "UPDATE",
+          entity: "supervisor_evaluation_schedules",
+          entityId: fullRecord.value.id,
+          entityName: `SEF Window: ${fullRecord.value.form.title} (${fullRecord.value.semester.semester_term} Sem)`,
+          oldRecord: existing.value,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
   }
 
-  deleteSupervisorSchedule(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteSupervisorSchedule(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getSupervisorScheduleById(id, false, tx);
       if (existing.isErr()) throw existing.error;
@@ -710,15 +836,30 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
             isNull(SupervisorEvaluationSchedules.deleted_at),
           ),
         )
-        .returning({ id: SupervisorEvaluationSchedules.id });
+        .returning();
 
       if (!deleted) throw new AppError(404, "Schedule not found or already archived.");
+
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "DELETE",
+        entity: "supervisor_evaluation_schedules",
+        entityId: existing.value.id,
+        entityName: `SEF Window: ${existing.value.form.title} (${existing.value.semester.semester_term} Sem)`,
+        oldRecord: existing.value,
+        tx,
+      });
+
+      return undefined;
     });
   }
 
   restoreSupervisorSchedule(
     id: number,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetSupervisorSchedule, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getSupervisorScheduleById(id, true, tx);
@@ -738,6 +879,17 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
       const fullRecord = await this.getSupervisorScheduleById(id, false, tx);
       if (fullRecord.isErr()) throw fullRecord.error;
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "RESTORE",
+        entity: "supervisor_evaluation_schedules",
+        entityId: fullRecord.value.id,
+        entityName: `SEF Window: ${fullRecord.value.form.title} (${fullRecord.value.semester.semester_term} Sem)`,
+        newRecord: fullRecord.value,
+        tx,
+      });
+
       return fullRecord.value;
     });
   }
@@ -745,6 +897,8 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
   forceStopSupervisorSchedule(
     id: number,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetSupervisorSchedule, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getSupervisorScheduleById(id, false, tx);
@@ -778,6 +932,18 @@ export class EvaluationScheduleService implements IEvaluationScheduleService {
 
       const fullRecord = await this.getSupervisorScheduleById(id, false, tx);
       if (fullRecord.isErr()) throw fullRecord.error;
+
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "STATUS_CHANGE",
+        entity: "supervisor_evaluation_schedules",
+        entityId: fullRecord.value.id,
+        entityName: `SEF Window: ${fullRecord.value.form.title} (Force Concluded)`,
+        oldRecord: existing.value,
+        newRecord: fullRecord.value,
+        tx,
+      });
 
       return fullRecord.value;
     });

@@ -36,6 +36,8 @@ import {
 } from "drizzle-orm";
 import { type ResultAsync } from "neverthrow";
 import { UserService, type IUserService } from "./user.service.js";
+import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
 export interface IFacultyService {
   getFacultyById(
@@ -52,14 +54,31 @@ export interface IFacultyService {
     client?: DbClient,
     actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetFaculty[]>, AppError>;
-  createFaculty(info: IFacultyInsert, client?: DbClient): ResultAsync<GetFaculty, AppError>;
+  createFaculty(
+    info: IFacultyInsert,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetFaculty, AppError>;
   updateFaculty(
     id: number,
     info: IFacultyUpdate,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetFaculty, AppError>;
-  deleteFaculty(id: number, client?: DbClient): ResultAsync<void, AppError>;
-  restoreFaculty(id: number, client?: DbClient): ResultAsync<GetFaculty, AppError>;
+  deleteFaculty(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
+  restoreFaculty(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetFaculty, AppError>;
 }
 
 export class FacultyService implements IFacultyService {
@@ -170,7 +189,6 @@ export class FacultyService implements IFacultyService {
         isNull(Programs.deleted_at),
       ];
 
-      // Role scoping for Deans & Program Chairs
       const roles = actorUser?.roles ?? [];
       const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
 
@@ -252,10 +270,14 @@ export class FacultyService implements IFacultyService {
     });
   }
 
-  createFaculty(info: IFacultyInsert, client: DbClient = db): ResultAsync<GetFaculty, AppError> {
+  createFaculty(
+    info: IFacultyInsert,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetFaculty, AppError> {
     return ValidateSchema(FacultyInsert, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
-        // 1. Verify User Account exists and is eligible
         const [account] = await tx
           .select({ id: Accounts.id })
           .from(Accounts)
@@ -267,11 +289,9 @@ export class FacultyService implements IFacultyService {
           throw new AppError(400, "Student accounts cannot be appointed as departmental faculty.");
         }
 
-        // Ensure user has the FACULTY role granted
         const grantRes = await this.userService.grantRole(parsed.account_id, "FACULTY", tx);
         if (grantRes.isErr()) throw grantRes.error;
 
-        // 2. Check if user already has an active department appointment
         const [activeAppointment] = await tx
           .select({
             id: Faculties.id,
@@ -290,7 +310,6 @@ export class FacultyService implements IFacultyService {
           );
         }
 
-        // 3. Insert or reactivate appointment
         const [existingDeleted] = await tx
           .select()
           .from(Faculties)
@@ -322,6 +341,17 @@ export class FacultyService implements IFacultyService {
         const fullRecord = await this.getFacultyById(facultyId, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "faculties",
+          entityId: fullRecord.value.id,
+          entityName: `${fullRecord.value.user.details.first_name} ${fullRecord.value.user.details.last_name} (${fullRecord.value.program.initialism})`,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
@@ -331,6 +361,8 @@ export class FacultyService implements IFacultyService {
     id: number,
     info: IFacultyUpdate,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetFaculty, AppError> {
     return ValidateSchema(FacultyUpdate, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -356,17 +388,33 @@ export class FacultyService implements IFacultyService {
         const fullRecord = await this.getFacultyById(id, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "UPDATE",
+          entity: "faculties",
+          entityId: fullRecord.value.id,
+          entityName: `${fullRecord.value.user.details.first_name} ${fullRecord.value.user.details.last_name} (${fullRecord.value.program.initialism})`,
+          oldRecord: existing.value,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
   }
 
-  deleteFaculty(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteFaculty(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getFacultyById(id, tx);
       if (existing.isErr()) throw existing.error;
 
-      // Check if faculty has active course offerings scheduled
       const [activeOfferings] = await tx
         .select({ total: count(CourseOfferings.id) })
         .from(CourseOfferings)
@@ -384,11 +432,27 @@ export class FacultyService implements IFacultyService {
         .set({ deleted_at: new Date() })
         .where(and(eq(Faculties.id, id), isNull(Faculties.deleted_at)));
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "DELETE",
+        entity: "faculties",
+        entityId: existing.value.id,
+        entityName: `${existing.value.user.details.first_name} ${existing.value.user.details.last_name} (${existing.value.program.initialism})`,
+        oldRecord: existing.value,
+        tx,
+      });
+
       return undefined;
     });
   }
 
-  restoreFaculty(id: number, client: DbClient = db): ResultAsync<GetFaculty, AppError> {
+  restoreFaculty(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetFaculty, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getFacultyById(id, tx, true);
       if (existing.isErr()) throw existing.error;
@@ -415,6 +479,17 @@ export class FacultyService implements IFacultyService {
 
       const fullRecord = await this.getFacultyById(id, tx);
       if (fullRecord.isErr()) throw fullRecord.error;
+
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "RESTORE",
+        entity: "faculties",
+        entityId: fullRecord.value.id,
+        entityName: `${fullRecord.value.user.details.first_name} ${fullRecord.value.user.details.last_name} (${fullRecord.value.program.initialism})`,
+        newRecord: fullRecord.value,
+        tx,
+      });
 
       return fullRecord.value;
     });

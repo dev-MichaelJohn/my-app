@@ -67,6 +67,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { type ResultAsync } from "neverthrow";
+import { logAuditEvent } from "@/libs/audit.lib.js";
 
 export interface IEvaluationReportService {
   getAnnexCReport(
@@ -206,6 +207,20 @@ export class EvaluationReportService implements IEvaluationReportService {
           reportsGenerated++;
         }
 
+        await logAuditEvent({
+          actor: undefined,
+          action: "STATUS_CHANGE",
+          entity: "individual_faculty_reports",
+          entityId: semester_id,
+          entityName: `Batch Consolidated ${reportsGenerated} Reports for Semester #${semester_id}`,
+          newRecord: {
+            semester_id,
+            reports_generated: reportsGenerated,
+            formula,
+          },
+          tx,
+        });
+
         return {
           semester_id,
           semester_term: semester.semester_term,
@@ -263,6 +278,17 @@ export class EvaluationReportService implements IEvaluationReportService {
           .set({ status, updated_at: new Date() })
           .where(eq(IndividualFacultyReports.id, reportId))
           .returning();
+
+        await logAuditEvent({
+          actor: actorUser,
+          action: "STATUS_CHANGE",
+          entity: "individual_faculty_reports",
+          entityId: reportId,
+          entityName: `Report #${reportId} Status -> ${status}`,
+          oldRecord: { status: report.status },
+          newRecord: { status },
+          tx,
+        });
 
         return this.hydrateReport(updated!, tx, actorUser.account.id);
       });
@@ -326,6 +352,17 @@ export class EvaluationReportService implements IEvaluationReportService {
           .set({ fedaf_plan: updatedPlan, updated_at: new Date() })
           .where(eq(IndividualFacultyReports.id, reportId))
           .returning();
+
+        await logAuditEvent({
+          actor: actorUser,
+          action: "UPDATE",
+          entity: "individual_faculty_reports",
+          entityId: reportId,
+          entityName: `FEDAF Plan updated for Report #${reportId}`,
+          oldRecord: { fedaf_plan: existingPlan },
+          newRecord: { fedaf_plan: updatedPlan },
+          tx,
+        });
 
         return this.hydrateReport(updated!, tx, actorUser.account.id);
       });
@@ -466,6 +503,21 @@ export class EvaluationReportService implements IEvaluationReportService {
         })
         .where(eq(IndividualFacultyReports.id, reportId))
         .returning();
+
+      await logAuditEvent({
+        actor: actorUser,
+        action: "STATUS_CHANGE",
+        entity: "individual_faculty_reports",
+        entityId: reportId,
+        entityName: `FEDAF Acknowledgment Signed as ${signatureRole} (Report #${reportId})`,
+        newRecord: {
+          signatureRole,
+          supervisor_name: existingPlan.supervisor_name,
+          signed_at: now,
+          status: nextStatus,
+        },
+        tx,
+      });
 
       return this.hydrateReport(updated!, tx, actorUser.account.id);
     });

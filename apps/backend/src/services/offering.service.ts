@@ -45,6 +45,8 @@ import db, { type PgTransaction } from "@/configs/db.config.js";
 import { ValidateSchema } from "@/libs/result.lib.js";
 import { createPaginatedData } from "@/libs/response.lib.js";
 import { SemesterService, type ISemesterService } from "./semester.service.js";
+import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
 export interface IOfferingService {
   getOfferingById(
@@ -57,17 +59,36 @@ export interface IOfferingService {
     client?: DbClient,
     actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetOffering[]>, AppError>;
-  createOffering(info: IOfferingInsert, client?: DbClient): ResultAsync<GetOffering, AppError>;
+  createOffering(
+    info: IOfferingInsert,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetOffering, AppError>;
   updateOffering(
     id: number,
     info: IOfferingUpdate,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetOffering, AppError>;
-  deleteOffering(id: number, client?: DbClient): ResultAsync<void, AppError>;
-  restoreOffering(id: number, client?: DbClient): ResultAsync<GetOffering, AppError>;
+  deleteOffering(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
+  restoreOffering(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetOffering, AppError>;
   generateOfferingsForSemester(
     semesterId: number,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GenerateOfferingsSummary, AppError>;
 }
 
@@ -235,11 +256,9 @@ export class OfferingService implements IOfferingService {
         const chairships = actorUser.offices?.chairships || [];
 
         if (chairships.length > 0) {
-          // Chair: Lock strictly to their program(s)
           const chairProgramIds = chairships.map((c) => c.id);
           filters.push(inArray(Programs.id, chairProgramIds));
         } else if (deanships.length > 0) {
-          // Dean: Lock strictly to programs in their college(s)
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Programs.college_id, deanCollegeIds));
         }
@@ -359,7 +378,12 @@ export class OfferingService implements IOfferingService {
     });
   }
 
-  createOffering(info: IOfferingInsert, client: DbClient = db): ResultAsync<GetOffering, AppError> {
+  createOffering(
+    info: IOfferingInsert,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetOffering, AppError> {
     return ValidateSchema(OfferingInsert, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
         await this.semesterService.validateSemesterOpen(parsed.semester_id, tx);
@@ -421,6 +445,17 @@ export class OfferingService implements IOfferingService {
         const fullRecord = await this.getOfferingById(offeringId, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "offerings",
+          entityId: fullRecord.value.id,
+          entityName: `${fullRecord.value.course_curriculum.course.initialism} - ${fullRecord.value.class.year_level}${fullRecord.value.class.section}`,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
@@ -430,6 +465,8 @@ export class OfferingService implements IOfferingService {
     id: number,
     info: IOfferingUpdate,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetOffering, AppError> {
     return ValidateSchema(OfferingUpdate, info).asyncAndThen((parsed) => {
       const hasUpdates = Boolean(parsed && Object.keys(parsed).length > 0);
@@ -468,12 +505,29 @@ export class OfferingService implements IOfferingService {
         const fullRecord = await this.getOfferingById(id, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "UPDATE",
+          entity: "offerings",
+          entityId: fullRecord.value.id,
+          entityName: `${fullRecord.value.course_curriculum.course.initialism} - ${fullRecord.value.class.year_level}${fullRecord.value.class.section}`,
+          oldRecord: existing.value,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
   }
 
-  deleteOffering(id: number, client?: DbClient): ResultAsync<void, AppError> {
+  deleteOffering(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getOfferingById(id, tx);
       if (existing.isErr()) throw existing.error;
@@ -487,10 +541,28 @@ export class OfferingService implements IOfferingService {
         .returning({ id: CourseOfferings.id });
 
       if (!deleted) throw new AppError(404, "Course offering was not found or already deleted.");
+
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "DELETE",
+        entity: "offerings",
+        entityId: existing.value.id,
+        entityName: `${existing.value.course_curriculum.course.initialism} - ${existing.value.class.year_level}${existing.value.class.section}`,
+        oldRecord: existing.value,
+        tx,
+      });
+
+      return undefined;
     });
   }
 
-  restoreOffering(id: number, client?: DbClient): ResultAsync<GetOffering, AppError> {
+  restoreOffering(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetOffering, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getOfferingById(id, tx, true);
       if (existing.isErr()) throw existing.error;
@@ -540,6 +612,17 @@ export class OfferingService implements IOfferingService {
       const fullRecord = await this.getOfferingById(id, tx);
       if (fullRecord.isErr()) throw fullRecord.error;
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "RESTORE",
+        entity: "offerings",
+        entityId: fullRecord.value.id,
+        entityName: `${fullRecord.value.course_curriculum.course.initialism} - ${fullRecord.value.class.year_level}${fullRecord.value.class.section}`,
+        newRecord: fullRecord.value,
+        tx,
+      });
+
       return fullRecord.value;
     });
   }
@@ -547,6 +630,8 @@ export class OfferingService implements IOfferingService {
   generateOfferingsForSemester(
     semesterId: number,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GenerateOfferingsSummary, AppError> {
     return WithTransaction(client, async (tx) => {
       const [semester] = await tx
@@ -647,6 +732,17 @@ export class OfferingService implements IOfferingService {
 
       if (offeringsToInsert.length > 0) {
         await tx.insert(CourseOfferings).values(offeringsToInsert);
+
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "BULK_IMPORT",
+          entity: "offerings",
+          entityId: semesterId,
+          entityName: `Generated ${offeringsToInsert.length} Offerings for Semester #${semesterId}`,
+          newRecord: { count: offeringsToInsert.length, semesterId },
+          tx,
+        });
       }
 
       return {

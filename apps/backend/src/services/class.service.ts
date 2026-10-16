@@ -33,6 +33,8 @@ import {
 } from "drizzle-orm";
 import { ValidateSchema } from "@/libs/result.lib.js";
 import { createPaginatedData } from "@/libs/response.lib.js";
+import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
 export interface IClassService {
   getClassById(
@@ -45,14 +47,31 @@ export interface IClassService {
     client?: DbClient,
     actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetClass[]>, AppError>;
-  createClass(classInfo: IClassInsert, client?: DbClient): ResultAsync<GetClass, AppError>;
+  createClass(
+    classInfo: IClassInsert,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetClass, AppError>;
   updateClass(
     id: number,
     classInfo: IClassUpdate,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetClass, AppError>;
-  deleteClass(id: number, client?: DbClient): ResultAsync<void, AppError>;
-  restoreClass(id: number, client?: DbClient): ResultAsync<GetClass, AppError>;
+  deleteClass(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
+  restoreClass(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetClass, AppError>;
 }
 
 export class ClassService implements IClassService {
@@ -119,11 +138,9 @@ export class ClassService implements IClassService {
         const chairships = actorUser.offices?.chairships || [];
 
         if (chairships.length > 0) {
-          // Chair: Lock strictly to their program(s)
           const chairProgramIds = chairships.map((c) => c.id);
           filters.push(inArray(Programs.id, chairProgramIds));
         } else if (deanships.length > 0) {
-          // Dean: Lock strictly to programs in their college(s)
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Programs.college_id, deanCollegeIds));
         }
@@ -204,18 +221,33 @@ export class ClassService implements IClassService {
     });
   }
 
-  createClass(classInfo: IClassInsert, client: DbClient = db): ResultAsync<GetClass, AppError> {
+  createClass(
+    classInfo: IClassInsert,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetClass, AppError> {
     return ValidateSchema(ClassInsert, classInfo).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
         const programResult = await this.programService.getProgramById(parsed.program_id, tx);
         if (programResult.isErr()) throw programResult.error;
 
         const [createdClass] = await tx.insert(Classes).values(parsed).returning();
-
         if (!createdClass) throw new AppError(500, "Failed to create class record.");
 
         const fullClass = await this.getClassById(createdClass.id, tx);
         if (fullClass.isErr()) throw fullClass.error;
+
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "classes",
+          entityId: fullClass.value.id,
+          entityName: `${fullClass.value.program.initialism} ${fullClass.value.year_level}-${fullClass.value.section}`,
+          newRecord: fullClass.value,
+          tx,
+        });
 
         return fullClass.value;
       });
@@ -226,6 +258,8 @@ export class ClassService implements IClassService {
     id: number,
     classInfo: IClassUpdate,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetClass, AppError> {
     return ValidateSchema(ClassUpdate, classInfo).asyncAndThen((parsed) => {
       const hasUpdateData = Boolean(parsed && Object.keys(parsed).length > 0);
@@ -255,12 +289,29 @@ export class ClassService implements IClassService {
         const fullClass = await this.getClassById(id, tx);
         if (fullClass.isErr()) throw fullClass.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "UPDATE",
+          entity: "classes",
+          entityId: fullClass.value.id,
+          entityName: `${fullClass.value.program.initialism} ${fullClass.value.year_level}-${fullClass.value.section}`,
+          oldRecord: existingClass.value,
+          newRecord: fullClass.value,
+          tx,
+        });
+
         return fullClass.value;
       });
     });
   }
 
-  deleteClass(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteClass(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const existingClass = await this.getClassById(id, tx);
       if (existingClass.isErr()) throw existingClass.error;
@@ -271,12 +322,29 @@ export class ClassService implements IClassService {
         .update(Classes)
         .set({ deleted_at: new Date() })
         .where(and(eq(Classes.id, id), isNull(Classes.deleted_at)))
-        .returning({ id: Classes.id });
+        .returning();
+
       if (!deleted) throw new AppError(404, "Class was not found or has already been archived.");
+
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "DELETE",
+        entity: "classes",
+        entityId: existingClass.value.id,
+        entityName: `${existingClass.value.program.initialism} ${existingClass.value.year_level}-${existingClass.value.section}`,
+        oldRecord: existingClass.value,
+        tx,
+      });
     });
   }
 
-  restoreClass(id: number, client: DbClient = db): ResultAsync<GetClass, AppError> {
+  restoreClass(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetClass, AppError> {
     return WithTransaction(client, async (tx) => {
       const existingClass = await this.getClassById(id, tx, true);
       if (existingClass.isErr()) throw existingClass.error;
@@ -322,6 +390,17 @@ export class ClassService implements IClassService {
       const fullClass = await this.getClassById(id, tx);
       if (fullClass.isErr()) throw fullClass.error;
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "RESTORE",
+        entity: "classes",
+        entityId: fullClass.value.id,
+        entityName: `${fullClass.value.program.initialism} ${fullClass.value.year_level}-${fullClass.value.section}`,
+        newRecord: fullClass.value,
+        tx,
+      });
+
       return fullClass.value;
     });
   }
@@ -343,12 +422,8 @@ export class ClassService implements IClassService {
 
     if (offeringCount > 0 || studentCount > 0) {
       const reasons: string[] = [];
-      if (offeringCount > 0) {
-        reasons.push(`${offeringCount} scheduled course offering(s)`);
-      }
-      if (studentCount > 0) {
-        reasons.push(`${studentCount} enrolled student(s)`);
-      }
+      if (offeringCount > 0) reasons.push(`${offeringCount} scheduled course offering(s)`);
+      if (studentCount > 0) reasons.push(`${studentCount} enrolled student(s)`);
 
       throw new AppError(
         409,
