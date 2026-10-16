@@ -40,6 +40,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsRight,
+  Layers,
 } from "lucide-react";
 import type { IAuditLogSelect } from "@my-app/shared";
 
@@ -47,6 +48,7 @@ export default function AuditLogPage() {
   const [search, setSearch] = useState("");
   const [entityFilter, setEntityFilter] = useState<string | undefined>(undefined);
   const [page, setPage] = useState(1);
+  const [rollbackEntireTx, setRollbackEntireTx] = useState(true);
 
   const { data: response, isLoading } = useAuditLogs({
     search: search || undefined,
@@ -67,7 +69,10 @@ export default function AuditLogPage() {
     if (!rollbackTarget) return;
 
     try {
-      const res = await rollbackMutation.mutateAsync(rollbackTarget.id);
+      const res = await rollbackMutation.mutateAsync({
+        id: rollbackTarget.id,
+        rollbackEntireTransaction: rollbackEntireTx,
+      });
       toast.success(res.message);
       setRollbackTarget(null);
     } catch (err: any) {
@@ -85,8 +90,30 @@ export default function AuditLogPage() {
         return (
           <Badge className="bg-destructive/15 text-destructive border-destructive/30">DELETE</Badge>
         );
+      case "RESTORE":
+        return <Badge className="bg-primary/15 text-primary border-primary/30">RESTORE</Badge>;
       case "ROLLBACK":
         return <Badge className="bg-warning/15 text-warning border-warning/30">ROLLBACK</Badge>;
+      case "STATUS_CHANGE":
+        return (
+          <Badge variant="outline" className="text-chart-2 border-chart-2/30">
+            STATUS
+          </Badge>
+        );
+      case "ROLE_CHANGE":
+        return (
+          <Badge variant="outline" className="text-primary border-primary/30">
+            ROLES
+          </Badge>
+        );
+      case "PASSWORD_RESET":
+        return (
+          <Badge variant="outline" className="text-destructive border-destructive/30">
+            PASS_RESET
+          </Badge>
+        );
+      case "BULK_IMPORT":
+        return <Badge className="bg-chart-3/15 text-chart-3 border-chart-3/30">BULK_IMPORT</Badge>;
       default:
         return <Badge variant="outline">{action}</Badge>;
     }
@@ -102,7 +129,8 @@ export default function AuditLogPage() {
             <span>Audit Trail & Rollback Control</span>
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Immutable log of all administrative actions with point-in-time state reversion.
+            Immutable log of all administrative actions with atomic multi-table transaction
+            rollback.
           </p>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-xl border border-border">
@@ -139,7 +167,13 @@ export default function AuditLogPage() {
             <SelectItem value="curriculums">Curriculums</SelectItem>
             <SelectItem value="faculties">Faculties</SelectItem>
             <SelectItem value="offerings">Offerings</SelectItem>
-            <SelectItem value="users">Users</SelectItem>
+            <SelectItem value="class_students">Class Rosters</SelectItem>
+            <SelectItem value="student_classes">Course Enrollments</SelectItem>
+            <SelectItem value="semesters">Semesters</SelectItem>
+            <SelectItem value="accounts">User Accounts</SelectItem>
+            <SelectItem value="student_evaluation_schedules">SET Schedules</SelectItem>
+            <SelectItem value="supervisor_evaluation_schedules">SEF Schedules</SelectItem>
+            <SelectItem value="individual_faculty_reports">Evaluation Reports</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -160,14 +194,15 @@ export default function AuditLogPage() {
                 <TableHead className="font-bold">Action</TableHead>
                 <TableHead className="font-bold">Entity</TableHead>
                 <TableHead className="font-bold">Target Record</TableHead>
-                <TableHead className="text-right font-bold w-[130px]">Actions</TableHead>
+                <TableHead className="font-bold">Tx Group</TableHead>
+                <TableHead className="text-right font-bold w-[120px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {auditLogs.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center py-12 text-xs text-muted-foreground"
                   >
                     No audit records match the current filters.
@@ -193,8 +228,20 @@ export default function AuditLogPage() {
                         {log.entity}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-medium text-foreground max-w-[180px] truncate">
+                    <TableCell className="font-medium text-foreground max-w-[160px] truncate">
                       {log.entity_name}
+                    </TableCell>
+                    <TableCell>
+                      {log.transaction_id ? (
+                        <span
+                          className="font-mono text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted max-w-[70px] truncate block"
+                          title={`Transaction ID: ${log.transaction_id}`}
+                        >
+                          {log.transaction_id.slice(0, 8)}…
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -216,7 +263,10 @@ export default function AuditLogPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => setRollbackTarget(log)}
+                              onClick={() => {
+                                setRollbackTarget(log);
+                                setRollbackEntireTx(Boolean(log.transaction_id));
+                              }}
                               className="h-7 text-[11px] gap-1 text-primary border-primary/30 hover:bg-primary/10"
                             >
                               <RotateCcw className="w-3 h-3" />
@@ -229,7 +279,7 @@ export default function AuditLogPage() {
                             variant="outline"
                             className="text-[10px] text-muted-foreground gap-1"
                           >
-                            <CheckCircle2 className="w-3 h-3 text-success" /> Rolled Back
+                            <CheckCircle2 className="w-3 h-3 text-success" /> Reverted
                           </Badge>
                         )}
                       </div>
@@ -308,6 +358,11 @@ export default function AuditLogPage() {
               <DialogDescription className="text-xs">
                 Captured before-and-after values for this {activeDiffLog.action} action on{" "}
                 {activeDiffLog.entity}.
+                {activeDiffLog.transaction_id && (
+                  <span className="block mt-1 font-mono text-[10px] text-muted-foreground">
+                    Tx ID: {activeDiffLog.transaction_id}
+                  </span>
+                )}
               </DialogDescription>
             </DialogHeader>
 
@@ -316,17 +371,42 @@ export default function AuditLogPage() {
         </Dialog>
       )}
 
-      {/* ── Rollback Confirmation Modal ── */}
+      {/* ── Rollback Confirmation Modal with Transaction Toggle ── */}
       <ConfirmActionDialog
         open={Boolean(rollbackTarget)}
         onOpenChange={(open) => !open && setRollbackTarget(null)}
         title={`Rollback ${rollbackTarget?.action} on ${rollbackTarget?.entity_name}?`}
         description={
-          <span>
-            This will revert <strong>{rollbackTarget?.entity_name}</strong> back to its state prior
-            to this action. A permanent audit log entry of this rollback will be added to the
-            ledger.
-          </span>
+          <div className="space-y-3 pt-1">
+            <p className="text-xs text-muted-foreground">
+              This will revert <strong>{rollbackTarget?.entity_name}</strong> back to its pre-action
+              state inside an atomic database transaction.
+            </p>
+
+            {rollbackTarget?.transaction_id && (
+              <div className="p-3 rounded-xl border border-border bg-muted/40 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                  <Layers className="w-4 h-4 text-primary" />
+                  <span>Transaction Group Detected</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  This action was part of an atomic multi-table transaction (
+                  <code className="text-[10px]">{rollbackTarget.transaction_id.slice(0, 8)}…</code>
+                  ). Rolling back the entire transaction will safely revert all associated
+                  operations in reverse dependency order.
+                </p>
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-foreground pt-1">
+                  <input
+                    type="checkbox"
+                    checked={rollbackEntireTx}
+                    onChange={(e) => setRollbackEntireTx(e.target.checked)}
+                    className="rounded border-input text-primary focus:ring-primary"
+                  />
+                  <span>Rollback all related changes in this transaction</span>
+                </label>
+              </div>
+            )}
+          </div>
         }
         confirmLabel="Confirm Rollback"
         variant="destructive"

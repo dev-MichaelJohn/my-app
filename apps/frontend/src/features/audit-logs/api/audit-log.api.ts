@@ -7,7 +7,13 @@ export class AuditLogAPI {
     return http.get<PaginatedData<IAuditLogSelect[]>>("/audit-logs", query);
   }
 
-  rollback(id: number): ResultAsync<{ message: string; restoredEntity: string }, ApiError> {
-    return http.post<{ message: string; restoredEntity: string }>(`/audit-logs/${id}/rollback`);
+  rollback(
+    id: number,
+    rollbackEntireTransaction = true,
+  ): ResultAsync<{ message: string; restoredEntity: string; revertedCount: number }, ApiError> {
+    return http.post<{ message: string; restoredEntity: string; revertedCount: number }>(
+      `/audit-logs/${id}/rollback`,
+      { rollbackEntireTransaction },
+    );
   }
 }
