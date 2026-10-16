@@ -6,9 +6,9 @@ import z from "zod";
 export class CourseController {
   constructor(private courseService: ICourseService = new CourseService()) {}
 
-  private idSchema = z.coerce.number().int().positive("Invalid Program ID provided.");
+  private idSchema = z.coerce.number().int().positive("Invalid Course ID provided.");
 
-  getCourseById = runAsync((req, _res) => {
+  getCourseById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((courseId) => {
       return this.courseService.getCourseById(courseId).map((data) => ({
         status: 200,
@@ -18,7 +18,7 @@ export class CourseController {
     });
   });
 
-  getCourses = runAsync((req, _res) => {
+  getCourses = runAsync((req) => {
     return this.courseService.getCourses(req.query, undefined, req.user).map((data) => ({
       status: 200,
       message: "Courses retrieved successfully.",
@@ -26,27 +26,29 @@ export class CourseController {
     }));
   });
 
-  createCourse = runAsync((req, _res) => {
-    return this.courseService.createCourse(req.body).map((data) => ({
+  createCourse = runAsync((req) => {
+    return this.courseService.createCourse(req.body, undefined, req.user, req).map((data) => ({
       status: 200,
       message: "Course created successfully.",
       data,
     }));
   });
 
-  updateCourse = runAsync((req, _res) => {
+  updateCourse = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((courseId) => {
-      return this.courseService.updateCourse(courseId, req.body).map((data) => ({
-        status: 200,
-        message: "Course updated successfully.",
-        data,
-      }));
+      return this.courseService
+        .updateCourse(courseId, req.body, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Course updated successfully.",
+          data,
+        }));
     });
   });
 
-  deleteCourse = runAsync((req, _res) => {
+  deleteCourse = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((courseId) => {
-      return this.courseService.deleteCourse(courseId).map(() => ({
+      return this.courseService.deleteCourse(courseId, undefined, req.user, req).map(() => ({
         status: 200,
         message: "Course archived successfully.",
         data: null,
@@ -54,9 +56,9 @@ export class CourseController {
     });
   });
 
-  restoreCourse = runAsync((req, _res) => {
+  restoreCourse = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((courseId) => {
-      return this.courseService.restoreCourse(courseId).map((data) => ({
+      return this.courseService.restoreCourse(courseId, undefined, req.user, req).map((data) => ({
         status: 200,
         message: "Course restored successfully.",
         data,

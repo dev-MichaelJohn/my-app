@@ -42,6 +42,7 @@ import { createPaginatedData } from "@/libs/response.lib.js";
 import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
 import { UserService, type IUserService } from "./user.service.js";
 import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
 export interface ICollegeService {
   getCollegeById(
@@ -58,18 +59,26 @@ export interface ICollegeService {
     collegeInfo: CreateCollege,
     client?: DbClient,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetCollege, AppError>;
   updateCollege(
     id: number,
     collegeInfo: UpdateCollege,
     client?: DbClient,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetCollege, AppError>;
-  deleteCollege(id: number, client?: DbClient, actorUser?: GetUser): ResultAsync<void, AppError>;
+  deleteCollege(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
   restoreCollege(
     id: number,
     client?: DbClient,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetCollege, AppError>;
   hasDeanships(accountId: number, tx: PgTransaction, excludeCollegeId?: number): Promise<boolean>;
   hasProgramChairRecords(
@@ -159,7 +168,6 @@ export class CollegeService implements ICollegeService {
         is_archived ? isNotNull(Colleges.deleted_at) : isNull(Colleges.deleted_at),
       ];
 
-      // ── Scoping for Deans & Program Chairs ──
       const roles = actorUser?.roles ?? [];
       const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
 
@@ -168,11 +176,9 @@ export class CollegeService implements ICollegeService {
         const chairships = actorUser.offices?.chairships || [];
 
         if (deanships.length > 0) {
-          // Dean: Can only see the college(s) they govern
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Colleges.id, deanCollegeIds));
         } else if (chairships.length > 0) {
-          // Program Chair: Has NO access to college-level data
           return okAsync(
             createPaginatedData({ data: [], currentPage: 1, pageSize: limit, totalItems: 0 }),
           );
@@ -296,17 +302,30 @@ export class CollegeService implements ICollegeService {
     collegeInfo: CreateCollege,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetCollege, AppError> {
     return ValidateSchema(CreateCollegeSchema, collegeInfo).asyncAndThen(({ college, dean }) => {
       return WithTransaction(client, async (tx) => {
         const [collegeRecord] = await tx.insert(Colleges).values(college).returning();
         if (!collegeRecord) throw new AppError(500, "Failed to create college record.");
 
-        if (!dean)
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "colleges",
+          entityId: collegeRecord.id,
+          entityName: `${collegeRecord.initialism} - ${collegeRecord.name}`,
+          newRecord: collegeRecord,
+          tx,
+        });
+
+        if (!dean) {
           return {
             college: collegeRecord,
             dean: null,
           };
+        }
 
         let deanUser: GetUser | null = null;
         let account_id: number;
@@ -321,7 +340,7 @@ export class CollegeService implements ICollegeService {
         } else {
           const { info } = dean;
           const newDeanInfo: CreateUser = { ...info, role: "FACULTY" };
-          const userRecord = await this.userService.createUser(newDeanInfo, tx);
+          const userRecord = await this.userService.createUser(newDeanInfo, tx, actorUser, req);
           if (userRecord.isErr()) throw userRecord.error;
 
           deanUser = userRecord.value;
@@ -341,11 +360,12 @@ export class CollegeService implements ICollegeService {
 
         await logAuditEvent({
           actor: actorUser,
+          req,
           action: "CREATE",
-          entity: "colleges",
-          entityId: collegeRecord.id,
-          entityName: `${collegeRecord.initialism} - ${collegeRecord.name}`,
-          newRecord: collegeRecord,
+          entity: "college_deans",
+          entityId: deanAssignment.id,
+          entityName: `Dean of ${collegeRecord.initialism}`,
+          newRecord: deanAssignment,
           tx,
         });
 
@@ -362,6 +382,7 @@ export class CollegeService implements ICollegeService {
     collegeInfo: UpdateCollege,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetCollege, AppError> {
     return ValidateSchema(UpdateCollegeSchema, collegeInfo).asyncAndThen(({ college, dean }) => {
       const hasCollegeInfo = Boolean(college && Object.keys(college).length > 0);
@@ -391,6 +412,7 @@ export class CollegeService implements ICollegeService {
 
           await logAuditEvent({
             actor: actorUser,
+            req,
             action: "UPDATE",
             entity: "colleges",
             entityId: updated.id,
@@ -403,11 +425,10 @@ export class CollegeService implements ICollegeService {
 
         if (hasDeanInfo) {
           if (dean === null) {
-            // 1. Vacate the active Dean assignment in DB first
             if (existingCollege.dean) {
               const oldDeanId = existingCollege.dean.account.id;
 
-              await tx
+              const [vacated] = await tx
                 .update(CollegeDeans)
                 .set({ deleted_at: new Date() })
                 .where(
@@ -416,9 +437,22 @@ export class CollegeService implements ICollegeService {
                     eq(CollegeDeans.college_id, existingCollege.college.id),
                     isNull(CollegeDeans.deleted_at),
                   ),
-                );
+                )
+                .returning();
 
-              // 2. Only revoke SUPERVISOR if they have no other active offices
+              if (vacated) {
+                await logAuditEvent({
+                  actor: actorUser,
+                  req,
+                  action: "DELETE",
+                  entity: "college_deans",
+                  entityId: vacated.id,
+                  entityName: `Vacated Dean of ${existingCollege.college.initialism}`,
+                  oldRecord: vacated,
+                  tx,
+                });
+              }
+
               const hasOtherDeanships = await this.hasDeanships(oldDeanId, tx);
               const hasProgramChair = await this.hasProgramChairRecords(oldDeanId, tx);
 
@@ -444,18 +478,22 @@ export class CollegeService implements ICollegeService {
                 finalDeanUser = userRecord.value;
               } else {
                 const newDeanInfo: CreateUser = { ...dean.info, role: "FACULTY" };
-                const userRecord = await this.userService.createUser(newDeanInfo, tx);
+                const userRecord = await this.userService.createUser(
+                  newDeanInfo,
+                  tx,
+                  actorUser,
+                  req,
+                );
                 if (userRecord.isErr()) throw userRecord.error;
 
                 finalDeanUser = userRecord.value;
                 account_id = finalDeanUser.account.id;
               }
 
-              // Vacate previous dean
               if (existingCollege.dean) {
                 const oldDeanId = existingCollege.dean.account.id;
 
-                await tx
+                const [vacated] = await tx
                   .update(CollegeDeans)
                   .set({ deleted_at: new Date() })
                   .where(
@@ -464,7 +502,21 @@ export class CollegeService implements ICollegeService {
                       eq(CollegeDeans.college_id, existingCollege.college.id),
                       isNull(CollegeDeans.deleted_at),
                     ),
-                  );
+                  )
+                  .returning();
+
+                if (vacated) {
+                  await logAuditEvent({
+                    actor: actorUser,
+                    req,
+                    action: "DELETE",
+                    entity: "college_deans",
+                    entityId: vacated.id,
+                    entityName: `Replaced Dean of ${existingCollege.college.initialism}`,
+                    oldRecord: vacated,
+                    tx,
+                  });
+                }
 
                 const hasOtherDeanships = await this.hasDeanships(oldDeanId, tx);
                 const hasProgramChair = await this.hasProgramChairRecords(oldDeanId, tx);
@@ -475,7 +527,6 @@ export class CollegeService implements ICollegeService {
                 }
               }
 
-              // Assign new dean
               const grantRes = await this.userService.grantRole(account_id, "SUPERVISOR", tx);
               if (grantRes.isErr()) throw grantRes.error;
 
@@ -488,6 +539,17 @@ export class CollegeService implements ICollegeService {
                 .returning();
 
               if (!newDeanRecord) throw new AppError(500, "Failed to assign new dean to college.");
+
+              await logAuditEvent({
+                actor: actorUser,
+                req,
+                action: "CREATE",
+                entity: "college_deans",
+                entityId: newDeanRecord.id,
+                entityName: `New Dean of ${existingCollege.college.initialism}`,
+                newRecord: newDeanRecord,
+                tx,
+              });
             }
           }
         }
@@ -504,6 +566,7 @@ export class CollegeService implements ICollegeService {
     id: number,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const result = await this.getCollegeById(id, tx);
@@ -555,6 +618,7 @@ export class CollegeService implements ICollegeService {
 
       await logAuditEvent({
         actor: actorUser,
+        req,
         action: "DELETE",
         entity: "colleges",
         entityId: existingCollege.college.id,
@@ -569,6 +633,7 @@ export class CollegeService implements ICollegeService {
     id: number,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetCollege, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getCollegeById(id, tx, true);
@@ -612,6 +677,7 @@ export class CollegeService implements ICollegeService {
 
       await logAuditEvent({
         actor: actorUser,
+        req,
         action: "RESTORE",
         entity: "colleges",
         entityId: restored.id,

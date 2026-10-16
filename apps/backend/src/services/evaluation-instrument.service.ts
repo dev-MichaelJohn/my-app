@@ -41,12 +41,17 @@ import {
   type ISupervisorEvalFormSelect,
   type ISupervisorEvalFormUpdate,
   type PaginatedData,
+  type GetUser,
 } from "@my-app/shared";
+import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
 export interface IEvaluationInstrumentService {
   createStudentForm(
     info: IStudentEvalFormInsert,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<IStudentEvalFormSelect, AppError>;
   getStudentFormById(
     id: number,
@@ -61,16 +66,27 @@ export interface IEvaluationInstrumentService {
     id: number,
     info: IStudentEvalFormUpdate,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<IStudentEvalFormSelect, AppError>;
-  deleteStudentForm(id: number, client?: DbClient): ResultAsync<void, AppError>;
+  deleteStudentForm(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
   restoreStudentForm(
     id: number,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetStudentEvaluationForm, AppError>;
 
   createSupervisorForm(
     info: ISupervisorEvalFormInsert,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<ISupervisorEvalFormSelect, AppError>;
   getSupervisorFormById(
     id: number,
@@ -85,22 +101,29 @@ export interface IEvaluationInstrumentService {
     id: number,
     info: ISupervisorEvalFormUpdate,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<ISupervisorEvalFormSelect, AppError>;
-  deleteSupervisorForm(id: number, client?: DbClient): ResultAsync<void, AppError>;
+  deleteSupervisorForm(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
   restoreSupervisorForm(
     id: number,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetSupervisorEvaluationForm, AppError>;
 }
 
 export class EvaluationInstrumentService implements IEvaluationInstrumentService {
-  // =========================================================================
-  // 1. STUDENT INSTRUMENTS (SET)
-  // =========================================================================
-
   createStudentForm(
     info: IStudentEvalFormInsert,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<IStudentEvalFormSelect, AppError> {
     return ValidateSchema(StudentEvalFormInsert, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -117,7 +140,6 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
             );
           }
 
-          // Reactivate archived form
           const [reactivated] = await tx
             .update(StudentEvaluationForms)
             .set({
@@ -131,12 +153,35 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
             .returning();
 
           if (!reactivated) throw new AppError(500, "Failed to reactivate evaluation form.");
+
+          await logAuditEvent({
+            actor: actorUser,
+            req,
+            action: "RESTORE",
+            entity: "student_evaluation_forms",
+            entityId: reactivated.id,
+            entityName: reactivated.title,
+            newRecord: reactivated,
+            tx,
+          });
+
           return reactivated;
         }
 
         const [created] = await tx.insert(StudentEvaluationForms).values(parsed).returning();
-
         if (!created) throw new AppError(500, "Failed to create evaluation form.");
+
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "student_evaluation_forms",
+          entityId: created.id,
+          entityName: created.title,
+          newRecord: created,
+          tx,
+        });
+
         return created;
       });
     });
@@ -148,7 +193,6 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
     client: DbClient = db,
   ): ResultAsync<GetStudentEvaluationForm, AppError> {
     return WithTransaction(client, async (tx) => {
-      // 1. Fetch Form Root
       const [form] = await tx
         .select()
         .from(StudentEvaluationForms)
@@ -161,7 +205,6 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
 
       if (!form) throw new AppError(404, "Student evaluation form was not found.");
 
-      // 2. Fetch Active Categories
       const categories = await tx
         .select()
         .from(StudentEvaluationCategories)
@@ -179,7 +222,6 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
 
       const catIds = categories.map((c) => c.id);
 
-      // 3. Fetch Active Questions for all categories in this form
       const questions = await tx
         .select()
         .from(StudentEvaluationQuestions)
@@ -191,7 +233,6 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
         )
         .orderBy(asc(StudentEvaluationQuestions.order));
 
-      // 4. Assemble tree in memory (Fast O(N) map)
       const categoryMap = new Map(
         categories.map((c) => [c.id, { ...c, questions: [] as typeof questions }]),
       );
@@ -273,6 +314,8 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
     id: number,
     info: IStudentEvalFormUpdate,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<IStudentEvalFormSelect, AppError> {
     return ValidateSchema(StudentEvalFormUpdate, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -306,12 +349,30 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
           .returning();
 
         if (!updated) throw new AppError(404, "Student evaluation form not found.");
+
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "UPDATE",
+          entity: "student_evaluation_forms",
+          entityId: updated.id,
+          entityName: updated.title,
+          oldRecord: existing.value,
+          newRecord: updated,
+          tx,
+        });
+
         return updated;
       });
     });
   }
 
-  deleteStudentForm(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteStudentForm(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getStudentFormById(id, false, tx);
       if (existing.isErr()) throw existing.error;
@@ -322,11 +383,10 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
         .update(StudentEvaluationForms)
         .set({ deleted_at: deleteTime })
         .where(and(eq(StudentEvaluationForms.id, id), isNull(StudentEvaluationForms.deleted_at)))
-        .returning({ id: StudentEvaluationForms.id });
+        .returning();
 
       if (!deleted) throw new AppError(404, "Form not found or already archived.");
 
-      // Cascade soft-delete
       await tx
         .update(StudentEvaluationCategories)
         .set({ deleted_at: deleteTime })
@@ -337,6 +397,17 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
           ),
         );
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "DELETE",
+        entity: "student_evaluation_forms",
+        entityId: existing.value.id,
+        entityName: existing.value.title,
+        oldRecord: existing.value,
+        tx,
+      });
+
       return undefined;
     });
   }
@@ -344,6 +415,8 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
   restoreStudentForm(
     id: number,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetStudentEvaluationForm, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getStudentFormById(id, true, tx);
@@ -354,7 +427,6 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
         throw new AppError(400, "This evaluation form is already active.");
       }
 
-      // Conflict check on active form title
       const [conflict] = await tx
         .select({ id: StudentEvaluationForms.id })
         .from(StudentEvaluationForms)
@@ -373,7 +445,6 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
         );
       }
 
-      // Restore form & categories
       await tx
         .update(StudentEvaluationForms)
         .set({ deleted_at: null, updated_at: new Date() })
@@ -387,17 +458,26 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
       const fullRecord = await this.getStudentFormById(id, false, tx);
       if (fullRecord.isErr()) throw fullRecord.error;
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "RESTORE",
+        entity: "student_evaluation_forms",
+        entityId: fullRecord.value.id,
+        entityName: fullRecord.value.title,
+        newRecord: fullRecord.value,
+        tx,
+      });
+
       return fullRecord.value;
     });
   }
 
-  // =========================================================================
-  // 2. SUPERVISOR INSTRUMENTS (SEF)
-  // =========================================================================
-
   createSupervisorForm(
     info: ISupervisorEvalFormInsert,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<ISupervisorEvalFormSelect, AppError> {
     return ValidateSchema(SupervisorEvalFormInsert, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -425,12 +505,35 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
 
           if (!reactivated)
             throw new AppError(500, "Failed to reactivate supervisor evaluation form.");
+
+          await logAuditEvent({
+            actor: actorUser,
+            req,
+            action: "RESTORE",
+            entity: "supervisor_evaluation_forms",
+            entityId: reactivated.id,
+            entityName: reactivated.title,
+            newRecord: reactivated,
+            tx,
+          });
+
           return reactivated;
         }
 
         const [created] = await tx.insert(SupervisorEvaluationForms).values(parsed).returning();
-
         if (!created) throw new AppError(500, "Failed to create supervisor evaluation form.");
+
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "supervisor_evaluation_forms",
+          entityId: created.id,
+          entityName: created.title,
+          newRecord: created,
+          tx,
+        });
+
         return created;
       });
     });
@@ -442,7 +545,6 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
     client: DbClient = db,
   ): ResultAsync<GetSupervisorEvaluationForm, AppError> {
     return WithTransaction(client, async (tx) => {
-      // 1. Fetch Form Root
       const [form] = await tx
         .select()
         .from(SupervisorEvaluationForms)
@@ -455,7 +557,6 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
 
       if (!form) throw new AppError(404, "Supervisor evaluation form was not found.");
 
-      // 2. Fetch Active Categories
       const categories = await tx
         .select()
         .from(SupervisorEvaluationCategories)
@@ -473,7 +574,6 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
 
       const catIds = categories.map((c) => c.id);
 
-      // 3. Fetch Questions
       const questions = await tx
         .select()
         .from(SupervisorEvaluationQuestions)
@@ -487,7 +587,6 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
 
       const questionIds = questions.map((q) => q.id);
 
-      // 4. Fetch MOVs / Means Descriptors
       const means =
         questionIds.length > 0
           ? await tx
@@ -502,7 +601,6 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
               .orderBy(asc(SupervisorEvaluationMeans.order))
           : [];
 
-      // 5. Assemble full 4-tier tree in memory
       const questionMap = new Map(
         questions.map((q) => [q.id, { ...q, means: [] as typeof means }]),
       );
@@ -598,6 +696,8 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
     id: number,
     info: ISupervisorEvalFormUpdate,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<ISupervisorEvalFormSelect, AppError> {
     return ValidateSchema(SupervisorEvalFormUpdate, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -628,12 +728,30 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
           .returning();
 
         if (!updated) throw new AppError(404, "Supervisor evaluation form not found.");
+
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "UPDATE",
+          entity: "supervisor_evaluation_forms",
+          entityId: updated.id,
+          entityName: updated.title,
+          oldRecord: existing.value,
+          newRecord: updated,
+          tx,
+        });
+
         return updated;
       });
     });
   }
 
-  deleteSupervisorForm(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteSupervisorForm(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getSupervisorFormById(id, false, tx);
       if (existing.isErr()) throw existing.error;
@@ -646,7 +764,7 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
         .where(
           and(eq(SupervisorEvaluationForms.id, id), isNull(SupervisorEvaluationForms.deleted_at)),
         )
-        .returning({ id: SupervisorEvaluationForms.id });
+        .returning();
 
       if (!deleted) throw new AppError(404, "Form not found or already archived.");
 
@@ -660,6 +778,17 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
           ),
         );
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "DELETE",
+        entity: "supervisor_evaluation_forms",
+        entityId: existing.value.id,
+        entityName: existing.value.title,
+        oldRecord: existing.value,
+        tx,
+      });
+
       return undefined;
     });
   }
@@ -667,6 +796,8 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
   restoreSupervisorForm(
     id: number,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetSupervisorEvaluationForm, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getSupervisorFormById(id, true, tx);
@@ -707,6 +838,17 @@ export class EvaluationInstrumentService implements IEvaluationInstrumentService
 
       const fullRecord = await this.getSupervisorFormById(id, false, tx);
       if (fullRecord.isErr()) throw fullRecord.error;
+
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "RESTORE",
+        entity: "supervisor_evaluation_forms",
+        entityId: fullRecord.value.id,
+        entityName: fullRecord.value.title,
+        newRecord: fullRecord.value,
+        tx,
+      });
 
       return fullRecord.value;
     });

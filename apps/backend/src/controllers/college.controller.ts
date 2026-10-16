@@ -8,7 +8,7 @@ export class CollegeController {
 
   private idSchema = z.coerce.number().int().positive("Invalid College ID provided.");
 
-  getCollegeById = runAsync((req, _res) => {
+  getCollegeById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((collegeId) => {
       return this.collegeService.getCollegeById(collegeId).map((data) => ({
         status: 200,
@@ -18,7 +18,7 @@ export class CollegeController {
     });
   });
 
-  getColleges = runAsync((req, _res) => {
+  getColleges = runAsync((req) => {
     return this.collegeService.getColleges(req.query, undefined, req.user).map((data) => ({
       status: 200,
       message: "Colleges retrieved successfully.",
@@ -26,18 +26,18 @@ export class CollegeController {
     }));
   });
 
-  createCollege = runAsync((req, _res) => {
-    return this.collegeService.createCollege(req.body, undefined, req.user).map((data) => ({
+  createCollege = runAsync((req) => {
+    return this.collegeService.createCollege(req.body, undefined, req.user, req).map((data) => ({
       status: 201,
       message: "College created successfully.",
       data,
     }));
   });
 
-  updateCollege = runAsync((req, _res) => {
+  updateCollege = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((collegeId) => {
       return this.collegeService
-        .updateCollege(collegeId, req.body, undefined, req.user)
+        .updateCollege(collegeId, req.body, undefined, req.user, req)
         .map((data) => ({
           status: 200,
           message: "College updated successfully.",
@@ -46,9 +46,9 @@ export class CollegeController {
     });
   });
 
-  deleteCollege = runAsync((req, _res) => {
+  deleteCollege = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((collegeId) => {
-      return this.collegeService.deleteCollege(collegeId, undefined, req.user).map(() => ({
+      return this.collegeService.deleteCollege(collegeId, undefined, req.user, req).map(() => ({
         status: 200,
         message: "College archived successfully!",
         data: null,
@@ -56,13 +56,15 @@ export class CollegeController {
     });
   });
 
-  restoreCollege = runAsync((req, _res) => {
+  restoreCollege = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((collegeId) => {
-      return this.collegeService.restoreCollege(collegeId, undefined, req.user).map((data) => ({
-        status: 200,
-        message: "College restored successfully!",
-        data,
-      }));
+      return this.collegeService
+        .restoreCollege(collegeId, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "College restored successfully!",
+          data,
+        }));
     });
   });
 }

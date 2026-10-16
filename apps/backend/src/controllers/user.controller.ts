@@ -29,7 +29,7 @@ export class UserController {
   });
 
   createUser = runAsync((req) => {
-    return this.userService.createUser(req.body, undefined, req.user).map((data) => ({
+    return this.userService.createUser(req.body, undefined, req.user, req).map((data) => ({
       status: 201,
       message: "User account created successfully.",
       data,
@@ -38,17 +38,19 @@ export class UserController {
 
   updateUser = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((userId) => {
-      return this.userService.updateUser(userId, req.body, undefined, req.user).map((data) => ({
-        status: 200,
-        message: "User account updated successfully.",
-        data,
-      }));
+      return this.userService
+        .updateUser(userId, req.body, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "User account updated successfully.",
+          data,
+        }));
     });
   });
 
   deleteUser = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((userId) => {
-      return this.userService.deleteUser(userId, undefined, req.user).map(() => ({
+      return this.userService.deleteUser(userId, undefined, req.user, req).map(() => ({
         status: 200,
         message: "User account archived successfully.",
         data: null,
@@ -58,7 +60,7 @@ export class UserController {
 
   restoreUser = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((userId) => {
-      return this.userService.restoreUser(userId, undefined, req.user).map((data) => ({
+      return this.userService.restoreUser(userId, undefined, req.user, req).map((data) => ({
         status: 200,
         message: "User account restored successfully.",
         data,
@@ -69,7 +71,7 @@ export class UserController {
   manageRoles = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((userId) => {
       return this.userService
-        .manageRoles(userId, req.body.roles, undefined, req.user)
+        .manageRoles(userId, req.body.roles, undefined, req.user, req)
         .map((data) => ({
           status: 200,
           message: "User roles updated successfully.",
@@ -80,7 +82,7 @@ export class UserController {
 
   resetUserPassword = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((userId) => {
-      return this.userService.resetUserPassword(userId, undefined, req.user).map((data) => ({
+      return this.userService.resetUserPassword(userId, undefined, req.user, req).map((data) => ({
         status: 200,
         message: "Password reset. Temporary password sent to user's email.",
         data,
@@ -94,7 +96,7 @@ export class UserController {
     const targetUserId = req.params.id ? Number(req.params.id) : req.user.account.id;
 
     return this.userService
-      .changePassword(targetUserId, req.body, undefined, isSelfService)
+      .changePassword(targetUserId, req.body, undefined, isSelfService, req.user, req)
       .map(() => ({
         status: 200,
         message: "Password updated successfully.",
@@ -104,7 +106,7 @@ export class UserController {
 
   resendWelcomeEmail = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((userId) => {
-      return this.userService.resendWelcomeEmail(userId, undefined, req.user).map(() => ({
+      return this.userService.resendWelcomeEmail(userId, undefined, req.user, req).map(() => ({
         status: 200,
         message: "Account credentials re-sent successfully.",
         data: null,

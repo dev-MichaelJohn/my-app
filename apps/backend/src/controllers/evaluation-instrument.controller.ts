@@ -13,16 +13,14 @@ export class EvaluationInstrumentController {
 
   private idSchema = z.coerce.number().int().positive("Invalid Form ID provided.");
 
-  // =========================================================================
-  // 1. STUDENT INSTRUMENTS (SET)
-  // =========================================================================
-
   createStudentForm = runAsync((req) => {
-    return this.instrumentService.createStudentForm(req.body).map((data) => ({
-      status: 201,
-      message: "Student evaluation form template created successfully.",
-      data,
-    }));
+    return this.instrumentService
+      .createStudentForm(req.body, undefined, req.user, req)
+      .map((data) => ({
+        status: 201,
+        message: "Student evaluation form template created successfully.",
+        data,
+      }));
   });
 
   getStudentFormById = runAsync((req) => {
@@ -45,17 +43,19 @@ export class EvaluationInstrumentController {
 
   updateStudentForm = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((formId) => {
-      return this.instrumentService.updateStudentForm(formId, req.body).map((data) => ({
-        status: 200,
-        message: "Student evaluation form updated.",
-        data,
-      }));
+      return this.instrumentService
+        .updateStudentForm(formId, req.body, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Student evaluation form updated.",
+          data,
+        }));
     });
   });
 
   deleteStudentForm = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((formId) => {
-      return this.instrumentService.deleteStudentForm(formId).map(() => ({
+      return this.instrumentService.deleteStudentForm(formId, undefined, req.user, req).map(() => ({
         status: 200,
         message: "Student evaluation form archived successfully.",
         data: null,
@@ -65,24 +65,24 @@ export class EvaluationInstrumentController {
 
   restoreStudentForm = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((formId) => {
-      return this.instrumentService.restoreStudentForm(formId).map((data) => ({
-        status: 200,
-        message: "Student evaluation form restored.",
-        data,
-      }));
+      return this.instrumentService
+        .restoreStudentForm(formId, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Student evaluation form restored.",
+          data,
+        }));
     });
   });
 
-  // =========================================================================
-  // 2. SUPERVISOR INSTRUMENTS (SEF)
-  // =========================================================================
-
   createSupervisorForm = runAsync((req) => {
-    return this.instrumentService.createSupervisorForm(req.body).map((data) => ({
-      status: 201,
-      message: "Supervisor evaluation form template created successfully.",
-      data,
-    }));
+    return this.instrumentService
+      .createSupervisorForm(req.body, undefined, req.user, req)
+      .map((data) => ({
+        status: 201,
+        message: "Supervisor evaluation form template created successfully.",
+        data,
+      }));
   });
 
   getSupervisorFormById = runAsync((req) => {
@@ -105,31 +105,37 @@ export class EvaluationInstrumentController {
 
   updateSupervisorForm = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((formId) => {
-      return this.instrumentService.updateSupervisorForm(formId, req.body).map((data) => ({
-        status: 200,
-        message: "Supervisor evaluation form updated.",
-        data,
-      }));
+      return this.instrumentService
+        .updateSupervisorForm(formId, req.body, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Supervisor evaluation form updated.",
+          data,
+        }));
     });
   });
 
   deleteSupervisorForm = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((formId) => {
-      return this.instrumentService.deleteSupervisorForm(formId).map(() => ({
-        status: 200,
-        message: "Supervisor evaluation form archived successfully.",
-        data: null,
-      }));
+      return this.instrumentService
+        .deleteSupervisorForm(formId, undefined, req.user, req)
+        .map(() => ({
+          status: 200,
+          message: "Supervisor evaluation form archived successfully.",
+          data: null,
+        }));
     });
   });
 
   restoreSupervisorForm = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((formId) => {
-      return this.instrumentService.restoreSupervisorForm(formId).map((data) => ({
-        status: 200,
-        message: "Supervisor evaluation form restored.",
-        data,
-      }));
+      return this.instrumentService
+        .restoreSupervisorForm(formId, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Supervisor evaluation form restored.",
+          data,
+        }));
     });
   });
 }

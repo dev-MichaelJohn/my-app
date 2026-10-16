@@ -58,8 +58,9 @@ import {
   WelcomeTextTemplate,
 } from "@/libs/email.lib.js";
 import env from "@/configs/env.config.js";
+import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
-// Helper to guarantee roles is always a valid JavaScript array
 const toRolesArray = (roles: unknown): SystemRole[] => {
   if (Array.isArray(roles)) return roles as SystemRole[];
   if (typeof roles === "string") {
@@ -67,7 +68,6 @@ const toRolesArray = (roles: unknown): SystemRole[] => {
       const parsed = JSON.parse(roles);
       if (Array.isArray(parsed)) return parsed as SystemRole[];
     } catch {
-      // Handles raw string role, e.g. "SYS_ADMIN" or "FACULTY"
       return [roles as SystemRole];
     }
   }
@@ -87,39 +87,68 @@ export interface IUserService {
     info: CreateUser,
     client?: DbClient,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetUser, AppError>;
   updateUser(
     id: number,
     info: UpdateUser,
     client?: DbClient,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetUser, AppError>;
-  deleteUser(id: number, client?: DbClient, actorUser?: GetUser): ResultAsync<void, AppError>;
-  restoreUser(id: number, client?: DbClient, actorUser?: GetUser): ResultAsync<GetUser, AppError>;
-  grantRole(accountId: number, role: SystemRole, client?: DbClient): ResultAsync<void, AppError>;
-  revokeRole(accountId: number, role: SystemRole, client?: DbClient): ResultAsync<void, AppError>;
+  deleteUser(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
+  restoreUser(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetUser, AppError>;
+  grantRole(
+    accountId: number,
+    role: SystemRole,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
+  revokeRole(
+    accountId: number,
+    role: SystemRole,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
   hasRole(accountId: number, role: SystemRole, client?: DbClient): ResultAsync<boolean, AppError>;
   manageRoles(
     accountId: number,
     roles: SystemRole[],
     client?: DbClient,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetUser, AppError>;
   resetUserPassword(
     accountId: number,
     client?: DbClient,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<{ temporaryPassword: string }, AppError>;
   changePassword(
     accountId: number,
     payload: ChangePassword,
     client?: DbClient,
     isSelfService?: boolean,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<void, AppError>;
   resendWelcomeEmail(
     accountId: number,
     client?: DbClient,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<void, AppError>;
 }
 
@@ -403,12 +432,12 @@ export class UserService implements IUserService {
     info: CreateUser,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetUser, AppError> {
     return ValidateSchema(CreateUserSchema, info).asyncAndThen((parsedInfo) => {
       const actorRoles = toRolesArray(actorUser?.roles);
       const isSysAdmin = actorRoles.includes("SYS_ADMIN");
 
-      // If actorUser is provided via HTTP, enforce that only SYS_ADMIN can provision ADMIN/SYS_ADMIN
       if (
         (parsedInfo.role === "ADMIN" || parsedInfo.role === "SYS_ADMIN") &&
         actorUser &&
@@ -492,6 +521,24 @@ export class UserService implements IUserService {
           .insert(AccountRoles)
           .values({ account_id: userAccount.id, role_id: systemRole.id });
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "accounts",
+          entityId: userAccount.id,
+          entityName: `${userDetails.first_name} ${userDetails.last_name} (${userAccount.email})`,
+          newRecord: {
+            email: userAccount.email,
+            is_verified: userAccount.is_verified,
+            first_name: userDetails.first_name,
+            last_name: userDetails.last_name,
+            institutional_id: userDetails.institutional_id,
+            roles: [systemRole.system_role],
+          },
+          tx,
+        });
+
         const { password: _password, ...filteredAccount } = userAccount;
 
         return {
@@ -521,7 +568,7 @@ export class UserService implements IUserService {
           })
           .map(() => newUser)
           .orElse((err) => {
-            console.warn("⚠️ Welcome email failed to send:", err.message);
+            console.warn("Welcome email failed to send:", err.message);
             return okAsync(newUser);
           });
       });
@@ -533,6 +580,7 @@ export class UserService implements IUserService {
     info: UpdateUser,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetUser, AppError> {
     return ValidateSchema(UpdateUserSchema, info).asyncAndThen((parsed) => {
       const hasAccountInfo = Boolean(parsed.account && Object.keys(parsed.account).length > 0);
@@ -568,7 +616,6 @@ export class UserService implements IUserService {
         if (targetRoles.includes("ADMIN") && !isSysAdmin && !isSelf) {
           throw new AppError(403, "Only System Administrators can modify Administrator accounts.");
         }
-        // Prevent non-SYS_ADMIN from promoting any account to ADMIN or SYS_ADMIN
         if (
           parsed.role &&
           (parsed.role === "ADMIN" || parsed.role === "SYS_ADMIN") &&
@@ -577,7 +624,6 @@ export class UserService implements IUserService {
           throw new AppError(403, "Only System Administrators can assign administrative roles.");
         }
 
-        // Security check 4: Protect Active Office Holders from Demotion
         if (hasRoleInfo && parsed.role) {
           const deanships = target.offices?.deanships ?? [];
           const chairships = target.offices?.chairships ?? [];
@@ -600,7 +646,6 @@ export class UserService implements IUserService {
           }
         }
 
-        // 1. Details
         if (hasDetailsInfo && parsed.details) {
           const d = parsed.details;
 
@@ -650,7 +695,6 @@ export class UserService implements IUserService {
             .where(eq(PersonalDetails.id, target.details.id));
         }
 
-        // 2. Account
         if (hasAccountInfo && parsed.account) {
           const a = parsed.account;
           const accountUpdateData: Record<string, any> = { ...a };
@@ -692,11 +736,10 @@ export class UserService implements IUserService {
             .where(eq(Accounts.id, target.account.id));
         }
 
-        // 3. Role
         if (hasRoleInfo && parsed.role) {
           const hasTargetRole = targetRoles.includes(parsed.role);
           if (!hasTargetRole) {
-            const grantRes = await this.grantRole(id, parsed.role, tx);
+            const grantRes = await this.grantRole(id, parsed.role, tx, actorUser, req);
             if (grantRes.isErr()) throw grantRes.error;
 
             updatedFieldsList.push({
@@ -709,6 +752,18 @@ export class UserService implements IUserService {
 
         const fullUser = await this.getUserById(id, tx);
         if (fullUser.isErr()) throw fullUser.error;
+
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "UPDATE",
+          entity: "accounts",
+          entityId: id,
+          entityName: `${fullUser.value.details.first_name} ${fullUser.value.details.last_name} (${fullUser.value.account.email})`,
+          oldRecord: target,
+          newRecord: fullUser.value,
+          tx,
+        });
 
         return fullUser.value;
       }).andThen((updatedUser) => {
@@ -734,14 +789,19 @@ export class UserService implements IUserService {
           })
           .map(() => updatedUser)
           .orElse((emailErr) => {
-            console.warn("⚠️ Account update notice email failed to send:", emailErr.message);
+            console.warn("Account update notice email failed to send:", emailErr.message);
             return okAsync(updatedUser);
           });
       });
     });
   }
 
-  deleteUser(id: number, client: DbClient = db, actorUser?: GetUser): ResultAsync<void, AppError> {
+  deleteUser(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       if (actorUser && actorUser.account?.id === id) {
         throw new AppError(403, "You cannot archive your own account.");
@@ -778,6 +838,19 @@ export class UserService implements IUserService {
         .update(AccountRoles)
         .set({ deleted_at: deleteTime })
         .where(and(eq(AccountRoles.account_id, id), isNull(AccountRoles.deleted_at)));
+
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "DELETE",
+        entity: "accounts",
+        entityId: id,
+        entityName: `${target.details.first_name} ${target.details.last_name} (${target.account.email})`,
+        oldRecord: target,
+        tx,
+      });
+
+      return undefined;
     });
   }
 
@@ -785,6 +858,7 @@ export class UserService implements IUserService {
     id: number,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetUser, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getUserById(id, tx, true);
@@ -851,6 +925,17 @@ export class UserService implements IUserService {
       const fullUser = await this.getUserById(id, tx);
       if (fullUser.isErr()) throw fullUser.error;
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "RESTORE",
+        entity: "accounts",
+        entityId: id,
+        entityName: `${target.details.first_name} ${target.details.last_name} (${target.account.email})`,
+        newRecord: fullUser.value,
+        tx,
+      });
+
       return fullUser.value;
     });
   }
@@ -859,6 +944,8 @@ export class UserService implements IUserService {
     accountId: number,
     role: SystemRole,
     client: DbClient = db,
+    _actorUser?: GetUser,
+    _req?: Request,
   ): ResultAsync<void, AppError> {
     return this.hasRole(accountId, role, client).andThen((alreadyHasRole) => {
       if (alreadyHasRole) {
@@ -924,6 +1011,8 @@ export class UserService implements IUserService {
     accountId: number,
     role: SystemRole,
     client: DbClient = db,
+    _actorUser?: GetUser,
+    _req?: Request,
   ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       if (role === "SUPERVISOR") {
@@ -989,6 +1078,7 @@ export class UserService implements IUserService {
     roles: SystemRole[],
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetUser, AppError> {
     return ValidateSchema(ManageUserRolesSchema, { roles }).asyncAndThen((parsed) => {
       const isSysAdmin = Boolean(toRolesArray(actorUser?.roles).includes("SYS_ADMIN"));
@@ -1069,6 +1159,18 @@ export class UserService implements IUserService {
         const updatedUser = await this.getUserById(accountId, tx);
         if (updatedUser.isErr()) throw updatedUser.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "ROLE_CHANGE",
+          entity: "accounts",
+          entityId: accountId,
+          entityName: `${target.details.first_name} ${target.details.last_name}`,
+          oldRecord: { roles: targetRoles },
+          newRecord: { roles: parsed.roles },
+          tx,
+        });
+
         return updatedUser.value;
       });
     });
@@ -1078,6 +1180,7 @@ export class UserService implements IUserService {
     accountId: number,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<{ temporaryPassword: string }, AppError> {
     return WithTransaction(client, async (tx) => {
       const user = await this.getUserById(accountId, tx);
@@ -1110,6 +1213,17 @@ export class UserService implements IUserService {
         .set({ password: hash, is_verified: false, updated_at: new Date() })
         .where(eq(Accounts.id, accountId));
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "PASSWORD_RESET",
+        entity: "accounts",
+        entityId: accountId,
+        entityName: `${targetUser.details.first_name} ${targetUser.details.last_name}`,
+        isRollbackable: false,
+        tx,
+      });
+
       return { targetUser, temporaryPassword };
     }).andThen(({ targetUser, temporaryPassword }) => {
       const fullName = this.formatFullName(targetUser.details);
@@ -1132,7 +1246,7 @@ export class UserService implements IUserService {
         })
         .map(() => ({ temporaryPassword }))
         .orElse((err) => {
-          console.warn("⚠️ Password reset email delivery failed:", err.message);
+          console.warn("Password reset email delivery failed:", err.message);
           return okAsync({ temporaryPassword });
         });
     });
@@ -1143,6 +1257,8 @@ export class UserService implements IUserService {
     payload: ChangePassword,
     client: DbClient = db,
     isSelfService = false,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<void, AppError> {
     return ValidateSchema(ChangePasswordSchema, payload).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -1171,6 +1287,17 @@ export class UserService implements IUserService {
           .set({ password: newHash, is_verified: true, updated_at: new Date() })
           .where(eq(Accounts.id, accountId));
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "PASSWORD_RESET",
+          entity: "accounts",
+          entityId: accountId,
+          entityName: `Password Changed: Account #${accountId}`,
+          isRollbackable: false,
+          tx,
+        });
+
         return undefined;
       });
     });
@@ -1180,6 +1307,7 @@ export class UserService implements IUserService {
     accountId: number,
     client: DbClient = db,
     actorUser?: GetUser,
+    _req?: Request,
   ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const user = await this.getUserById(accountId, tx);

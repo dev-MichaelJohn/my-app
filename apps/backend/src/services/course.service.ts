@@ -33,6 +33,8 @@ import {
 } from "drizzle-orm";
 import { ValidateSchema } from "@/libs/result.lib.js";
 import { createPaginatedData } from "@/libs/response.lib.js";
+import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
 export interface ICourseService {
   getCourseById(
@@ -45,14 +47,31 @@ export interface ICourseService {
     client?: DbClient,
     actorUser?: GetUser,
   ): ResultAsync<PaginatedData<ICourseSelect[]>, AppError>;
-  createCourse(courseInfo: ICourseInsert, client?: DbClient): ResultAsync<ICourseSelect, AppError>;
+  createCourse(
+    courseInfo: ICourseInsert,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<ICourseSelect, AppError>;
   updateCourse(
     id: number,
     courseInfo: ICourseUpdate,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<ICourseSelect, AppError>;
-  deleteCourse(id: number, client?: DbClient): ResultAsync<void, AppError>;
-  restoreCourse(id: number, client?: DbClient): ResultAsync<ICourseSelect, AppError>;
+  deleteCourse(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
+  restoreCourse(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<ICourseSelect, AppError>;
 }
 
 export class CourseService implements ICourseService {
@@ -94,11 +113,9 @@ export class CourseService implements ICourseService {
         const chairships = actorUser.offices?.chairships || [];
 
         if (chairships.length > 0) {
-          // Chair: Lock strictly to their program(s)
           const chairProgramIds = chairships.map((c) => c.id);
           filters.push(inArray(Programs.id, chairProgramIds));
         } else if (deanships.length > 0) {
-          // Dean: Lock strictly to programs in their college(s)
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Programs.college_id, deanCollegeIds));
         }
@@ -174,6 +191,8 @@ export class CourseService implements ICourseService {
   createCourse(
     courseInfo: ICourseInsert,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<ICourseSelect, AppError> {
     return ValidateSchema(CourseInsert, courseInfo).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -182,6 +201,17 @@ export class CourseService implements ICourseService {
 
         const [courseRecord] = await tx.insert(Courses).values(parsed).returning();
         if (!courseRecord) throw new AppError(500, "Failed to create course record.");
+
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "courses",
+          entityId: courseRecord.id,
+          entityName: `${courseRecord.initialism} - ${courseRecord.name}`,
+          newRecord: courseRecord,
+          tx,
+        });
 
         return courseRecord;
       });
@@ -192,6 +222,8 @@ export class CourseService implements ICourseService {
     id: number,
     courseInfo: ICourseUpdate,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<ICourseSelect, AppError> {
     return ValidateSchema(CourseUpdate, courseInfo).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -214,12 +246,29 @@ export class CourseService implements ICourseService {
           .returning();
         if (!updated) throw new AppError(500, "Failed to update course record.");
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "UPDATE",
+          entity: "courses",
+          entityId: updated.id,
+          entityName: `${updated.initialism} - ${updated.name}`,
+          oldRecord: current,
+          newRecord: updated,
+          tx,
+        });
+
         return updated;
       });
     });
   }
 
-  deleteCourse(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteCourse(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const existingCourse = await this.getCourseById(id, tx);
       if (existingCourse.isErr()) throw existingCourse.error;
@@ -230,15 +279,33 @@ export class CourseService implements ICourseService {
         .update(Courses)
         .set({ deleted_at: new Date() })
         .where(and(eq(Courses.id, id), isNull(Courses.deleted_at)))
-        .returning({ id: Courses.id });
+        .returning();
 
       if (!deletedCourse) {
         throw new AppError(404, "Course was not found or has already been archived.");
       }
+
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "DELETE",
+        entity: "courses",
+        entityId: existingCourse.value.id,
+        entityName: `${existingCourse.value.initialism} - ${existingCourse.value.name}`,
+        oldRecord: existingCourse.value,
+        tx,
+      });
+
+      return undefined;
     });
   }
 
-  restoreCourse(id: number, client: DbClient = db): ResultAsync<ICourseSelect, AppError> {
+  restoreCourse(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<ICourseSelect, AppError> {
     return WithTransaction(client, async (tx) => {
       const existingCourse = await this.getCourseById(id, tx, true);
       if (existingCourse.isErr()) throw existingCourse.error;
@@ -280,6 +347,17 @@ export class CourseService implements ICourseService {
       if (!restoredCourse) {
         throw new AppError(500, "Failed to restore course.");
       }
+
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "RESTORE",
+        entity: "courses",
+        entityId: restoredCourse.id,
+        entityName: `${restoredCourse.initialism} - ${restoredCourse.name}`,
+        newRecord: restoredCourse,
+        tx,
+      });
 
       return restoredCourse;
     });
