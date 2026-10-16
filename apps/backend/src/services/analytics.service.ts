@@ -18,6 +18,7 @@ import {
   SupervisorEvaluations,
   SupervisorEvaluationSchedules,
   ProgramChairs,
+  Faculties,
   type AnalyticsQuery,
   type ComprehensiveAnalyticsReport,
   type LongitudinalPoint,
@@ -72,20 +73,17 @@ export class AnalyticsService implements IAnalyticsService {
     client: DbClient = db,
   ): ResultAsync<ComprehensiveAnalyticsReport, AppError> {
     return WithTransaction(client, async (tx): Promise<ComprehensiveAnalyticsReport> => {
-      // 1. Enforce RBAC & Scoping
       const { validatedScope, resolvedEntityId, scopeEntityName } = await this.enforceRbacScope(
         actorUser,
         query,
         tx,
       );
 
-      // 2. Resolve Active Semester
       const activeSemester = await this.resolveSemester(query.semesterId, tx);
       if (!activeSemester) {
         throw new AppError(404, "No active or historical semester records found.");
       }
 
-      // 3. Find all semesters that have reports up to the resolved semester
       const recentSemesters = await tx
         .select()
         .from(Semesters)
@@ -99,7 +97,6 @@ export class AnalyticsService implements IAnalyticsService {
 
       const semesterIds = recentSemesters.map((s) => s.id);
 
-      // 4. Fetch all reports across these semesters
       const allReports = await tx
         .select()
         .from(IndividualFacultyReports)
@@ -119,7 +116,6 @@ export class AnalyticsService implements IAnalyticsService {
         this.matchesScope(r, validatedScope, resolvedEntityId, affiliationMap),
       );
 
-      // 5. Compute Historical Trends
       const historicalTrends = this.computeHistoricalTrends(
         recentSemesters,
         allReports,
@@ -128,19 +124,15 @@ export class AnalyticsService implements IAnalyticsService {
         affiliationMap,
       );
 
-      // 6. Compute KPIs
       const kpis = this.computeKpis(scopedCurrentReports, historicalTrends, activeSemester.id);
 
-      // 7. Domain Competencies
       const domainCompetencies = this.computeDomainCompetencies(
         scopedCurrentReports,
         currentSemesterReports,
       );
 
-      // 8. Diagnostics
       const diagnostics = this.computeDiagnostics(scopedCurrentReports, currentSemesterReports);
 
-      // 9. Side-by-side Entity Bar Comparisons
       const comparisons = await this.computeComparisons(
         validatedScope,
         resolvedEntityId,
@@ -167,9 +159,6 @@ export class AnalyticsService implements IAnalyticsService {
     });
   }
 
-  // ==========================================
-  // REAL-TIME DASHBOARD OVERVIEW ENGINE
-  // ==========================================
   getDashboardOverview(
     actorUser: GetUser,
     client: DbClient = db,
@@ -177,13 +166,11 @@ export class AnalyticsService implements IAnalyticsService {
     return WithTransaction(client, async (tx): Promise<DashboardOverviewStats> => {
       const now = new Date();
 
-      // 1. Resolve Active or Nearest Semester
       const activeSemester = await this.resolveSemester(undefined, tx);
       if (!activeSemester) {
         throw new AppError(404, "No active academic semester found.");
       }
 
-      // 2. Resolve Active or Most Recent Evaluation Window
       const [scheduleRecord] = await tx
         .select({
           id: StudentEvaluationSchedules.id,
@@ -227,7 +214,6 @@ export class AnalyticsService implements IAnalyticsService {
         };
       }
 
-      // 3. Determine User Scope (Institution, College, Program)
       const roles = actorUser.roles ?? [];
       const isPrivilegedAdmin = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
       const deanships = actorUser.offices?.deanships || [];
@@ -250,7 +236,6 @@ export class AnalyticsService implements IAnalyticsService {
         scopeConditions.push(inArray(Programs.id, chairProgramIds));
       }
 
-      // 4. Compute High-Level Metrics (SET)
       const [enrolledCount] = await tx
         .select({ total: count(StudentClasses.id) })
         .from(StudentClasses)
@@ -298,11 +283,10 @@ export class AnalyticsService implements IAnalyticsService {
 
       const totalFacultyEvaluated = distinctFacultyCount?.total ?? 0;
 
-      // ── 🔑 SEF Submissions Count (Updated: Faculty-centric, exactly 1 SEF per faculty) ──
+      // 🚀 Fixed: Route supervisory count through Accounts.id
       let sefFacultyScopeFilter: SQL | undefined = undefined;
 
       if (isDean) {
-        // Chairs under Dean's colleges
         const chairAccounts = await tx
           .select({ chairId: ProgramChairs.chair_id })
           .from(ProgramChairs)
@@ -318,16 +302,17 @@ export class AnalyticsService implements IAnalyticsService {
         sefFacultyScopeFilter =
           targetIds.length > 0 ? inArray(SupervisorEvaluations.faculty_id, targetIds) : sql`false`;
       } else if (isChair) {
-        // Regular faculty teaching in Chair's programs
         const allChairs = await tx
           .select({ chairId: ProgramChairs.chair_id })
           .from(ProgramChairs)
           .where(isNull(ProgramChairs.deleted_at));
         const allChairIds = new Set(allChairs.map((c) => c.chairId));
 
+        // 🚀 Join Faculties to get the real account_id
         const deptOfferings = await tx
-          .selectDistinct({ facultyId: CourseOfferings.faculty_id })
+          .selectDistinct({ accountId: Faculties.account_id })
           .from(CourseOfferings)
+          .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
           .innerJoin(
             CourseCurriculums,
             eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
@@ -339,10 +324,12 @@ export class AnalyticsService implements IAnalyticsService {
               eq(CourseOfferings.semester_id, activeSemester.id),
               isNotNull(CourseOfferings.faculty_id),
               isNull(CourseOfferings.deleted_at),
+              isNull(Faculties.deleted_at),
             ),
           );
+
         const targetIds = deptOfferings
-          .map((d) => d.facultyId)
+          .map((d) => d.accountId)
           .filter((id): id is number => Boolean(id && !allChairIds.has(id)));
 
         sefFacultyScopeFilter =
@@ -361,13 +348,12 @@ export class AnalyticsService implements IAnalyticsService {
             eq(SupervisorEvaluationSchedules.semester_id, activeSemester.id),
             isNotNull(SupervisorEvaluations.submitted_at),
             sefFacultyScopeFilter,
-            ne(SupervisorEvaluations.faculty_id, actorUser.account.id), // Cannot evaluate self
+            ne(SupervisorEvaluations.faculty_id, actorUser.account.id),
           ),
         );
 
       const totalSupervisorSubmissions = supervisorCount?.total ?? 0;
 
-      // 5. College-Level Participation Breakdown
       const collegeQueryCondition = isDean
         ? inArray(Colleges.id, deanCollegeIds)
         : isNull(Colleges.deleted_at);
@@ -412,7 +398,6 @@ export class AnalyticsService implements IAnalyticsService {
         .where(collegeQueryCondition)
         .groupBy(Colleges.id, Colleges.name, Colleges.initialism);
 
-      // 6. Recent Pulses: Recent Student (SET) Submissions
       const recentStudentSubmissions = await tx
         .select({
           id: StudentEvaluations.id,
@@ -441,7 +426,6 @@ export class AnalyticsService implements IAnalyticsService {
         .orderBy(desc(StudentEvaluations.submitted_at))
         .limit(15);
 
-      // ── 🔑 Recent Pulses: Recent Supervisor (SEF) Submissions (Updated) ──
       const recentSupervisorSubmissions = await tx
         .select({
           id: SupervisorEvaluations.id,
@@ -514,42 +498,42 @@ export class AnalyticsService implements IAnalyticsService {
     });
   }
 
-  // ==========================================
-  // AFFILIATION MAP ENGINE
-  // ==========================================
+  // 🚀 Fixed: Maps Faculties.account_id to Faculty Affiliations correctly
   private async getFacultyAffiliations(
-    facultyIds: number[],
+    facultyAccountIds: number[],
     semesterIds: number[],
     tx: PgTransaction,
   ): Promise<Map<number, { collegeIds: Set<number>; programIds: Set<number> }>> {
     const map = new Map<number, { collegeIds: Set<number>; programIds: Set<number> }>();
-    if (facultyIds.length === 0) return map;
+    if (facultyAccountIds.length === 0) return map;
 
     const rows = await tx
       .select({
-        facultyId: CourseOfferings.faculty_id,
+        accountId: Faculties.account_id,
         collegeId: Colleges.id,
         programId: Programs.id,
       })
       .from(CourseOfferings)
+      .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
       .innerJoin(CourseCurriculums, eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id))
       .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
       .innerJoin(Programs, eq(Courses.program_id, Programs.id))
       .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
       .where(
         and(
-          inArray(CourseOfferings.faculty_id, facultyIds),
+          inArray(Faculties.account_id, facultyAccountIds), // 🚀 Matches through Faculties table
           inArray(CourseOfferings.semester_id, semesterIds),
           isNull(CourseOfferings.deleted_at),
+          isNull(Faculties.deleted_at),
         ),
       );
 
     for (const r of rows) {
-      if (!r.facultyId) continue;
-      if (!map.has(r.facultyId)) {
-        map.set(r.facultyId, { collegeIds: new Set(), programIds: new Set() });
+      if (!r.accountId) continue;
+      if (!map.has(r.accountId)) {
+        map.set(r.accountId, { collegeIds: new Set(), programIds: new Set() });
       }
-      const entry = map.get(r.facultyId)!;
+      const entry = map.get(r.accountId)!;
       entry.collegeIds.add(r.collegeId);
       entry.programIds.add(r.programId);
     }
@@ -557,9 +541,6 @@ export class AnalyticsService implements IAnalyticsService {
     return map;
   }
 
-  // ==========================================
-  // RBAC SCOPE ENFORCEMENT
-  // ==========================================
   private async enforceRbacScope(
     actorUser: GetUser,
     query: AnalyticsQuery,

@@ -397,7 +397,15 @@ export class OfferingService implements IOfferingService {
         const classResult = await this.classService.getClassById(parsed.class_id, tx);
         if (classResult.isErr()) throw classResult.error;
 
-        if (parsed.faculty_id) await this.validateFaculty(parsed.faculty_id, tx);
+        // 🚀 Resolve to canonical Faculties.id (accepts either faculties.id or accounts.id)
+        let resolvedFacultyId: number | null = null;
+        if (parsed.faculty_id) {
+          resolvedFacultyId = await this.validateFaculty(
+            parsed.faculty_id,
+            tx,
+            classResult.value.program.id,
+          );
+        }
 
         const [existing] = await tx
           .select()
@@ -423,7 +431,7 @@ export class OfferingService implements IOfferingService {
           const [restored] = await tx
             .update(CourseOfferings)
             .set({
-              faculty_id: parsed.faculty_id ?? null,
+              faculty_id: resolvedFacultyId, // Uses resolved Faculties.id
               deleted_at: null,
               updated_at: new Date(),
             })
@@ -435,7 +443,10 @@ export class OfferingService implements IOfferingService {
         } else {
           const [created] = await tx
             .insert(CourseOfferings)
-            .values(parsed)
+            .values({
+              ...parsed,
+              faculty_id: resolvedFacultyId, // Uses resolved Faculties.id
+            })
             .returning({ id: CourseOfferings.id });
 
           if (!created) throw new AppError(500, "Failed to schedule course offering.");
@@ -487,16 +498,29 @@ export class OfferingService implements IOfferingService {
           if (currResult.isErr()) throw currResult.error;
         }
 
+        let classProgramId = existing.value.class.program.id;
         if (parsed.class_id) {
           const classResult = await this.classService.getClassById(parsed.class_id, tx);
           if (classResult.isErr()) throw classResult.error;
+          classProgramId = classResult.value.program.id;
         }
 
-        if (parsed.faculty_id) await this.validateFaculty(parsed.faculty_id, tx);
+        // 🚀 Resolve to canonical Faculties.id
+        let resolvedFacultyId: number | null | undefined = undefined;
+        if (parsed.faculty_id !== undefined) {
+          resolvedFacultyId = parsed.faculty_id
+            ? await this.validateFaculty(parsed.faculty_id, tx, classProgramId)
+            : null;
+        }
+
+        const updatePayload: Record<string, any> = {
+          ...parsed,
+          ...(resolvedFacultyId !== undefined && { faculty_id: resolvedFacultyId }),
+        };
 
         const [updated] = await tx
           .update(CourseOfferings)
-          .set(parsed)
+          .set(updatePayload)
           .where(and(eq(CourseOfferings.id, id), isNull(CourseOfferings.deleted_at)))
           .returning({ id: CourseOfferings.id });
 
@@ -754,23 +778,70 @@ export class OfferingService implements IOfferingService {
     });
   }
 
-  private async validateFaculty(facultyId: number, tx: PgTransaction): Promise<void> {
-    const [faculty] = await tx
-      .select({ id: Faculties.id })
+  /**
+   * Resiliently validates the assigned faculty member.
+   * Resolves whether the client passed a Faculties.id OR an Accounts.id.
+   * Auto-appoints to fallbackProgramId if the account exists with FACULTY/SUPERVISOR role.
+   */
+  private async validateFaculty(
+    facultyId: number,
+    tx: PgTransaction,
+    fallbackProgramId?: number,
+  ): Promise<number> {
+    // 1. Check if ID matches an existing Faculties appointment
+    let [faculty] = await tx
+      .select({ id: Faculties.id, accountId: Faculties.account_id })
       .from(Faculties)
       .where(and(eq(Faculties.id, facultyId), isNull(Faculties.deleted_at)));
 
-    if (!faculty)
+    // 2. If not found, check if it matches an Accounts.id
+    if (!faculty) {
+      [faculty] = await tx
+        .select({ id: Faculties.id, accountId: Faculties.account_id })
+        .from(Faculties)
+        .where(and(eq(Faculties.account_id, facultyId), isNull(Faculties.deleted_at)));
+    }
+
+    // 3. Fallback: If still not appointed, auto-appoint to fallbackProgramId if account has FACULTY/SUPERVISOR role
+    if (!faculty) {
+      const [account] = await tx
+        .select({ id: Accounts.id })
+        .from(Accounts)
+        .where(and(eq(Accounts.id, facultyId), isNull(Accounts.deleted_at)));
+
+      if (account && fallbackProgramId) {
+        const isFaculty = await this.userService.hasRole(account.id, "FACULTY", tx);
+        const isSupervisor = await this.userService.hasRole(account.id, "SUPERVISOR", tx);
+
+        if ((isFaculty.isOk() && isFaculty.value) || (isSupervisor.isOk() && isSupervisor.value)) {
+          const [autoAppointed] = await tx
+            .insert(Faculties)
+            .values({
+              account_id: account.id,
+              program_id: fallbackProgramId,
+            })
+            .returning();
+
+          if (autoAppointed) {
+            faculty = { id: autoAppointed.id, accountId: autoAppointed.account_id };
+          }
+        }
+      }
+    }
+
+    if (!faculty) {
       throw new AppError(
         400,
         "The selected faculty member does not have an active departmental appointment in Faculties.",
       );
+    }
 
-    const isFaculty = await this.userService.hasRole(facultyId, "FACULTY", tx);
-    const isSupervisor = await this.userService.hasRole(facultyId, "SUPERVISOR", tx);
+    // 4. Verify roles using the true account_id
+    const isFaculty = await this.userService.hasRole(faculty.accountId, "FACULTY", tx);
+    const isSupervisor = await this.userService.hasRole(faculty.accountId, "SUPERVISOR", tx);
 
     if ((isFaculty.isOk() && isFaculty.value) || (isSupervisor.isOk() && isSupervisor.value)) {
-      return;
+      return faculty.id; // Returns canonical Faculties.id
     }
 
     throw new AppError(400, "The assigned user must have a FACULTY or SUPERVISOR role.");

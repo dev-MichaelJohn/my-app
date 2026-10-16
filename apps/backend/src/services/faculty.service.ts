@@ -181,7 +181,8 @@ export class FacultyService implements IFacultyService {
     actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetFaculty[]>, AppError> {
     return ValidateSchema(FacultyQuerySchema, rawQuery).asyncAndThen((parsed) => {
-      const { paginate, page, limit, search, program_id, college_id, is_archived } = parsed;
+      const { paginate, page, limit, search, program_id, college_id, is_archived, unscoped } =
+        parsed;
 
       const filters: SQL[] = [
         is_archived ? isNotNull(Faculties.deleted_at) : isNull(Faculties.deleted_at),
@@ -192,7 +193,8 @@ export class FacultyService implements IFacultyService {
       const roles = actorUser?.roles ?? [];
       const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
 
-      if (!isPrivileged && actorUser) {
+      // ── Only apply Dean/Chair scope if NOT explicitly requesting unscoped (all) faculty ──
+      if (!isPrivileged && actorUser && !unscoped) {
         const deanships = actorUser.offices?.deanships || [];
         const chairships = actorUser.offices?.chairships || [];
 

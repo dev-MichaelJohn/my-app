@@ -68,6 +68,7 @@ import {
 } from "drizzle-orm";
 import { type ResultAsync } from "neverthrow";
 import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
 export interface IEvaluationReportService {
   getAnnexCReport(
@@ -86,24 +87,29 @@ export interface IEvaluationReportService {
     semesterId: number,
     formulaId?: string,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<BatchConsolidationSummary, AppError>;
   updateReportStatus(
     reportId: number,
     status: ReportStatus,
     actorUser: GetUser,
     client?: DbClient,
+    req?: Request,
   ): ResultAsync<AnnexCFacultyReport, AppError>;
   updateFedafPlan(
     reportId: number,
     plan: UpdateFedafPlan,
     actorUser: GetUser,
     client?: DbClient,
+    req?: Request,
   ): ResultAsync<AnnexCFacultyReport, AppError>;
   signFedaf(
     reportId: number,
     signatureRole: "FACULTY" | "SUPERVISOR",
     actorUser: GetUser,
     client?: DbClient,
+    req?: Request,
   ): ResultAsync<AnnexCFacultyReport, AppError>;
   getReportsList(
     rawQuery: unknown,
@@ -160,7 +166,6 @@ export class EvaluationReportService implements IEvaluationReportService {
   ): ResultAsync<AnnexCFacultyReport, AppError> {
     return WithTransaction(client, async (tx) => {
       await this.validateEvaluationWindowsConcluded(semesterId, tx);
-
       return this.computeAndUpsertReport(semesterId, facultyId, formulaId, tx);
     });
   }
@@ -169,6 +174,8 @@ export class EvaluationReportService implements IEvaluationReportService {
     semesterId: number,
     formulaId = "ANNEX_C_WEIGHTED",
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<BatchConsolidationSummary, AppError> {
     return ValidateSchema(BatchConsolidationSchema, {
       semester_id: semesterId,
@@ -186,29 +193,33 @@ export class EvaluationReportService implements IEvaluationReportService {
 
         await this.validateEvaluationWindowsConcluded(semester_id, tx);
 
+        // 🚀 Fix: Join Faculties to extract the real Accounts.id
         const facultyRows = await tx
-          .selectDistinct({ facultyId: CourseOfferings.faculty_id })
+          .selectDistinct({ accountId: Faculties.account_id })
           .from(CourseOfferings)
+          .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
           .where(
             and(
               eq(CourseOfferings.semester_id, semester_id),
               isNotNull(CourseOfferings.faculty_id),
               isNull(CourseOfferings.deleted_at),
+              isNull(Faculties.deleted_at),
             ),
           );
 
-        const facultyIds = facultyRows
-          .map((r) => r.facultyId)
+        const accountIds = facultyRows
+          .map((r) => r.accountId)
           .filter((id): id is number => typeof id === "number");
 
         let reportsGenerated = 0;
-        for (const fid of facultyIds) {
-          await this.computeAndUpsertReport(semester_id, fid, formula, tx);
+        for (const accountId of accountIds) {
+          await this.computeAndUpsertReport(semester_id, accountId, formula, tx);
           reportsGenerated++;
         }
 
         await logAuditEvent({
-          actor: undefined,
+          actor: actorUser,
+          req,
           action: "STATUS_CHANGE",
           entity: "individual_faculty_reports",
           entityId: semester_id,
@@ -225,7 +236,7 @@ export class EvaluationReportService implements IEvaluationReportService {
           semester_id,
           semester_term: semester.semester_term,
           school_year: `${semester.school_year_start}-${semester.school_year_end}`,
-          total_faculty_processed: facultyIds.length,
+          total_faculty_processed: accountIds.length,
           reports_generated: reportsGenerated,
           calculation_formula: formula,
           processed_at: new Date().toISOString(),
@@ -240,6 +251,7 @@ export class EvaluationReportService implements IEvaluationReportService {
     status: ReportStatus,
     actorUser: GetUser,
     client: DbClient = db,
+    req?: Request,
   ): ResultAsync<AnnexCFacultyReport, AppError> {
     return ValidateSchema(UpdateReportStatusSchema, { status }).asyncAndThen(() => {
       return WithTransaction(client, async (tx) => {
@@ -252,7 +264,6 @@ export class EvaluationReportService implements IEvaluationReportService {
           throw new AppError(404, "Evaluation report not found.");
         }
 
-        // 🔒 Self-Supervision Rule: Cannot change lifecycle on own report
         if (report.faculty_id === actorUser.account.id) {
           throw new AppError(
             403,
@@ -281,6 +292,7 @@ export class EvaluationReportService implements IEvaluationReportService {
 
         await logAuditEvent({
           actor: actorUser,
+          req,
           action: "STATUS_CHANGE",
           entity: "individual_faculty_reports",
           entityId: reportId,
@@ -300,6 +312,7 @@ export class EvaluationReportService implements IEvaluationReportService {
     plan: UpdateFedafPlan,
     actorUser: GetUser,
     client: DbClient = db,
+    req?: Request,
   ): ResultAsync<AnnexCFacultyReport, AppError> {
     return ValidateSchema(UpdateFedafPlanSchema, plan).asyncAndThen((validated) => {
       return WithTransaction(client, async (tx) => {
@@ -310,7 +323,6 @@ export class EvaluationReportService implements IEvaluationReportService {
 
         if (!report) throw new AppError(404, "Evaluation report not found.");
 
-        // 🔒 Self-Supervision Rule: A Dean or Chair cannot write their own supervisory plan
         if (report.faculty_id === actorUser.account.id) {
           throw new AppError(
             403,
@@ -355,6 +367,7 @@ export class EvaluationReportService implements IEvaluationReportService {
 
         await logAuditEvent({
           actor: actorUser,
+          req,
           action: "UPDATE",
           entity: "individual_faculty_reports",
           entityId: reportId,
@@ -374,6 +387,7 @@ export class EvaluationReportService implements IEvaluationReportService {
     signatureRole: "FACULTY" | "SUPERVISOR",
     actorUser: GetUser,
     client: DbClient = db,
+    req?: Request,
   ): ResultAsync<AnnexCFacultyReport, AppError> {
     return WithTransaction(client, async (tx) => {
       const [report] = await tx
@@ -385,7 +399,6 @@ export class EvaluationReportService implements IEvaluationReportService {
 
       const isOwnReport = report.faculty_id === actorUser.account.id;
 
-      // 🔒 Self-Supervision Rule: Cannot sign as supervisor on own report
       if (isOwnReport && signatureRole === "SUPERVISOR") {
         throw new AppError(
           403,
@@ -420,7 +433,6 @@ export class EvaluationReportService implements IEvaluationReportService {
         const deanCollegeIds = deanships.map((d) => d.id);
         const chairProgramIds = chairships.map((c) => c.id);
 
-        // Check if the evaluated person is a Program Chair
         const [targetChair] = await tx
           .select({ id: ProgramChairs.id, collegeId: Programs.college_id })
           .from(ProgramChairs)
@@ -430,7 +442,6 @@ export class EvaluationReportService implements IEvaluationReportService {
           );
 
         if (targetChair) {
-          // Target IS a Program Chair -> ONLY their College Dean can sign
           const isTheirDean =
             isSysAdmin || isAdmin || deanCollegeIds.includes(targetChair.collegeId);
           if (!isTheirDean) {
@@ -441,7 +452,7 @@ export class EvaluationReportService implements IEvaluationReportService {
           }
           existingPlan.supervisor_name = `${actorUser.details.first_name} ${actorUser.details.last_name} (College Dean)`;
         } else {
-          // Target is regular faculty -> Program Chair MUST sign (Dean cannot sign regular faculty FEDAF)
+          // 🚀 Fixed Join: Check teaching through Faculties -> CourseOfferings
           const isTheirChair =
             isSysAdmin ||
             isAdmin ||
@@ -450,6 +461,7 @@ export class EvaluationReportService implements IEvaluationReportService {
                 const [match] = await tx
                   .select({ id: CourseOfferings.id })
                   .from(CourseOfferings)
+                  .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
                   .innerJoin(
                     CourseCurriculums,
                     eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
@@ -457,10 +469,11 @@ export class EvaluationReportService implements IEvaluationReportService {
                   .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
                   .where(
                     and(
-                      eq(CourseOfferings.faculty_id, report.faculty_id),
+                      eq(Faculties.account_id, report.faculty_id), // Matches via Faculties
                       eq(CourseOfferings.semester_id, report.semester_id),
                       inArray(Courses.program_id, chairProgramIds),
                       isNull(CourseOfferings.deleted_at),
+                      isNull(Faculties.deleted_at),
                     ),
                   )
                   .limit(1);
@@ -506,10 +519,11 @@ export class EvaluationReportService implements IEvaluationReportService {
 
       await logAuditEvent({
         actor: actorUser,
+        req,
         action: "STATUS_CHANGE",
         entity: "individual_faculty_reports",
         entityId: reportId,
-        entityName: `FEDAF Acknowledgment Signed as ${signatureRole} (Report #${reportId})`,
+        entityName: `FEDAF Signed as ${signatureRole} (Report #${reportId})`,
         newRecord: {
           signatureRole,
           supervisor_name: existingPlan.supervisor_name,
@@ -552,24 +566,17 @@ export class EvaluationReportService implements IEvaluationReportService {
       const chairProgramIds = chairships.map((c) => c.id);
 
       return WithTransaction(client, async (tx) => {
-        // 🧹 Clean up any orphaned 0-class reports
         await tx
           .delete(IndividualFacultyReports)
           .where(eq(IndividualFacultyReports.total_classes, 0));
 
-        const filters: SQL[] = [
-          // 🔒 Only show faculty with actual teaching assignments (> 0 classes)
-          sql`${IndividualFacultyReports.total_classes} > 0`,
-        ];
+        const filters: SQL[] = [sql`${IndividualFacultyReports.total_classes} > 0`];
 
-        // ── 1. Strict Hierarchy Scoping per CHED CMO 19 s. 2025 Sec 9.2 ──
         if (isSysAdmin || isAdmin) {
-          // Administrators see all reports
           if (faculty_id) filters.push(eq(IndividualFacultyReports.faculty_id, faculty_id));
         } else if (isSupervisor) {
           const supervisorScopeFilters: SQL[] = [];
 
-          // ── A. COLLEGE DEAN: Supervises ONLY Program Chairs under their college ──
           if (deanCollegeIds.length > 0) {
             const chairRecords = await tx
               .select({ chairId: ProgramChairs.chair_id })
@@ -594,27 +601,27 @@ export class EvaluationReportService implements IEvaluationReportService {
             }
           }
 
-          // ── B. PROGRAM CHAIR: Supervises regular faculty teaching in their program (their underlings) ──
           if (chairProgramIds.length > 0) {
-            // Find all chairs to exclude other department heads
             const allChairs = await tx
               .select({ chairId: ProgramChairs.chair_id })
               .from(ProgramChairs)
               .where(isNull(ProgramChairs.deleted_at));
             const allChairIds = allChairs.map((c) => c.chairId);
 
+            // 🚀 Fixed Join: Route through Faculties -> CourseOfferings
             supervisorScopeFilters.push(
               and(
                 sql`EXISTS (
                   SELECT 1 FROM ${CourseOfferings}
+                  INNER JOIN ${Faculties} ON ${CourseOfferings.faculty_id} = ${Faculties.id}
                   INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
                   INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
-                  WHERE ${CourseOfferings.faculty_id} = ${IndividualFacultyReports.faculty_id}
+                  WHERE ${Faculties.account_id} = ${IndividualFacultyReports.faculty_id}
                     AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
                     AND ${Courses.program_id} IN ${chairProgramIds}
                     AND ${CourseOfferings.deleted_at} IS NULL
+                    AND ${Faculties.deleted_at} IS NULL
                 )`,
-                // Program Chair evaluates regular faculty, not fellow Chairs
                 allChairIds.length > 0
                   ? sql`${IndividualFacultyReports.faculty_id} NOT IN ${allChairIds}`
                   : undefined,
@@ -625,7 +632,6 @@ export class EvaluationReportService implements IEvaluationReportService {
           if (supervisorScopeFilters.length > 0) {
             filters.push(or(...supervisorScopeFilters)!);
           } else {
-            // If Dean has no Program Chairs appointed yet, show 0 reports
             return createPaginatedData({
               data: [],
               currentPage: 1,
@@ -634,19 +640,16 @@ export class EvaluationReportService implements IEvaluationReportService {
             });
           }
 
-          // 🔒 A supervisor NEVER supervises/evaluates themselves in their supervisory list
           filters.push(ne(IndividualFacultyReports.faculty_id, actorUser.account.id));
 
           if (faculty_id) {
             filters.push(eq(IndividualFacultyReports.faculty_id, faculty_id));
           }
         } else {
-          // Pure Faculty: Only own reports that are published
           filters.push(eq(IndividualFacultyReports.faculty_id, actorUser.account.id));
           filters.push(eq(IndividualFacultyReports.status, "PUBLISHED"));
         }
 
-        // ── 2. Standard Filters ──
         if (semester_id) filters.push(eq(IndividualFacultyReports.semester_id, semester_id));
         if (status) filters.push(eq(IndividualFacultyReports.status, status));
 
@@ -662,29 +665,34 @@ export class EvaluationReportService implements IEvaluationReportService {
           );
         }
 
+        // 🚀 Fixed Join: Program filter routes through Faculties
         if (program_id) {
           filters.push(
             sql`EXISTS (
               SELECT 1 FROM ${CourseOfferings}
+              INNER JOIN ${Faculties} ON ${CourseOfferings.faculty_id} = ${Faculties.id}
               INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
               INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
-              WHERE ${CourseOfferings.faculty_id} = ${IndividualFacultyReports.faculty_id}
+              WHERE ${Faculties.account_id} = ${IndividualFacultyReports.faculty_id}
                 AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
                 AND ${Courses.program_id} = ${program_id}
                 AND ${CourseOfferings.deleted_at} IS NULL
+                AND ${Faculties.deleted_at} IS NULL
             )`,
           );
         } else if (college_id) {
           filters.push(
             sql`EXISTS (
               SELECT 1 FROM ${CourseOfferings}
+              INNER JOIN ${Faculties} ON ${CourseOfferings.faculty_id} = ${Faculties.id}
               INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
               INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
               INNER JOIN ${Programs} ON ${Courses.program_id} = ${Programs.id}
-              WHERE ${CourseOfferings.faculty_id} = ${IndividualFacultyReports.faculty_id}
+              WHERE ${Faculties.account_id} = ${IndividualFacultyReports.faculty_id}
                 AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
                 AND ${Programs.college_id} = ${college_id}
                 AND ${CourseOfferings.deleted_at} IS NULL
+                AND ${Faculties.deleted_at} IS NULL
             )`,
           );
         }
@@ -758,7 +766,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       }
 
       const [semester] = await tx.select().from(Semesters).where(eq(Semesters.id, semesterId));
-
       if (!semester) throw new AppError(404, "Semester not found.");
 
       const reports = await tx
@@ -822,7 +829,7 @@ export class EvaluationReportService implements IEvaluationReportService {
 
   private async computeAndUpsertReport(
     semesterId: number,
-    facultyId: number,
+    facultyId: number, // Accounts.id
     formulaId: string,
     tx: PgTransaction,
     actorUserId?: number,
@@ -880,7 +887,7 @@ export class EvaluationReportService implements IEvaluationReportService {
     const minRating = setTemplate?.min_rating ?? 1;
     const maxRating = setTemplate?.max_rating ?? 5;
 
-    // Fetch offerings taught by instructor
+    // 🚀 Uses canonical facultyRecordId (Faculties.id)
     const offerings = await tx
       .select({
         offeringId: CourseOfferings.id,
@@ -989,7 +996,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       grandTotalStudents += classEvaluatedStudents;
       grandTotalWeightedScore += weightedScore;
 
-      // Real course code, class section, and student count
       classBreakdown.push({
         seq: i + 1,
         offeringId: off.offeringId,
@@ -1018,6 +1024,7 @@ export class EvaluationReportService implements IEvaluationReportService {
     const supervisorCommentsList: SupervisorFeedbackComment[] = [];
     const allSupervisorEvaluationIds: number[] = [];
 
+    // Query SEF by faculty Accounts.id
     const sefSubmissions = await tx
       .select({
         id: SupervisorEvaluations.id,
@@ -1197,11 +1204,7 @@ export class EvaluationReportService implements IEvaluationReportService {
       faculty_signed_at: null,
     };
 
-    // 🔒 SELF-VIEW RESTRICTION:
-    // If the viewing user is the faculty member themselves (including a Dean/Chair viewing their own teaching report),
-    // they are ONLY permitted to see Annex D (FEDAF). Annex C breakdown, raw student comments, and class metrics are omitted.
     const isOwnReport = actorUserId !== undefined && actorUserId === report.faculty_id;
-
     const rawClassBreakdown = (report.class_breakdown as ClassConsolidationInput[]) || [];
 
     return {
@@ -1228,7 +1231,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       total_classes: isOwnReport ? 0 : report.total_classes,
       total_weighted_score: isOwnReport ? 0 : Number(report.total_weighted_score),
       calculation_formula: report.calculation_formula,
-      // 🚀 Supervisors see real breakdown with course code, section & students. Faculty viewing own report get empty breakdown.
       class_breakdown: isOwnReport ? [] : rawClassBreakdown,
       student_comments: isOwnReport
         ? []
@@ -1270,7 +1272,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
       .where(eq(Accounts.id, report.faculty_id));
 
-    // ── 🔗 Query Official Home Department via Faculties ──
     const [facultyAppointment] = await tx
       .select({
         collegeId: Colleges.id,
@@ -1298,7 +1299,6 @@ export class EvaluationReportService implements IEvaluationReportService {
     const minRating = setTemplate?.min_rating ?? 1;
     const maxRating = setTemplate?.max_rating ?? 5;
 
-    // Teacher's authentic department title
     const departmentCollege = facultyAppointment
       ? `${facultyAppointment.programName}, ${facultyAppointment.collegeName}`
       : "Academic Affairs";
@@ -1315,11 +1315,10 @@ export class EvaluationReportService implements IEvaluationReportService {
       facultyAppointment?.programId ?? null,
       facultyAppointment?.programName ?? null,
       facultyAppointment?.programCode ?? null,
-      actorUserId, // 👈 Forwards viewer ID to determine if it's a self-view or supervisory view
+      actorUserId,
     );
   }
 
-  // ── Dynamic SET Analytics Aggregation ──
   private async computeSetAnalytics(
     studentEvalIds: number[],
     minRating: number,
@@ -1459,7 +1458,6 @@ export class EvaluationReportService implements IEvaluationReportService {
     return { setCategories, setIndicators };
   }
 
-  // ── Dynamic SEF Analytics Aggregation ──
   private async computeSefAnalytics(
     supervisorEvalIds: number[],
     minRating: number,
@@ -1626,7 +1624,6 @@ export class EvaluationReportService implements IEvaluationReportService {
     return { sefCategories, sefIndicators };
   }
 
-  // ── Synthesized Analytics Summary ──
   private computeAnalyticsSummary(
     setIndicators: IndicatorAnalytics[],
     sefIndicators: IndicatorAnalytics[],
@@ -1691,7 +1688,6 @@ export class EvaluationReportService implements IEvaluationReportService {
     };
   }
 
-  // ── Dynamic Rating Qualitative Interpretation ──
   private getQualitativeInterpretation(rating: number, minRating = 1, maxRating = 5): string {
     const range = maxRating - minRating;
     if (range <= 0) return `Score: ${rating.toFixed(2)}`;
@@ -1733,7 +1729,7 @@ export class EvaluationReportService implements IEvaluationReportService {
   }
 
   private async enforceReportReadAccess(
-    facultyId: number,
+    facultyId: number, // Accounts.id
     semesterId: number,
     actorUser: GetUser,
     tx: PgTransaction,
@@ -1760,7 +1756,6 @@ export class EvaluationReportService implements IEvaluationReportService {
 
     let inScope = false;
 
-    // 1. If Dean, is the target a Program Chair under their college?
     if (deanCollegeIds.length > 0) {
       const [chairMatch] = await tx
         .select({ id: ProgramChairs.id })
@@ -1777,11 +1772,12 @@ export class EvaluationReportService implements IEvaluationReportService {
 
       if (chairMatch) inScope = true;
 
-      // Or is target teaching in a program with vacant chairship?
+      // 🚀 Fixed Join: Routes through Faculties table
       if (!inScope) {
         const [vacantMatch] = await tx
           .select({ id: CourseOfferings.id })
           .from(CourseOfferings)
+          .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
           .innerJoin(
             CourseCurriculums,
             eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
@@ -1794,11 +1790,12 @@ export class EvaluationReportService implements IEvaluationReportService {
           )
           .where(
             and(
-              eq(CourseOfferings.faculty_id, facultyId),
+              eq(Faculties.account_id, facultyId), // Matches via Faculties
               eq(CourseOfferings.semester_id, semesterId),
               inArray(Programs.college_id, deanCollegeIds),
               isNull(ProgramChairs.id),
               isNull(CourseOfferings.deleted_at),
+              isNull(Faculties.deleted_at),
             ),
           )
           .limit(1);
@@ -1807,11 +1804,12 @@ export class EvaluationReportService implements IEvaluationReportService {
       }
     }
 
-    // 2. If Chair, is target teaching courses in their program?
+    // 🚀 Fixed Join: Routes through Faculties table
     if (!inScope && chairProgramIds.length > 0) {
       const [teachingMatch] = await tx
         .select({ id: CourseOfferings.id })
         .from(CourseOfferings)
+        .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
         .innerJoin(
           CourseCurriculums,
           eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
@@ -1819,10 +1817,11 @@ export class EvaluationReportService implements IEvaluationReportService {
         .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
         .where(
           and(
-            eq(CourseOfferings.faculty_id, facultyId),
+            eq(Faculties.account_id, facultyId), // Matches via Faculties
             eq(CourseOfferings.semester_id, semesterId),
             inArray(Courses.program_id, chairProgramIds),
             isNull(CourseOfferings.deleted_at),
+            isNull(Faculties.deleted_at),
           ),
         )
         .limit(1);
@@ -1844,7 +1843,6 @@ export class EvaluationReportService implements IEvaluationReportService {
   ): Promise<void> {
     const now = new Date();
 
-    // 1. Fetch the latest SET schedule for this semester
     const [setSchedule] = await tx
       .select({
         id: StudentEvaluationSchedules.id,
@@ -1861,7 +1859,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       .orderBy(desc(StudentEvaluationSchedules.open_at))
       .limit(1);
 
-    // 2. Fetch the latest SEF schedule for this semester
     const [sefSchedule] = await tx
       .select({
         id: SupervisorEvaluationSchedules.id,
@@ -1878,7 +1875,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       .orderBy(desc(SupervisorEvaluationSchedules.open_at))
       .limit(1);
 
-    // If neither window was even configured yet
     if (!setSchedule && !sefSchedule) {
       throw new AppError(
         400,
@@ -1888,7 +1884,6 @@ export class EvaluationReportService implements IEvaluationReportService {
 
     const blockingReasons: string[] = [];
 
-    // Check SET Window
     if (setSchedule) {
       const openTime = new Date(setSchedule.open_at);
       const closeTime = new Date(setSchedule.close_at);
@@ -1903,7 +1898,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       }
     }
 
-    // Check SEF Window
     if (sefSchedule) {
       const openTime = new Date(sefSchedule.open_at);
       const closeTime = new Date(sefSchedule.close_at);

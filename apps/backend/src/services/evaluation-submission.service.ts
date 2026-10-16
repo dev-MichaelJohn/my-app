@@ -49,7 +49,6 @@ import { UserService, type IUserService } from "./user.service.js";
 import { getFormulaById } from "@my-app/shared";
 
 export interface IEvaluationSubmissionService {
-  // Student (SET)
   getEvaluableStudentSubjects(
     studentAccountId: number,
     client?: DbClient,
@@ -73,14 +72,13 @@ export interface IEvaluationSubmissionService {
     AppError
   >;
 
-  // Supervisor (SEF)
   getEvaluableSupervisorFaculty(
     evaluatorAccountId: number,
     client?: DbClient,
   ): ResultAsync<EvaluableSupervisorFaculty[], AppError>;
   getSupervisorEvaluationFormView(
     evaluatorAccountId: number,
-    courseOfferingId: number,
+    facultyId: number,
     client?: DbClient,
   ): ResultAsync<SupervisorEvaluationFormView, AppError>;
   submitSupervisorEvaluation(
@@ -137,6 +135,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         return [];
       }
 
+      // 🚀 Fixed Join: CourseOfferings -> Faculties -> Accounts -> PersonalDetails
       const enrollments = await tx
         .select({
           studentClassId: StudentClasses.id,
@@ -155,6 +154,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           startDate: Semesters.start_date,
           endDate: Semesters.end_date,
           curriculumId: CourseCurriculums.id,
+          facultyRecordId: Faculties.id,
           facultyAccountId: Accounts.id,
           facultyEmail: Accounts.email,
           facultyFirstName: PersonalDetails.first_name,
@@ -173,10 +173,11 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
         .innerJoin(Programs, eq(Classes.program_id, Programs.id))
         .innerJoin(Semesters, eq(CourseOfferings.semester_id, Semesters.id))
-        .innerJoin(
-          Accounts,
-          and(eq(CourseOfferings.faculty_id, Accounts.id), isNull(Accounts.deleted_at)),
+        .leftJoin(
+          Faculties,
+          and(eq(CourseOfferings.faculty_id, Faculties.id), isNull(Faculties.deleted_at)),
         )
+        .leftJoin(Accounts, and(eq(Faculties.account_id, Accounts.id), isNull(Accounts.deleted_at)))
         .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
         .where(
           and(
@@ -305,6 +306,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
       );
       if (formResult.isErr()) throw formResult.error;
 
+      // 🚀 Fixed Join: CourseOfferings -> Faculties -> Accounts -> PersonalDetails
       const [enrollment] = await tx
         .select({
           studentClassId: StudentClasses.id,
@@ -323,6 +325,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           startDate: Semesters.start_date,
           endDate: Semesters.end_date,
           curriculumId: CourseCurriculums.id,
+          facultyRecordId: Faculties.id,
           facultyAccountId: Accounts.id,
           facultyEmail: Accounts.email,
           facultyFirstName: PersonalDetails.first_name,
@@ -341,10 +344,11 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
         .innerJoin(Programs, eq(Classes.program_id, Programs.id))
         .innerJoin(Semesters, eq(CourseOfferings.semester_id, Semesters.id))
-        .innerJoin(
-          Accounts,
-          and(eq(CourseOfferings.faculty_id, Accounts.id), isNull(Accounts.deleted_at)),
+        .leftJoin(
+          Faculties,
+          and(eq(CourseOfferings.faculty_id, Faculties.id), isNull(Faculties.deleted_at)),
         )
+        .leftJoin(Accounts, and(eq(Faculties.account_id, Accounts.id), isNull(Accounts.deleted_at)))
         .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
         .where(
           and(
@@ -519,7 +523,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           throw new AppError(409, "You have already submitted an evaluation for this subject.");
         }
 
-        // Calculate Likert Mean
         let computedRating: number | null = null;
         if (data.ratings.length > 0) {
           const [formRecord] = await tx
@@ -656,7 +659,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
     return WithTransaction(client, async (tx) => {
       const now = new Date();
 
-      // 1. Check active supervisor evaluation window
       const [activeSchedule] = await tx
         .select()
         .from(SupervisorEvaluationSchedules)
@@ -671,7 +673,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
       if (!activeSchedule) return [];
 
-      // 2. Resolve Evaluator's Academic Offices
       const [deanships, chairships] = await Promise.all([
         tx
           .select({ collegeId: CollegeDeans.college_id })
@@ -694,33 +695,32 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         return [];
       }
 
-      // 3. Determine subordinate faculty to evaluate based on scope
-      const eligibleFacultyIds = new Set<number>();
+      // 🚀 Stores ACCOUNTS.ID of eligible instructors
+      const eligibleAccountIds = new Set<number>();
 
-      // ── A. PROGRAM CHAIR: Evaluates regular faculty teaching in their program ──
+      // ── A. PROGRAM CHAIR: Regular faculty appointed to chair's program ──
       if (chairProgramIds.length > 0) {
         const allChairs = await tx
           .select({ chairId: ProgramChairs.chair_id })
           .from(ProgramChairs)
           .where(isNull(ProgramChairs.deleted_at));
-        const allChairIds = new Set(allChairs.map((c) => c.chairId));
+        const allChairAccountIds = new Set(allChairs.map((c) => c.chairId));
 
-        const deptOfferings = await tx
+        const deptFaculty = await tx
           .select({
-            facultyId: Faculties.id,
             accountId: Faculties.account_id,
           })
           .from(Faculties)
           .where(and(inArray(Faculties.program_id, chairProgramIds), isNull(Faculties.deleted_at)));
 
-        deptOfferings.forEach((df) => {
-          if (df.accountId !== evaluatorAccountId && !allChairIds.has(df.accountId)) {
-            eligibleFacultyIds.add(df.facultyId);
+        deptFaculty.forEach((df) => {
+          if (df.accountId !== evaluatorAccountId && !allChairAccountIds.has(df.accountId)) {
+            eligibleAccountIds.add(df.accountId); // Adds Accounts.id
           }
         });
       }
 
-      // ── B. COLLEGE DEAN: Evaluates Program Chairs under their college (+ vacant chair programs) ──
+      // ── B. COLLEGE DEAN: Program Chairs under dean's college ──
       if (deanCollegeIds.length > 0) {
         const chairAccounts = await tx
           .select({ chairId: ProgramChairs.chair_id })
@@ -735,44 +735,16 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
             ),
           );
 
-        chairAccounts.forEach((c) => eligibleFacultyIds.add(c.chairId));
-
-        // Vacant Chair Coverage: Dean evaluates faculty in programs with no chair
-        const vacantOfferings = await tx
-          .selectDistinct({ facultyId: CourseOfferings.faculty_id })
-          .from(CourseOfferings)
-          .innerJoin(
-            CourseCurriculums,
-            eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
-          )
-          .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
-          .innerJoin(Programs, eq(Courses.program_id, Programs.id))
-          .leftJoin(
-            ProgramChairs,
-            and(eq(Programs.id, ProgramChairs.program_id), isNull(ProgramChairs.deleted_at)),
-          )
-          .where(
-            and(
-              inArray(Programs.college_id, deanCollegeIds),
-              eq(CourseOfferings.semester_id, activeSchedule.semester_id),
-              isNull(ProgramChairs.id), // No chair appointed
-              isNotNull(CourseOfferings.faculty_id),
-              isNull(CourseOfferings.deleted_at),
-            ),
-          );
-        vacantOfferings.forEach((v) => {
-          if (v.facultyId) eligibleFacultyIds.add(v.facultyId);
-        });
+        chairAccounts.forEach((c) => eligibleAccountIds.add(c.chairId));
       }
 
-      // 🔒 Cannot evaluate self
-      eligibleFacultyIds.delete(evaluatorAccountId);
+      eligibleAccountIds.delete(evaluatorAccountId);
 
-      if (eligibleFacultyIds.size === 0) return [];
+      if (eligibleAccountIds.size === 0) return [];
 
-      const targetFacultyList = Array.from(eligibleFacultyIds);
+      const targetAccountList = Array.from(eligibleAccountIds);
 
-      // 4. Fetch the single SEF evaluation row for each faculty member
+      // Fetch existing evaluations by target account IDs
       const existingEvaluations = await tx
         .select()
         .from(SupervisorEvaluations)
@@ -780,21 +752,20 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           and(
             eq(SupervisorEvaluations.schedule_id, activeSchedule.id),
             eq(SupervisorEvaluations.evaluator_id, evaluatorAccountId),
-            inArray(SupervisorEvaluations.faculty_id, targetFacultyList),
+            inArray(SupervisorEvaluations.faculty_id, targetAccountList),
           ),
         );
 
       const evalMap = new Map(existingEvaluations.map((ev) => [ev.faculty_id, ev]));
 
-      // 5. Build response per faculty member (with their semester teaching load)
       const results: EvaluableSupervisorFaculty[] = [];
 
-      for (const facultyId of targetFacultyList) {
-        const userRes = await this.userService.getUserById(facultyId, tx);
+      for (const accountId of targetAccountList) {
+        const userRes = await this.userService.getUserById(accountId, tx);
         if (userRes.isErr()) continue;
         const facultyUser = userRes.value;
 
-        // Query all classes taught by this faculty member this semester for reference
+        // Query teaching offerings via Faculties -> CourseOfferings
         const teachingOfferings = await tx
           .select({
             offeringId: CourseOfferings.id,
@@ -805,6 +776,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
             programCode: Programs.initialism,
           })
           .from(CourseOfferings)
+          .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
           .innerJoin(
             CourseCurriculums,
             eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
@@ -814,13 +786,13 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           .innerJoin(Programs, eq(Classes.program_id, Programs.id))
           .where(
             and(
-              eq(CourseOfferings.faculty_id, facultyId),
+              eq(Faculties.account_id, accountId), // 🚀 Matches through Faculties table
               eq(CourseOfferings.semester_id, activeSchedule.semester_id),
               isNull(CourseOfferings.deleted_at),
             ),
           );
 
-        const ev = evalMap.get(facultyId);
+        const ev = evalMap.get(accountId);
 
         results.push({
           faculty: facultyUser,
@@ -846,7 +818,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
   getSupervisorEvaluationFormView(
     evaluatorAccountId: number,
-    facultyId: number,
+    facultyId: number, // account_id
     client: DbClient = db,
   ): ResultAsync<SupervisorEvaluationFormView, AppError> {
     return WithTransaction(client, async (tx) => {
@@ -883,7 +855,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
       if (userRes.isErr()) throw userRes.error;
       const facultyUser = userRes.value;
 
-      // Fetch teaching load for reference
+      // 🚀 Query teaching offerings via Faculties table
       const teachingOfferings = await tx
         .select({
           offeringId: CourseOfferings.id,
@@ -894,6 +866,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           programCode: Programs.initialism,
         })
         .from(CourseOfferings)
+        .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
         .innerJoin(
           CourseCurriculums,
           eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
@@ -903,7 +876,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         .innerJoin(Programs, eq(Classes.program_id, Programs.id))
         .where(
           and(
-            eq(CourseOfferings.faculty_id, facultyId),
+            eq(Faculties.account_id, facultyId), // 🚀 Matches through Faculties table
             eq(CourseOfferings.semester_id, schedule.semester_id),
             isNull(CourseOfferings.deleted_at),
           ),
@@ -1092,7 +1065,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           await tx.insert(SupervisorEvaluationRatings).values(ratingInserts);
         }
 
-        // 📡 Real-time pulse
         if (!data.is_draft) {
           const facultyUser = await this.userService.getUserById(data.faculty_id, tx);
           const facultyName = facultyUser.isOk()
@@ -1123,6 +1095,10 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
       });
     });
   }
+
+  // =========================================================================
+  // 3. FACULTY TEACHING OFFERINGS (FOR INSTRUCTOR PORTAL)
+  // =========================================================================
 
   getFacultyTeachingOfferings(
     facultyAccountId: number,
@@ -1160,6 +1136,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
       if (!targetSemesterId) return [];
 
+      // 🚀 Fixed Join: Finds offerings by joining through Faculties.account_id
       const offerings = await tx
         .select({
           id: CourseOfferings.id,
@@ -1179,6 +1156,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           curriculumId: CourseCurriculums.id,
         })
         .from(CourseOfferings)
+        .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
         .innerJoin(
           CourseCurriculums,
           eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
@@ -1189,7 +1167,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         .innerJoin(Semesters, eq(CourseOfferings.semester_id, Semesters.id))
         .where(
           and(
-            eq(CourseOfferings.faculty_id, facultyAccountId),
+            eq(Faculties.account_id, facultyAccountId), // 🚀 Resolves through Faculties
             eq(CourseOfferings.semester_id, targetSemesterId),
             isNull(CourseOfferings.deleted_at),
           ),

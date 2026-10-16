@@ -8,7 +8,7 @@ export const FacultySelect = createSelectSchema(Faculties);
 export const FacultyInsert = createInsertSchema(Faculties, {
   account_id: z.number().int().positive("Please select a valid user account."),
   program_id: z.number().int().positive("Please select a valid program."),
-}).omit({ id: true, created_at: true, updated_at: true, deleted_at: true });
+}).omit({ created_at: true, updated_at: true, deleted_at: true });
 
 export const FacultyUpdate = createUpdateSchema(Faculties).omit({
   id: true,
@@ -30,6 +30,7 @@ export const FacultyQuerySchema = z.object({
   program_id: z.coerce.number().int().positive().optional(),
   college_id: z.coerce.number().int().positive().optional(),
   is_archived: z.preprocess((val) => val === "true" || val === true, z.boolean()).default(false),
+  unscoped: z.preprocess((val) => val === "true" || val === true, z.boolean()).optional(), // 👈 Allows fetching all university faculty
 });
 
 export type IFacultySelect = z.infer<typeof FacultySelect>;

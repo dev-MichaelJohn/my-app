@@ -47,11 +47,25 @@ export type IOfferingSelect = z.infer<typeof OfferingSelect>;
 export type IOfferingInsert = z.infer<typeof OfferingInsert>;
 export type IOfferingUpdate = z.infer<typeof OfferingUpdate>;
 
+// ── Added faculty_id and home_program to match SQL JSON_BUILD_OBJECT ──
+export const GetOfferingFacultySchema = GetUserSchema.omit({ roles: true })
+  .extend({
+    faculty_id: z.number().int().positive().optional(),
+    home_program: z
+      .object({
+        id: z.number(),
+        name: z.string(),
+        initialism: z.string(),
+      })
+      .optional(),
+  })
+  .nullable();
+
 export const GetOfferingSchema = OfferingSelect.extend({
   course_curriculum: GetCurriculumSchema.pick({ id: true, course: true }),
   class: GetClassSchema.pick({ id: true, year_level: true, section: true, program: true }),
   semester: SemesterSelect,
-  faculty: GetUserSchema.omit({ roles: true }).nullable(),
+  faculty: GetOfferingFacultySchema,
 }).omit({
   course_curriculum_id: true,
   class_id: true,

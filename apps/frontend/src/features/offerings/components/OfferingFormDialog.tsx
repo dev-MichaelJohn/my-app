@@ -38,9 +38,9 @@ import {
   type ISemesterSelect,
 } from "@my-app/shared";
 import { useCreateOffering, useUpdateOffering } from "../hooks/useOfferings";
-import { useUsers } from "@/features/users/hooks/useUsers";
+import { useFaculties } from "@/features/faculties/hooks/useFaculties";
 import type { ApiError } from "@/lib/api.lib";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface OfferingFormDialogProps {
@@ -97,11 +97,12 @@ function OfferingFormInner({
   const createMutation = useCreateOffering();
   const updateMutation = useUpdateOffering();
 
-  const { data: usersResponse, isLoading: isLoadingFaculty } = useUsers({
-    role: "FACULTY",
+  // Load all appointed department faculty
+  const { data: facultiesResponse, isLoading: isLoadingFaculty } = useFaculties({
     paginate: false,
+    unscoped: true,
   });
-  const facultyUsers = usersResponse?.data ?? [];
+  const facultiesList = facultiesResponse?.data ?? [];
 
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
@@ -109,12 +110,18 @@ function OfferingFormInner({
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [facultyComboboxOpen, setFacultyComboboxOpen] = useState(false);
 
+  // Type-safe resolution of initial faculty appointment ID
+  const initialFacultyId = offeringToEdit?.faculty
+    ? ((offeringToEdit.faculty as { faculty_id?: number }).faculty_id ??
+      offeringToEdit.faculty.account.id)
+    : null;
+
   const form = useForm({
     defaultValues: {
       semester_id: offeringToEdit?.semester.id || semesters[0]?.id || 0,
       class_id: offeringToEdit?.class.id || classes[0]?.id || 0,
       course_curriculum_id: offeringToEdit?.course_curriculum.id || curriculums[0]?.id || 0,
-      faculty_id: offeringToEdit?.faculty?.account.id || null,
+      faculty_id: initialFacultyId,
     } as IOfferingInsert,
     validators: {
       onChange: OfferingInsert,
@@ -186,6 +193,7 @@ function OfferingFormInner({
           </div>
         )}
 
+        {/* Academic Semester */}
         <form.Field name="semester_id">
           {(field) => {
             const selectedSem = semesters.find((s) => s.id === Number(field.state.value));
@@ -222,6 +230,7 @@ function OfferingFormInner({
           }}
         </form.Field>
 
+        {/* Class Cohort */}
         <form.Field name="class_id">
           {(field) => {
             const selectedClass = classes.find((c) => c.id === Number(field.state.value));
@@ -264,6 +273,7 @@ function OfferingFormInner({
           }}
         </form.Field>
 
+        {/* Course Subject */}
         <form.Field name="course_curriculum_id">
           {(field) => {
             const selectedCurr = curriculums.find((curr) => curr.id === Number(field.state.value));
@@ -305,10 +315,12 @@ function OfferingFormInner({
           }}
         </form.Field>
 
+        {/* Faculty Combobox */}
         <form.Field name="faculty_id">
           {(field) => {
-            const selectedFaculty = facultyUsers.find(
-              (u) => u.account.id === Number(field.state.value),
+            const selectedFaculty = facultiesList.find(
+              (f) =>
+                f.id === Number(field.state.value) || f.account_id === Number(field.state.value),
             );
 
             return (
@@ -319,7 +331,7 @@ function OfferingFormInner({
                     <button
                       type="button"
                       onClick={() => field.handleChange(null)}
-                      className="text-[11px] text-destructive hover:underline"
+                      className="text-[11px] text-destructive hover:underline cursor-pointer"
                     >
                       Clear / Unassign
                     </button>
@@ -327,27 +339,33 @@ function OfferingFormInner({
                 </div>
 
                 <Popover open={facultyComboboxOpen} onOpenChange={setFacultyComboboxOpen}>
-                  <PopoverTrigger>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={facultyComboboxOpen}
-                      disabled={isLoadingFaculty}
-                      className="w-full h-10 px-3 flex items-center justify-between bg-background border-input text-foreground font-normal text-sm"
-                    >
-                      {selectedFaculty ? (
-                        <span className="truncate font-medium text-foreground">
-                          {selectedFaculty.details.last_name}, {selectedFaculty.details.first_name}{" "}
-                          ({selectedFaculty.details.institutional_id})
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          Search and assign faculty instructor...
-                        </span>
-                      )}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
+                  <PopoverTrigger
+                    render={
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={facultyComboboxOpen}
+                        disabled={isLoadingFaculty}
+                        className="w-full h-10 px-3 flex items-center justify-between bg-background border-input text-foreground font-normal text-sm"
+                      >
+                        {selectedFaculty ? (
+                          <span className="truncate font-medium text-foreground">
+                            {selectedFaculty.user.details.last_name},{" "}
+                            {selectedFaculty.user.details.first_name} (
+                            {selectedFaculty.user.details.institutional_id}) —{" "}
+                            <span className="font-mono text-primary font-bold">
+                              {selectedFaculty.program.initialism}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            Search and assign appointed instructor...
+                          </span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    }
+                  />
 
                   <PopoverContent
                     align="start"
@@ -360,34 +378,43 @@ function OfferingFormInner({
                       className="w-full"
                     >
                       <CommandInput
-                        placeholder="Search by faculty name or ID..."
+                        placeholder="Search instructor by name or ID..."
                         className="h-9 text-xs"
                       />
                       <CommandList className="max-h-56 w-full">
-                        <CommandEmpty className="p-3 text-xs text-center text-muted-foreground">
-                          No matching faculty instructors found.
+                        <CommandEmpty className="p-3 text-xs text-center text-muted-foreground space-y-1">
+                          <p className="font-semibold text-foreground">
+                            No appointed instructors found.
+                          </p>
+                          <p className="text-[11px]">
+                            Instructors must first be appointed in{" "}
+                            <strong>Department Faculty</strong>.
+                          </p>
                         </CommandEmpty>
-                        <CommandGroup heading="Faculty Members" className="p-1">
-                          {facultyUsers.map((u) => {
-                            const searchableText = `${u.details.last_name}, ${u.details.first_name} ${u.details.institutional_id} ${u.account.email}`;
-                            const isSelected = u.account.id === Number(field.state.value);
+                        <CommandGroup heading="Appointed Faculty Members" className="p-1">
+                          {facultiesList.map((f) => {
+                            const searchableText = `${f.user.details.last_name}, ${f.user.details.first_name} ${f.user.details.institutional_id} ${f.program.name} ${f.program.initialism}`;
+                            const isSelected =
+                              f.id === Number(field.state.value) ||
+                              f.account_id === Number(field.state.value);
 
                             return (
                               <CommandItem
-                                key={u.account.id}
+                                key={f.id}
                                 value={searchableText}
                                 onSelect={() => {
-                                  field.handleChange(u.account.id);
+                                  field.handleChange(f.id); // Canonical Faculties.id
                                   setFacultyComboboxOpen(false);
                                 }}
                                 className="cursor-pointer text-xs flex items-center justify-between px-2.5 py-2 rounded-md"
                               >
                                 <div className="flex flex-col truncate pr-2">
                                   <span className="font-semibold text-foreground truncate">
-                                    {u.details.last_name}, {u.details.first_name}
+                                    {f.user.details.last_name}, {f.user.details.first_name}
                                   </span>
                                   <span className="text-[11px] text-muted-foreground truncate">
-                                    ID: {u.details.institutional_id} • {u.account.email}
+                                    ID: {f.user.details.institutional_id} • Dept:{" "}
+                                    <strong className="text-primary">{f.program.initialism}</strong>
                                   </span>
                                 </div>
                                 <Check
@@ -404,6 +431,16 @@ function OfferingFormInner({
                     </Command>
                   </PopoverContent>
                 </Popover>
+
+                {facultiesList.length === 0 && !isLoadingFaculty && (
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1 pt-1">
+                    <Info className="w-3.5 h-3.5 text-primary shrink-0" />
+                    <span>
+                      No instructors appointed yet. Go to <strong>Department Faculty</strong> to
+                      appoint instructors to an academic program.
+                    </span>
+                  </p>
+                )}
               </div>
             );
           }}
