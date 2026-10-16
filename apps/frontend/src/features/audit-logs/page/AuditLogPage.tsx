@@ -349,24 +349,31 @@ export default function AuditLogPage() {
           open={Boolean(activeDiffLog)}
           onOpenChange={(open) => !open && setActiveDiffLog(null)}
         >
-          <DialogContent className="sm:max-w-xl border-border bg-card text-card-foreground">
-            <DialogHeader>
+          <DialogContent className="sm:max-w-3xl lg:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col border-border bg-card text-card-foreground">
+            <DialogHeader className="pb-3 border-b border-border">
               <DialogTitle className="text-base font-bold flex items-center gap-2">
-                <Eye className="w-4 h-4 text-primary" />
-                <span>State Diff Inspector — {activeDiffLog.entity_name}</span>
+                <Eye className="w-4.5 h-4.5 text-primary" />
+                <span className="truncate">State Diff: {activeDiffLog.entity_name}</span>
               </DialogTitle>
-              <DialogDescription className="text-xs">
-                Captured before-and-after values for this {activeDiffLog.action} action on{" "}
-                {activeDiffLog.entity}.
+              <DialogDescription className="text-xs text-muted-foreground flex flex-wrap items-center gap-2 pt-0.5">
+                <span>
+                  Action: <strong className="text-foreground">{activeDiffLog.action}</strong> on{" "}
+                  <strong className="text-foreground uppercase">{activeDiffLog.entity}</strong>
+                </span>
                 {activeDiffLog.transaction_id && (
-                  <span className="block mt-1 font-mono text-[10px] text-muted-foreground">
-                    Tx ID: {activeDiffLog.transaction_id}
-                  </span>
+                  <>
+                    <span>•</span>
+                    <span className="font-mono text-[10px]">
+                      Tx ID: {activeDiffLog.transaction_id}
+                    </span>
+                  </>
                 )}
               </DialogDescription>
             </DialogHeader>
 
-            <AuditDiffViewer diff={activeDiffLog.diff} />
+            <div className="flex-1 overflow-y-auto py-2">
+              <AuditDiffViewer diff={activeDiffLog.diff} />
+            </div>
           </DialogContent>
         </Dialog>
       )}
