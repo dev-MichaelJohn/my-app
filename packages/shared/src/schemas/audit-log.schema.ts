@@ -42,8 +42,8 @@ export const AuditLogs = pgTable(
     entity_id: integer("entity_id").notNull(),
     entity_name: varchar("entity_name", { length: 255 }).notNull(),
 
-    // 🚀 Added | undefined | null to satisfy exactOptionalPropertyTypes
     diff: jsonb("diff").$type<AuditDiff | null | undefined>(),
+    transaction_id: varchar("transaction_id", { length: 64 }),
 
     ip_address: varchar("ip_address", { length: 64 }),
     user_agent: text("user_agent"),
@@ -60,6 +60,7 @@ export const AuditLogs = pgTable(
     index("idx_audit_logs_entity").on(t.entity, t.entity_id),
     index("idx_audit_logs_actor_id").on(t.actor_id),
     index("idx_audit_logs_action").on(t.action),
+    index("idx_audit_logs_transaction_id").on(t.transaction_id),
     index("idx_audit_logs_created_at").on(t.created_at),
   ],
 );

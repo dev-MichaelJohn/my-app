@@ -15,6 +15,7 @@ export const AuditDiffSchema = z.object({
 
 export const AuditLogSelect = createSelectSchema(AuditLogs, {
   diff: () => AuditDiffSchema.optional().nullable(),
+  transaction_id: (schema) => schema.optional().nullable(),
 });
 export type IAuditLogSelect = z.infer<typeof AuditLogSelect>;
 
@@ -26,6 +27,7 @@ export const AuditLogQuerySchema = z.object({
   entity: z.string().trim().optional(),
   action: AuditActionSchema.optional(),
   actor_id: z.coerce.number().int().positive().optional(),
+  transaction_id: z.string().trim().optional(),
   start_date: z.string().optional(),
   end_date: z.string().optional(),
 });
@@ -44,4 +46,5 @@ export interface RecordAuditInput {
   ipAddress?: string | null | undefined;
   userAgent?: string | null | undefined;
   isRollbackable?: boolean | undefined;
+  transactionId?: string | null | undefined;
 }
