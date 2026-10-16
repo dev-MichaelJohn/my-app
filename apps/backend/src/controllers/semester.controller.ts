@@ -35,7 +35,7 @@ export class SemesterController {
   });
 
   createSemester = runAsync((req) => {
-    return this.semesterService.createSemester(req.body).map((data) => ({
+    return this.semesterService.createSemester(req.body, undefined, req.user, req).map((data) => ({
       status: 201,
       message: "Academic semester created successfully.",
       data,
@@ -44,17 +44,19 @@ export class SemesterController {
 
   updateSemester = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((semesterId) => {
-      return this.semesterService.updateSemester(semesterId, req.body).map((data) => ({
-        status: 200,
-        message: "Semester updated successfully.",
-        data,
-      }));
+      return this.semesterService
+        .updateSemester(semesterId, req.body, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Semester updated successfully.",
+          data,
+        }));
     });
   });
 
   deleteSemester = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((semesterId) => {
-      return this.semesterService.deleteSemester(semesterId).map(() => ({
+      return this.semesterService.deleteSemester(semesterId, undefined, req.user, req).map(() => ({
         status: 200,
         message: "Semester archived successfully.",
         data: null,
@@ -64,21 +66,25 @@ export class SemesterController {
 
   restoreSemester = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((semesterId) => {
-      return this.semesterService.restoreSemester(semesterId).map((data) => ({
-        status: 200,
-        message: "Semester restored successfully.",
-        data,
-      }));
+      return this.semesterService
+        .restoreSemester(semesterId, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Semester restored successfully.",
+          data,
+        }));
     });
   });
 
   forceStopSemester = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((semesterId) => {
-      return this.semesterService.forceStopSemester(semesterId).map((data) => ({
-        status: 200,
-        message: "Academic semester concluded successfully.",
-        data,
-      }));
+      return this.semesterService
+        .forceStopSemester(semesterId, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Academic semester concluded successfully.",
+          data,
+        }));
     });
   });
 }

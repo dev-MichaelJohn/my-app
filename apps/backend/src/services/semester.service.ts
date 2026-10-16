@@ -27,9 +27,12 @@ import {
   type ISemesterSelect,
   type ISemesterUpdate,
   type PaginatedData,
+  type GetUser,
 } from "@my-app/shared";
 import { OfferingService, type IOfferingService } from "./offering.service.js";
 import { logger } from "@/libs/logger.lib.js";
+import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
 export interface ISemesterService {
   getSemesterById(
@@ -42,16 +45,38 @@ export interface ISemesterService {
     rawQuery: unknown,
     client?: DbClient,
   ): ResultAsync<PaginatedData<ISemesterSelect[]>, AppError>;
-  createSemester(info: ISemesterInsert, client?: DbClient): ResultAsync<ISemesterSelect, AppError>;
+  createSemester(
+    info: ISemesterInsert,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<ISemesterSelect, AppError>;
   updateSemester(
     id: number,
     info: ISemesterUpdate,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<ISemesterSelect, AppError>;
-  deleteSemester(id: number, client?: DbClient): ResultAsync<void, AppError>;
-  restoreSemester(id: number, client?: DbClient): ResultAsync<ISemesterSelect, AppError>;
+  deleteSemester(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
+  restoreSemester(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<ISemesterSelect, AppError>;
   validateSemesterOpen(semesterId: number, tx: PgTransaction): Promise<void>;
-  forceStopSemester(id: number, client?: DbClient): ResultAsync<ISemesterSelect, AppError>;
+  forceStopSemester(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<ISemesterSelect, AppError>;
 }
 
 export class SemesterService implements ISemesterService {
@@ -176,6 +201,8 @@ export class SemesterService implements ISemesterService {
   createSemester(
     info: ISemesterInsert,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<ISemesterSelect, AppError> {
     return ValidateSchema(SemesterInsert, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -202,8 +229,25 @@ export class SemesterService implements ISemesterService {
           throw new AppError(500, "Failed to create semester record.");
         }
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "semesters",
+          entityId: created.id,
+          entityName: `${created.semester_term} Sem A.Y. ${created.school_year_start}-${created.school_year_end}`,
+          newRecord: created,
+          tx,
+        });
+
+        // Auto-generation of course offerings will automatically share req.__auditTxId
         const offeringService: IOfferingService = new OfferingService();
-        const generateRes = await offeringService.generateOfferingsForSemester(created.id, tx);
+        const generateRes = await offeringService.generateOfferingsForSemester(
+          created.id,
+          tx,
+          actorUser,
+          req,
+        );
         if (generateRes.isErr())
           logger.warn("Offering auto-generation warning:", generateRes.error.message);
 
@@ -216,6 +260,8 @@ export class SemesterService implements ISemesterService {
     id: number,
     info: ISemesterUpdate,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<ISemesterSelect, AppError> {
     return ValidateSchema(SemesterUpdate, info).asyncAndThen((parsed) => {
       const hasUpdates = Boolean(parsed && Object.keys(parsed).length > 0);
@@ -244,12 +290,29 @@ export class SemesterService implements ISemesterService {
           throw new AppError(500, "Failed to update semester record.");
         }
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "UPDATE",
+          entity: "semesters",
+          entityId: updated.id,
+          entityName: `${updated.semester_term} Sem A.Y. ${updated.school_year_start}-${updated.school_year_end}`,
+          oldRecord: current,
+          newRecord: updated,
+          tx,
+        });
+
         return updated;
       });
     });
   }
 
-  deleteSemester(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteSemester(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getSemesterById(id, tx);
       if (existing.isErr()) throw existing.error;
@@ -260,17 +323,33 @@ export class SemesterService implements ISemesterService {
         .update(Semesters)
         .set({ deleted_at: new Date() })
         .where(and(eq(Semesters.id, id), isNull(Semesters.deleted_at)))
-        .returning({ id: Semesters.id });
+        .returning();
 
       if (!deleted) {
         throw new AppError(404, "Semester record was not found or has already been archived.");
       }
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "DELETE",
+        entity: "semesters",
+        entityId: existing.value.id,
+        entityName: `${existing.value.semester_term} Sem A.Y. ${existing.value.school_year_start}-${existing.value.school_year_end}`,
+        oldRecord: existing.value,
+        tx,
+      });
+
       return undefined;
     });
   }
 
-  restoreSemester(id: number, client: DbClient = db): ResultAsync<ISemesterSelect, AppError> {
+  restoreSemester(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<ISemesterSelect, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getSemesterById(id, tx, true);
       if (existing.isErr()) throw existing.error;
@@ -309,6 +388,17 @@ export class SemesterService implements ISemesterService {
         throw new AppError(500, "Failed to restore semester.");
       }
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "RESTORE",
+        entity: "semesters",
+        entityId: restored.id,
+        entityName: `${restored.semester_term} Sem A.Y. ${restored.school_year_start}-${restored.school_year_end}`,
+        newRecord: restored,
+        tx,
+      });
+
       return restored;
     });
   }
@@ -341,7 +431,12 @@ export class SemesterService implements ISemesterService {
       );
   }
 
-  forceStopSemester(id: number, client: DbClient = db): ResultAsync<ISemesterSelect, AppError> {
+  forceStopSemester(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<ISemesterSelect, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getSemesterById(id, tx);
       if (existing.isErr()) throw existing.error;
@@ -385,6 +480,18 @@ export class SemesterService implements ISemesterService {
       if (!updated) {
         throw new AppError(500, "Failed to force stop semester.");
       }
+
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "STATUS_CHANGE",
+        entity: "semesters",
+        entityId: updated.id,
+        entityName: `${updated.semester_term} Sem A.Y. ${updated.school_year_start}-${updated.school_year_end} (Force Stopped)`,
+        oldRecord: current,
+        newRecord: updated,
+        tx,
+      });
 
       return updated;
     });

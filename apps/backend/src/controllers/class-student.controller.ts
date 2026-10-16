@@ -11,7 +11,7 @@ export class ClassStudentController {
 
   private idSchema = z.coerce.number().int().positive("Invalid Class-student ID provided.");
 
-  getClassStudentById = runAsync((req, _res) => {
+  getClassStudentById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((classStudentId) => {
       return this.classStudentService.getClassStudentById(classStudentId).map((data) => ({
         status: 200,
@@ -21,7 +21,7 @@ export class ClassStudentController {
     });
   });
 
-  getClassStudents = runAsync((req, _res) => {
+  getClassStudents = runAsync((req) => {
     return this.classStudentService
       .getClassStudents(req.query, undefined, req.user)
       .map((data) => ({
@@ -31,41 +31,49 @@ export class ClassStudentController {
       }));
   });
 
-  createClassStudent = runAsync((req, _res) => {
-    return this.classStudentService.createClassStudent(req.body).map((data) => ({
-      status: 200,
-      message: "Class-student created successfully.",
-      data,
-    }));
-  });
-
-  updateClassStudent = runAsync((req, _res) => {
-    return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((classStudentId) => {
-      return this.classStudentService.updateClassStudent(classStudentId, req.body).map((data) => ({
+  createClassStudent = runAsync((req) => {
+    return this.classStudentService
+      .createClassStudent(req.body, undefined, req.user, req)
+      .map((data) => ({
         status: 200,
-        message: "Class-student updated successfully.",
+        message: "Class-student created successfully.",
         data,
       }));
+  });
+
+  updateClassStudent = runAsync((req) => {
+    return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((classStudentId) => {
+      return this.classStudentService
+        .updateClassStudent(classStudentId, req.body, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Class-student updated successfully.",
+          data,
+        }));
     });
   });
 
-  deleteClassStudent = runAsync((req, _res) => {
+  deleteClassStudent = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((classStudentId) => {
-      return this.classStudentService.deleteClassStudent(classStudentId).map(() => ({
-        status: 200,
-        message: "Class-student archived successfully.",
-        data: null,
-      }));
+      return this.classStudentService
+        .deleteClassStudent(classStudentId, undefined, req.user, req)
+        .map(() => ({
+          status: 200,
+          message: "Class-student archived successfully.",
+          data: null,
+        }));
     });
   });
 
-  restoreClassStudent = runAsync((req, _res) => {
+  restoreClassStudent = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((classStudentId) => {
-      return this.classStudentService.restoreClassStudent(classStudentId).map((data) => ({
-        status: 200,
-        message: "Class-student restored successfully.",
-        data,
-      }));
+      return this.classStudentService
+        .restoreClassStudent(classStudentId, undefined, req.user, req)
+        .map((data) => ({
+          status: 200,
+          message: "Class-student restored successfully.",
+          data,
+        }));
     });
   });
 }

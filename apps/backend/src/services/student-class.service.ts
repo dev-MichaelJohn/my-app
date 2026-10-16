@@ -38,10 +38,12 @@ import {
 import { errAsync, type ResultAsync } from "neverthrow";
 import { OfferingService, type IOfferingService } from "./offering.service.js";
 import { UserService, type IUserService } from "./user.service.js";
-import db, { type PgTransaction } from "@/configs/db.config.js";
+import db from "@/configs/db.config.js";
 import { ValidateSchema } from "@/libs/result.lib.js";
 import { createPaginatedData } from "@/libs/response.lib.js";
 import { SemesterService, type ISemesterService } from "./semester.service.js";
+import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
 const StudentAccounts = aliasedTable(Accounts, "student_accounts");
 const StudentDetails = aliasedTable(PersonalDetails, "student_details");
@@ -62,18 +64,27 @@ export interface IStudentClassService {
     info: IStudentClassInsert,
     client?: DbClient,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetStudentClass, AppError>;
   updateStudentClass(
     id: number,
     info: IStudentClassUpdate,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetStudentClass, AppError>;
   deleteStudentClass(
     id: number,
     client?: DbClient,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<void, AppError>;
-  restoreStudentClass(id: number, client?: DbClient): ResultAsync<GetStudentClass, AppError>;
+  restoreStudentClass(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetStudentClass, AppError>;
 }
 
 export class StudentClassService implements IStudentClassService {
@@ -89,7 +100,6 @@ export class StudentClassService implements IStudentClassService {
     updated_at: StudentClasses.updated_at,
     deleted_at: StudentClasses.deleted_at,
 
-    // ── Student JSON ──
     student: sql<GetStudentClass["student"]>`
       JSON_BUILD_OBJECT(
         'account', JSON_BUILD_OBJECT(
@@ -109,7 +119,6 @@ export class StudentClassService implements IStudentClassService {
       )
     `,
 
-    // ── Offering JSON ──
     offering: sql<GetStudentClass["offering"]>`
       JSON_BUILD_OBJECT(
         'id', ${CourseOfferings.id},
@@ -255,7 +264,7 @@ export class StudentClassService implements IStudentClassService {
             ilike(StudentDetails.first_name, term),
             ilike(StudentDetails.last_name, term),
             ilike(StudentDetails.institutional_id, term),
-            ilike(StudentAccounts.email, term), // Fixed: use StudentAccounts instead of Accounts
+            ilike(StudentAccounts.email, term),
             ilike(Courses.name, term),
             ilike(Courses.initialism, term),
             ilike(Programs.initialism, term),
@@ -333,7 +342,6 @@ export class StudentClassService implements IStudentClassService {
         const offset = (page - 1) * limit;
         const paginatedDataQuery = baseDataQuery.limit(limit).offset(offset);
 
-        // Include all joined tables referenced by whereCondition
         const countQuery = tx
           .select({ total: countDistinct(StudentClasses.id) })
           .from(StudentClasses)
@@ -367,6 +375,7 @@ export class StudentClassService implements IStudentClassService {
     info: IStudentClassInsert,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetStudentClass, AppError> {
     return ValidateSchema(StudentClassInsert, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -385,14 +394,12 @@ export class StudentClassService implements IStudentClassService {
 
         await this.semesterService.validateSemesterOpen(offering.semester.id, tx);
 
-        // 🛡️ Scope check: If actor is FACULTY, verify they are the appointed teacher of this offering
         if (actorUser) {
           const roles = actorUser.roles ?? [];
           const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
           const isSupervisor = roles.includes("SUPERVISOR");
 
           if (!isPrivileged && !isSupervisor && roles.includes("FACULTY")) {
-            // Check if offering is assigned to this faculty member
             const [myFaculty] = await tx
               .select({ id: Faculties.id })
               .from(Faculties)
@@ -450,6 +457,17 @@ export class StudentClassService implements IStudentClassService {
         const fullRecord = await this.getStudentClassById(enrollmentId, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "student_classes",
+          entityId: fullRecord.value.id,
+          entityName: `${fullRecord.value.student.details.last_name}, ${fullRecord.value.student.details.first_name} in ${fullRecord.value.offering.course_curriculum.course.initialism}`,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
@@ -459,6 +477,8 @@ export class StudentClassService implements IStudentClassService {
     id: number,
     info: IStudentClassUpdate,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetStudentClass, AppError> {
     return ValidateSchema(StudentClassUpdate, info).asyncAndThen((parsed) => {
       const hasUpdates = Boolean(parsed && Object.keys(parsed).length > 0);
@@ -500,6 +520,18 @@ export class StudentClassService implements IStudentClassService {
         const fullRecord = await this.getStudentClassById(id, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "UPDATE",
+          entity: "student_classes",
+          entityId: fullRecord.value.id,
+          entityName: `${fullRecord.value.student.details.last_name}, ${fullRecord.value.student.details.first_name}`,
+          oldRecord: existing.value,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
@@ -509,6 +541,7 @@ export class StudentClassService implements IStudentClassService {
     id: number,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getStudentClassById(id, tx);
@@ -517,7 +550,6 @@ export class StudentClassService implements IStudentClassService {
 
       await this.semesterService.validateSemesterOpen(current.offering.semester.id, tx);
 
-      // 🛡️ Scope check: If actor is FACULTY, verify they teach this offering
       if (actorUser) {
         const roles = actorUser.roles ?? [];
         const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
@@ -541,11 +573,27 @@ export class StudentClassService implements IStudentClassService {
 
       if (!deleted) throw new AppError(404, "Enrollment record was not found or already deleted.");
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "DELETE",
+        entity: "student_classes",
+        entityId: current.id,
+        entityName: `${current.student.details.last_name}, ${current.student.details.first_name} from ${current.offering.course_curriculum.course.initialism}`,
+        oldRecord: current,
+        tx,
+      });
+
       return undefined;
     });
   }
 
-  restoreStudentClass(id: number, client: DbClient = db): ResultAsync<GetStudentClass, AppError> {
+  restoreStudentClass(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetStudentClass, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getStudentClassById(id, tx, true);
       if (existing.isErr()) throw existing.error;
@@ -588,34 +636,18 @@ export class StudentClassService implements IStudentClassService {
       const fullRecord = await this.getStudentClassById(id, tx);
       if (fullRecord.isErr()) throw fullRecord.error;
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "RESTORE",
+        entity: "student_classes",
+        entityId: fullRecord.value.id,
+        entityName: `${fullRecord.value.student.details.last_name}, ${fullRecord.value.student.details.first_name} to ${fullRecord.value.offering.course_curriculum.course.initialism}`,
+        newRecord: fullRecord.value,
+        tx,
+      });
+
       return fullRecord.value;
     });
-  }
-
-  private async checkStudentClassDependencies(
-    studentAccountId: number,
-    courseOfferingId: number,
-    tx: PgTransaction,
-  ): Promise<void> {
-    // If you have evaluation submissions (e.g. EvaluationSubmissions table):
-    /*
-    const [existingEvaluation] = await tx
-      .select({ id: EvaluationSubmissions.id })
-      .from(EvaluationSubmissions)
-      .where(
-        and(
-          eq(EvaluationSubmissions.student_account_id, studentAccountId),
-          eq(EvaluationSubmissions.course_offering_id, courseOfferingId),
-          isNull(EvaluationSubmissions.deleted_at)
-        )
-      );
-
-    if (existingEvaluation) {
-      throw new AppError(
-        409,
-        "Cannot unenroll student: The student has already submitted an evaluation for this course offering."
-      );
-    }
-    */
   }
 }

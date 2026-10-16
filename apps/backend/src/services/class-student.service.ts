@@ -39,6 +39,8 @@ import {
 } from "drizzle-orm";
 import { ValidateSchema } from "@/libs/result.lib.js";
 import { createPaginatedData } from "@/libs/response.lib.js";
+import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
 export interface IClassStudentService {
   getClassStudentById(
@@ -54,14 +56,28 @@ export interface IClassStudentService {
   createClassStudent(
     classStudentInfo: IClassStudentInsert,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetClassStudent, AppError>;
   updateClassStudent(
     id: number,
     classStudentInfo: IClassStudentUpdate,
     client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetClassStudent, AppError>;
-  deleteClassStudent(id: number, client?: DbClient): ResultAsync<void, AppError>;
-  restoreClassStudent(id: number, client?: DbClient): ResultAsync<GetClassStudent, AppError>;
+  deleteClassStudent(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
+  restoreClassStudent(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetClassStudent, AppError>;
   validateSemesterOpen(semesterId: number, tx: PgTransaction): Promise<void>;
 }
 
@@ -189,11 +205,9 @@ export class ClassStudentService implements IClassStudentService {
         const chairships = actorUser.offices?.chairships || [];
 
         if (chairships.length > 0) {
-          // Chair: Lock strictly to their program(s)
           const chairProgramIds = chairships.map((c) => c.id);
           filters.push(inArray(Programs.id, chairProgramIds));
         } else if (deanships.length > 0) {
-          // Dean: Lock strictly to programs in their college(s)
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Programs.college_id, deanCollegeIds));
         }
@@ -280,6 +294,8 @@ export class ClassStudentService implements IClassStudentService {
   createClassStudent(
     classStudentInfo: IClassStudentInsert,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetClassStudent, AppError> {
     return ValidateSchema(ClassStudentInsert, classStudentInfo).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
@@ -294,7 +310,6 @@ export class ClassStudentService implements IClassStudentService {
           throw new AppError(400, "The selected account does not have a STUDENT role.");
         }
 
-        // ── 1. Check if the student is already actively enrolled in ANY class for this semester ──
         const [activeEnrollment] = await tx
           .select({
             id: ClassStudents.id,
@@ -328,7 +343,6 @@ export class ClassStudentService implements IClassStudentService {
           );
         }
 
-        // ── 2. Check if there was a previous soft-deleted enrollment in THIS class to restore ──
         const [existingDeleted] = await tx
           .select()
           .from(ClassStudents)
@@ -372,6 +386,17 @@ export class ClassStudentService implements IClassStudentService {
         const fullRecord = await this.getClassStudentById(enrollmentId, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "class_students",
+          entityId: fullRecord.value.id,
+          entityName: `${fullRecord.value.student.details.last_name}, ${fullRecord.value.student.details.first_name} in ${fullRecord.value.class.program.initialism} ${fullRecord.value.class.year_level}-${fullRecord.value.class.section}`,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
@@ -381,6 +406,8 @@ export class ClassStudentService implements IClassStudentService {
     id: number,
     classStudentInfo: IClassStudentUpdate,
     client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetClassStudent, AppError> {
     return ValidateSchema(ClassStudentUpdate, classStudentInfo).asyncAndThen((parsed) => {
       const hasUpdates = Boolean(parsed && Object.keys(parsed).length > 0);
@@ -415,7 +442,6 @@ export class ClassStudentService implements IClassStudentService {
         const targetClassId = parsed.class_id || current.class.id;
         const targetSemId = parsed.semester_id || current.semester.id;
 
-        // ── Ensure target student is not already active in another class for target semester ──
         const [conflict] = await tx
           .select({
             id: ClassStudents.id,
@@ -455,12 +481,29 @@ export class ClassStudentService implements IClassStudentService {
         const fullRecord = await this.getClassStudentById(id, tx);
         if (fullRecord.isErr()) throw fullRecord.error;
 
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "UPDATE",
+          entity: "class_students",
+          entityId: fullRecord.value.id,
+          entityName: `${fullRecord.value.student.details.last_name}, ${fullRecord.value.student.details.first_name}`,
+          oldRecord: current,
+          newRecord: fullRecord.value,
+          tx,
+        });
+
         return fullRecord.value;
       });
     });
   }
 
-  deleteClassStudent(id: number, client: DbClient = db): ResultAsync<void, AppError> {
+  deleteClassStudent(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getClassStudentById(id, tx);
       if (existing.isErr()) throw existing.error;
@@ -503,11 +546,27 @@ export class ClassStudentService implements IClassStudentService {
           );
       }
 
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "DELETE",
+        entity: "class_students",
+        entityId: current.id,
+        entityName: `${current.student.details.last_name}, ${current.student.details.first_name} from ${current.class.program.initialism} ${current.class.year_level}-${current.class.section}`,
+        oldRecord: current,
+        tx,
+      });
+
       return undefined;
     });
   }
 
-  restoreClassStudent(id: number, client: DbClient = db): ResultAsync<GetClassStudent, AppError> {
+  restoreClassStudent(
+    id: number,
+    client: DbClient = db,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<GetClassStudent, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getClassStudentById(id, tx, true);
       if (existing.isErr()) throw existing.error;
@@ -523,7 +582,6 @@ export class ClassStudentService implements IClassStudentService {
 
       await this.validateSemesterOpen(current.semester.id, tx);
 
-      // ── Ensure student doesn't already have an active class in this semester ──
       const [conflict] = await tx
         .select({
           id: ClassStudents.id,
@@ -566,6 +624,17 @@ export class ClassStudentService implements IClassStudentService {
 
       const fullRecord = await this.getClassStudentById(id, tx);
       if (fullRecord.isErr()) throw fullRecord.error;
+
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "RESTORE",
+        entity: "class_students",
+        entityId: fullRecord.value.id,
+        entityName: `${fullRecord.value.student.details.last_name}, ${fullRecord.value.student.details.first_name} to ${fullRecord.value.class.program.initialism} ${fullRecord.value.class.year_level}-${fullRecord.value.class.section}`,
+        newRecord: fullRecord.value,
+        tx,
+      });
 
       return fullRecord.value;
     });
