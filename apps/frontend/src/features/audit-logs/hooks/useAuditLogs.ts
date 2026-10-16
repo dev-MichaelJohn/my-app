@@ -9,13 +9,14 @@ export const useAuditLogs = (query?: unknown) => {
     queryKey: ["audit-logs", query],
     queryFn: () => toQuery(auditApi.getAuditLogs(query)),
     placeholderData: keepPreviousData,
-    staleTime: 30 * 1000,
+    staleTime: 0, // Immediately show fresh events
   });
 };
 
 export const useRollbackAudit = () => {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: ["audit-rollback"],
     mutationFn: ({
       id,
       rollbackEntireTransaction = true,
@@ -23,22 +24,9 @@ export const useRollbackAudit = () => {
       id: number;
       rollbackEntireTransaction?: boolean;
     }) => toQuery(auditApi.rollback(id, rollbackEntireTransaction)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["audit-logs"] });
-      queryClient.invalidateQueries({ queryKey: ["colleges"] });
-      queryClient.invalidateQueries({ queryKey: ["programs"] });
-      queryClient.invalidateQueries({ queryKey: ["courses"] });
-      queryClient.invalidateQueries({ queryKey: ["classes"] });
-      queryClient.invalidateQueries({ queryKey: ["curriculums"] });
-      queryClient.invalidateQueries({ queryKey: ["faculties"] });
-      queryClient.invalidateQueries({ queryKey: ["offerings"] });
-      queryClient.invalidateQueries({ queryKey: ["class-students"] });
-      queryClient.invalidateQueries({ queryKey: ["student-classes"] });
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-      queryClient.invalidateQueries({ queryKey: ["semesters"] });
-      queryClient.invalidateQueries({ queryKey: ["evaluation-schedules"] });
-      queryClient.invalidateQueries({ queryKey: ["evaluation-instruments"] });
-      queryClient.invalidateQueries({ queryKey: ["evaluation-reports"] });
+    onSuccess: async () => {
+      // Invalidate the entire application cache across all active and inactive queries
+      await queryClient.invalidateQueries({ refetchType: "all" });
     },
   });
 };

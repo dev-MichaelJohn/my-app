@@ -18,7 +18,7 @@ export const usePrograms = (query?: unknown) => {
     queryKey: PROGRAM_KEYS.list(query),
     queryFn: () => toQuery(programAPI.getPrograms(query)),
     placeholderData: keepPreviousData,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 };
 
@@ -27,7 +27,7 @@ export const useProgram = (id: number, enabled: boolean = true) => {
     queryKey: PROGRAM_KEYS.detail(id),
     queryFn: () => toQuery(programAPI.getProgram(id)),
     enabled: Boolean(id) && enabled,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 };
 
@@ -35,8 +35,13 @@ export const useCreateProgram = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (newProgram: CreateProgram) => toQuery(programAPI.createProgram(newProgram)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PROGRAM_KEYS.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: PROGRAM_KEYS.all, refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["users"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["colleges"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };
@@ -46,9 +51,14 @@ export const useUpdateProgram = () => {
   return useMutation({
     mutationFn: ({ id, info }: { id: number; info: UpdateProgram }) =>
       toQuery(programAPI.updateProgram(id, info)),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: PROGRAM_KEYS.all });
-      queryClient.invalidateQueries({ queryKey: PROGRAM_KEYS.detail(id) });
+    onSuccess: async (_, { id }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: PROGRAM_KEYS.all, refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: PROGRAM_KEYS.detail(id), refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["users"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["colleges"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };
@@ -57,8 +67,12 @@ export const useDeleteProgram = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => toQuery(programAPI.deleteProgram(id)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PROGRAM_KEYS.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: PROGRAM_KEYS.all, refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["colleges"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };
@@ -67,8 +81,12 @@ export const useRestoreProgram = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => toQuery(programAPI.restoreProgram(id)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PROGRAM_KEYS.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: PROGRAM_KEYS.all, refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["colleges"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };

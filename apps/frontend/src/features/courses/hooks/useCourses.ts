@@ -18,7 +18,7 @@ export const useCourses = (query?: unknown) => {
     queryKey: COURSE_KEYS.list(query),
     queryFn: () => toQuery(courseAPI.getCourses(query)),
     placeholderData: keepPreviousData,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 };
 
@@ -27,52 +27,64 @@ export const useCourse = (id: number, enabled: boolean = true) => {
     queryKey: COURSE_KEYS.detail(id),
     queryFn: () => toQuery(courseAPI.getCourse(id)),
     enabled: Boolean(id) && enabled,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 };
 
 export const useCreateCourse = () => {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: (newCourse: ICourseInsert) => toQuery(courseAPI.createCourse(newCourse)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: COURSE_KEYS.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: COURSE_KEYS.all, refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["curriculums"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };
 
 export const useUpdateCourse = () => {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: ({ id, info }: { id: number; info: ICourseUpdate }) =>
       toQuery(courseAPI.updateCourse(id, info)),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: COURSE_KEYS.all });
-      queryClient.invalidateQueries({ queryKey: COURSE_KEYS.detail(id) });
+    onSuccess: async (_, { id }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: COURSE_KEYS.all, refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: COURSE_KEYS.detail(id), refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["curriculums"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };
 
 export const useDeleteCourse = () => {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: (id: number) => toQuery(courseAPI.deleteCourse(id)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: COURSE_KEYS.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: COURSE_KEYS.all, refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["curriculums"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };
 
 export const useRestoreCourse = () => {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: (id: number) => toQuery(courseAPI.restoreCourse(id)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: COURSE_KEYS.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: COURSE_KEYS.all, refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["curriculums"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };

@@ -18,7 +18,7 @@ export const useUsers = (query?: unknown, enabled = true) => {
     queryKey: USER_KEYS.list(query),
     queryFn: () => toQuery(userApi.getUsers(query)),
     placeholderData: keepPreviousData,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     enabled,
   });
 };
@@ -28,7 +28,7 @@ export const useUser = (id: number, enabled = true) => {
     queryKey: USER_KEYS.detail(id),
     queryFn: () => toQuery(userApi.getUser(id)),
     enabled: Boolean(id) && enabled,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 };
 
@@ -36,8 +36,16 @@ export const useCreateUser = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (newUser: CreateUser) => toQuery(userApi.createUser(newUser)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: USER_KEYS.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: USER_KEYS.all, refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["faculties"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["colleges"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["programs"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["class-students"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["student-classes"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };
@@ -47,9 +55,15 @@ export const useUpdateUser = () => {
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: UpdateUser }) =>
       toQuery(userApi.updateUser(id, data)),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: USER_KEYS.all });
-      queryClient.invalidateQueries({ queryKey: USER_KEYS.detail(id) });
+    onSuccess: async (_, { id }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: USER_KEYS.all, refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: USER_KEYS.detail(id), refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["faculties"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["colleges"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["programs"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };
@@ -58,8 +72,14 @@ export const useDeleteUser = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => toQuery(userApi.deleteUser(id)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: USER_KEYS.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: USER_KEYS.all, refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["faculties"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["colleges"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["programs"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };
@@ -68,8 +88,12 @@ export const useRestoreUser = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => toQuery(userApi.restoreUser(id)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: USER_KEYS.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: USER_KEYS.all, refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["faculties"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };
@@ -79,9 +103,13 @@ export const useManageRoles = () => {
   return useMutation({
     mutationFn: ({ id, roles }: { id: number; roles: SystemRole[] }) =>
       toQuery(userApi.manageRoles(id, roles)),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: USER_KEYS.all });
-      queryClient.invalidateQueries({ queryKey: USER_KEYS.detail(id) });
+    onSuccess: async (_, { id }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: USER_KEYS.all, refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: USER_KEYS.detail(id), refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["faculties"], refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };
@@ -90,8 +118,11 @@ export const useResetPassword = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => toQuery(userApi.resetPassword(id)),
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: USER_KEYS.detail(id) });
+    onSuccess: async (_, id) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: USER_KEYS.detail(id), refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"], refetchType: "all" }),
+      ]);
     },
   });
 };
