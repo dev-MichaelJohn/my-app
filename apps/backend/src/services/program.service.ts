@@ -43,6 +43,7 @@ import {
 import { ValidateSchema } from "@/libs/result.lib.js";
 import { createPaginatedData } from "@/libs/response.lib.js";
 import { logAuditEvent } from "@/libs/audit.lib.js";
+import type { Request } from "express";
 
 export interface IProgramService {
   getProgramById(
@@ -59,18 +60,26 @@ export interface IProgramService {
     programInfo: CreateProgram,
     client?: DbClient,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetProgram, AppError>;
   updateProgram(
     id: number,
     programInfo: UpdateProgram,
     client?: DbClient,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetProgram, AppError>;
-  deleteProgram(id: number, client?: DbClient, actorUser?: GetUser): ResultAsync<void, AppError>;
+  deleteProgram(
+    id: number,
+    client?: DbClient,
+    actorUser?: GetUser,
+    req?: Request,
+  ): ResultAsync<void, AppError>;
   restoreProgram(
     id: number,
     client?: DbClient,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetProgram, AppError>;
 }
 
@@ -169,11 +178,9 @@ export class ProgramService implements IProgramService {
         const chairships = actorUser.offices?.chairships || [];
 
         if (chairships.length > 0) {
-          // Chair: Lock strictly to their program(s)
           const chairProgramIds = chairships.map((c) => c.id);
           filters.push(inArray(Programs.id, chairProgramIds));
         } else if (deanships.length > 0) {
-          // Dean: Lock strictly to programs in their college(s)
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Programs.college_id, deanCollegeIds));
         }
@@ -302,6 +309,7 @@ export class ProgramService implements IProgramService {
     programInfo: CreateProgram,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetProgram, AppError> {
     return ValidateSchema(CreateProgramSchema, programInfo).asyncAndThen(({ program, chair }) => {
       return WithTransaction(client, async (tx) => {
@@ -311,11 +319,23 @@ export class ProgramService implements IProgramService {
         const [programRecord] = await tx.insert(Programs).values(program).returning();
         if (!programRecord) throw new AppError(500, "Failed to create program record.");
 
-        if (!chair)
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "CREATE",
+          entity: "programs",
+          entityId: programRecord.id,
+          entityName: `${programRecord.initialism} - ${programRecord.name}`,
+          newRecord: programRecord,
+          tx,
+        });
+
+        if (!chair) {
           return {
             program: programRecord,
             chair: null,
           };
+        }
 
         let chairUser: GetUser | null = null;
         let account_id: number;
@@ -330,7 +350,7 @@ export class ProgramService implements IProgramService {
         } else {
           const { info } = chair;
           const newChairInfo: CreateUser = { ...info, role: "FACULTY" };
-          const userRecord = await this.userService.createUser(newChairInfo, tx);
+          const userRecord = await this.userService.createUser(newChairInfo, tx, actorUser, req);
           if (userRecord.isErr()) throw userRecord.error;
 
           chairUser = userRecord.value;
@@ -346,16 +366,18 @@ export class ProgramService implements IProgramService {
             chair_id: account_id,
           })
           .returning();
-        if (!chairAssignment)
+        if (!chairAssignment) {
           throw new AppError(500, "Failed to assign program chair to the program.");
+        }
 
         await logAuditEvent({
           actor: actorUser,
+          req,
           action: "CREATE",
-          entity: "programs",
-          entityId: programRecord.id,
-          entityName: `${programRecord.initialism} - ${programRecord.name}`,
-          newRecord: programRecord,
+          entity: "program_chairs",
+          entityId: chairAssignment.id,
+          entityName: `Chair of ${programRecord.initialism}`,
+          newRecord: chairAssignment,
           tx,
         });
 
@@ -372,6 +394,7 @@ export class ProgramService implements IProgramService {
     programInfo: UpdateProgram,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetProgram, AppError> {
     return ValidateSchema(UpdateProgramSchema, programInfo).asyncAndThen(({ program, chair }) => {
       const hasProgramInfo = Boolean(program && Object.keys(program).length > 0);
@@ -403,6 +426,7 @@ export class ProgramService implements IProgramService {
 
           await logAuditEvent({
             actor: actorUser,
+            req,
             action: "UPDATE",
             entity: "programs",
             entityId: updated.id,
@@ -417,11 +441,10 @@ export class ProgramService implements IProgramService {
 
         if (hasChairInfo) {
           if (chair === null) {
-            // 1. Vacate active chair assignment in DB first
             if (existingProgram.chair) {
               const oldChairId = existingProgram.chair.account.id;
 
-              await tx
+              const [vacated] = await tx
                 .update(ProgramChairs)
                 .set({ deleted_at: new Date() })
                 .where(
@@ -430,9 +453,22 @@ export class ProgramService implements IProgramService {
                     eq(ProgramChairs.program_id, existingProgram.program.id),
                     isNull(ProgramChairs.deleted_at),
                   ),
-                );
+                )
+                .returning();
 
-              // 2. Only revoke SUPERVISOR if they have no other offices
+              if (vacated) {
+                await logAuditEvent({
+                  actor: actorUser,
+                  req,
+                  action: "DELETE",
+                  entity: "program_chairs",
+                  entityId: vacated.id,
+                  entityName: `Vacated Chair of ${existingProgram.program.initialism}`,
+                  oldRecord: vacated,
+                  tx,
+                });
+              }
+
               const hasOtherChairs = await this.collegeService.hasProgramChairRecords(
                 oldChairId,
                 tx,
@@ -461,18 +497,22 @@ export class ProgramService implements IProgramService {
                 finalChairUser = userRecord.value;
               } else {
                 const newChairInfo: CreateUser = { ...chair.info, role: "FACULTY" };
-                const userRecord = await this.userService.createUser(newChairInfo, tx);
+                const userRecord = await this.userService.createUser(
+                  newChairInfo,
+                  tx,
+                  actorUser,
+                  req,
+                );
                 if (userRecord.isErr()) throw userRecord.error;
 
                 finalChairUser = userRecord.value;
                 account_id = finalChairUser.account.id;
               }
 
-              // Vacate old chair
               if (existingProgram.chair) {
                 const oldChairId = existingProgram.chair.account.id;
 
-                await tx
+                const [vacated] = await tx
                   .update(ProgramChairs)
                   .set({ deleted_at: new Date() })
                   .where(
@@ -481,7 +521,21 @@ export class ProgramService implements IProgramService {
                       eq(ProgramChairs.program_id, existingProgram.program.id),
                       isNull(ProgramChairs.deleted_at),
                     ),
-                  );
+                  )
+                  .returning();
+
+                if (vacated) {
+                  await logAuditEvent({
+                    actor: actorUser,
+                    req,
+                    action: "DELETE",
+                    entity: "program_chairs",
+                    entityId: vacated.id,
+                    entityName: `Replaced Chair of ${existingProgram.program.initialism}`,
+                    oldRecord: vacated,
+                    tx,
+                  });
+                }
 
                 const hasOtherChairs = await this.collegeService.hasProgramChairRecords(
                   oldChairId,
@@ -495,7 +549,6 @@ export class ProgramService implements IProgramService {
                 }
               }
 
-              // Assign new chair
               const grantRes = await this.userService.grantRole(account_id, "SUPERVISOR", tx);
               if (grantRes.isErr()) throw grantRes.error;
 
@@ -510,6 +563,17 @@ export class ProgramService implements IProgramService {
               if (!newChairRecord) {
                 throw new AppError(500, "Failed to assign new chair to program.");
               }
+
+              await logAuditEvent({
+                actor: actorUser,
+                req,
+                action: "CREATE",
+                entity: "program_chairs",
+                entityId: newChairRecord.id,
+                entityName: `New Chair of ${existingProgram.program.initialism}`,
+                newRecord: newChairRecord,
+                tx,
+              });
             }
           }
         }
@@ -526,6 +590,7 @@ export class ProgramService implements IProgramService {
     id: number,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
       const getProgram = await this.getProgramById(id, tx);
@@ -537,7 +602,7 @@ export class ProgramService implements IProgramService {
       if (existingProgram.chair) {
         const chairId = existingProgram.chair.account.id;
 
-        await tx
+        const [vacated] = await tx
           .update(ProgramChairs)
           .set({ deleted_at: new Date() })
           .where(
@@ -546,7 +611,21 @@ export class ProgramService implements IProgramService {
               eq(ProgramChairs.chair_id, chairId),
               isNull(ProgramChairs.deleted_at),
             ),
-          );
+          )
+          .returning();
+
+        if (vacated) {
+          await logAuditEvent({
+            actor: actorUser,
+            req,
+            action: "DELETE",
+            entity: "program_chairs",
+            entityId: vacated.id,
+            entityName: `Chair of ${existingProgram.program.initialism}`,
+            oldRecord: vacated,
+            tx,
+          });
+        }
 
         const hasOtherChairs = await this.collegeService.hasProgramChairRecords(chairId, tx);
         const hasDeanships = await this.collegeService.hasDeanships(chairId, tx);
@@ -568,6 +647,7 @@ export class ProgramService implements IProgramService {
 
       await logAuditEvent({
         actor: actorUser,
+        req,
         action: "DELETE",
         entity: "programs",
         entityId: existingProgram.program.id,
@@ -582,6 +662,7 @@ export class ProgramService implements IProgramService {
     id: number,
     client: DbClient = db,
     actorUser?: GetUser,
+    req?: Request,
   ): ResultAsync<GetProgram, AppError> {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getProgramById(id, tx, true);
@@ -633,6 +714,7 @@ export class ProgramService implements IProgramService {
 
       await logAuditEvent({
         actor: actorUser,
+        req,
         action: "RESTORE",
         entity: "programs",
         entityId: restored.id,
