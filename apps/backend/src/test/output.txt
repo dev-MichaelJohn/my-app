@@ -1,0 +1,64 @@
+================================================================================
+🧪 PIT-FES SENTIMENT & ASPECT ANALYSIS TEST (6 CASES)
+================================================================================
+
+[TEST #1] English: High Praise & Mastery
+Input Text   : "Sir is well prepared every meeting. He explains clearly, has full mastery of the subject, and is always open to questions."
+Polarity     : POSITIVE (Score: +0.97 | Raw: 12)
+N-Grams      : ["well prepared","explains clearly","open to questions"]
+Words Matched: +["well prepared","explains clearly","open to questions","mastery"] | -[]
+Aspects      :
+  • PEDAGOGY    : POSITIVE (+0.30)
+  • PUNCTUALITY : POSITIVE (+0.30)
+Summary      : Overall positive sentiment (+0.97). Highlights: [pedagogy: positive, punctuality: positive].
+--------------------------------------------------------------------------------
+
+[TEST #2] English: Severe Negative Pedagogy & Punctuality
+Input Text   : "Total waste of time. He is a slide reader who is always late and gives zero consideration to students."
+Polarity     : NEGATIVE (Score: -0.97 | Raw: -13)
+N-Grams      : ["waste of time","slide reader","always late","zero consideration"]
+Words Matched: +[] | -["waste of time","slide reader","always late","zero consideration"]
+Summary      : Overall negative sentiment (-0.97).
+--------------------------------------------------------------------------------
+
+[TEST #3] Bisaya: Positive Pedagogy & Demeanor
+Input Text   : "Maayo kaayo mutudlo si sir! Dali ra sabton ang mga lisod nga concepts ug buotan gyud kaayo."
+Polarity     : POSITIVE (Score: +0.95 | Raw: 9.5)
+N-Grams      : ["dali ra sabton"]
+Words Matched: +["dali ra sabton","maayo","buotan"] | -["lisod"]
+Summary      : Overall positive sentiment (+0.95).
+--------------------------------------------------------------------------------
+
+[TEST #4] Bisaya: Negative Delivery & Grading
+Input Text   : "Walay klaro mutudlo, dugay pa gyud mag-start. Dili masabtan ang exam tapos hasol kaayo manghatag ug requirements."
+Polarity     : NEGATIVE (Score: -0.97 | Raw: -12)
+N-Grams      : ["walay klaro","dili masabtan"]
+Words Matched: +[] | -["walay klaro","dili masabtan","dugay","hasol"]
+Aspects      :
+  • PUNCTUALITY : NEGATIVE (-0.40)
+  • GRADING     : NEGATIVE (-0.40)
+  • WORKLOAD    : NEGATIVE (-0.40)
+Summary      : Overall negative sentiment (-0.97). Highlights: [punctuality: negative, grading: negative, workload: negative].
+--------------------------------------------------------------------------------
+
+[TEST #5] Contrastive Shift: Hard exam shifted by positive delivery ('pero')
+Input Text   : "Lisod kaayo iyang exam ug medyo strikto, pero maayo kaayo mutudlo ug dako ug natabang sa among project."
+Polarity     : MIXED (Score: +0.92 | Raw: 7.2)
+N-Grams      : ["dako ug natabang"]
+Words Matched: +["dako ug natabang","maayo"] | -["lisod"]
+Aspects      :
+  • GRADING     : NEGATIVE (-0.60)
+  • WORKLOAD    : POSITIVE (+1.00)
+Summary      : Overall mixed sentiment (+0.92). Highlights: [grading: negative, workload: positive].
+--------------------------------------------------------------------------------
+
+[TEST #6] Mixed Polarity: Great teacher, but terror personality
+Input Text   : "Magaling mag-explain ng topics at dedicated teacher, kaso terror at suplado pag nagtanong ka sa consultation."
+Polarity     : MIXED (Score: 0.00 | Raw: 0)
+N-Grams      : ["magaling mag-explain","dedicated teacher"]
+Words Matched: +["magaling mag-explain","dedicated teacher"] | -["terror","suplado"]
+Aspects      :
+  • ATTITUDE    : NEGATIVE (-1.00)
+Summary      : Overall mixed sentiment (0.00). Highlights: [attitude: negative].
+--------------------------------------------------------------------------------
+
