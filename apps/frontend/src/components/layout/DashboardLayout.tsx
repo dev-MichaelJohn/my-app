@@ -4,12 +4,15 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { PageLoader } from "@/components/ui/spinner";
 import { X } from "lucide-react";
+import { ForcePasswordChangeDialog } from "./ForcePasswordChangeDialog";
 
 export default function DashboardLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen w-full flex bg-background text-foreground">
+      <ForcePasswordChangeDialog />
+
       <div className="hidden md:block sticky top-0 h-screen shrink-0">
         <AppSidebar />
       </div>
