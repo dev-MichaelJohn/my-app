@@ -8,6 +8,7 @@ import {
   CourseCurriculums,
   Courses,
   CreateProgramSchema,
+  Faculties,
   PersonalDetails,
   ProgramChairs,
   ProgramQuerySchema,
@@ -759,7 +760,7 @@ export class ProgramService implements IProgramService {
   }
 
   private async checkProgramDependencies(programId: number, tx: PgTransaction): Promise<void> {
-    const [activeClasses, activeCourses, activeCurriculums] = await Promise.all([
+    const [activeClasses, activeCourses, activeCurriculums, activeFaculties] = await Promise.all([
       tx
         .select({ total: count(Classes.id) })
         .from(Classes)
@@ -774,25 +775,32 @@ export class ProgramService implements IProgramService {
         .where(
           and(eq(CourseCurriculums.program_id, programId), isNull(CourseCurriculums.deleted_at)),
         ),
+      // 🛡️ Check for active faculty appointments
+      tx
+        .select({ total: count(Faculties.id) })
+        .from(Faculties)
+        .where(and(eq(Faculties.program_id, programId), isNull(Faculties.deleted_at))),
     ]);
 
     const classCount = activeClasses[0]?.total ?? 0;
     const courseCount = activeCourses[0]?.total ?? 0;
     const curriculumCount = activeCurriculums[0]?.total ?? 0;
+    const facultyCount = activeFaculties[0]?.total ?? 0;
 
-    if (classCount > 0 || courseCount > 0 || curriculumCount > 0) {
+    if (classCount > 0 || courseCount > 0 || curriculumCount > 0 || facultyCount > 0) {
       const activeDependencies: string[] = [];
 
       if (classCount > 0) activeDependencies.push(`${classCount} active class(es)`);
       if (courseCount > 0) activeDependencies.push(`${courseCount} active course(s)`);
       if (curriculumCount > 0)
         activeDependencies.push(`${curriculumCount} curriculum entry/entries`);
+      if (facultyCount > 0) activeDependencies.push(`${facultyCount} appointed faculty member(s)`);
 
       throw new AppError(
         409,
         `Cannot archive program because it still has active dependencies: ${activeDependencies.join(
           ", ",
-        )}. Please archive or reassign them first.`,
+        )}. Please transfer or archive them first.`,
       );
     }
   }
