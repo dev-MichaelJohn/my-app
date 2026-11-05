@@ -1,8 +1,20 @@
 import type { AnnexCFacultyReport } from "@my-app/shared";
 
 /**
+ * Encodes special HTML characters to prevent XSS injection.
+ */
+function escapeHtml(str: unknown): string {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
  * Dispatches an HTML document to the browser's native print engine using a sandboxed iframe.
- * Completely replaces deprecated document.write and avoids browser popup blockers.
  */
 function printViaIframe(htmlContent: string) {
   const iframe = document.createElement("iframe");
@@ -28,18 +40,17 @@ function printViaIframe(htmlContent: string) {
 }
 
 /**
- * Downloads / Prints official Annex C (IFER) matching CHED CMO 19 s. 2025 page 17-18.
- * Notice: Course Code and Section are masked as Subject # and Class # for all roles.
+ * Downloads / Prints official Annex C (IFER) matching CHED CMO 19 s. 2025.
  */
 export function downloadAnnexCPdf(report: AnnexCFacultyReport) {
   const classRows = report.class_breakdown
     .map(
       (r) => `
       <tr>
-        <td style="text-align: center;">${r.seq}</td>
-        <td>${r.courseCode}</td>
-        <td>${r.yearSection}</td>
-        <td style="text-align: center;">${r.noOfStudents}</td>
+        <td style="text-align: center;">${escapeHtml(r.seq)}</td>
+        <td>${escapeHtml(r.courseCode)}</td>
+        <td>${escapeHtml(r.yearSection)}</td>
+        <td style="text-align: center;">${escapeHtml(r.noOfStudents ?? "-")}</td>
         <td style="text-align: right;">${r.averageSetRating.toFixed(2)}</td>
         <td style="text-align: right;">${r.weightedScore.toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
       </tr>`,
@@ -49,14 +60,20 @@ export function downloadAnnexCPdf(report: AnnexCFacultyReport) {
   const studentComments = report.student_comments
     .map(
       (c, i) =>
-        `<tr><td style="width: 40px; text-align: center;">${i + 1}</td><td>"${c.comment}" <em>(${c.sentiment})</em></td></tr>`,
+        `<tr>
+          <td style="width: 40px; text-align: center;">${i + 1}</td>
+          <td>"${escapeHtml(c.comment)}" <em>(${escapeHtml(c.sentiment)})</em></td>
+        </tr>`,
     )
     .join("");
 
   const supervisorComments = report.supervisor_comments
     .map(
       (s, i) =>
-        `<tr><td style="width: 40px; text-align: center;">${i + 1}</td><td>${s.comment} <br/><small style="color: #666;">— ${s.evaluator_name} (${s.evaluator_role})</small></td></tr>`,
+        `<tr>
+          <td style="width: 40px; text-align: center;">${i + 1}</td>
+          <td>${escapeHtml(s.comment)} <br/><small style="color: #666;">— ${escapeHtml(s.evaluator_name)} (${escapeHtml(s.evaluator_role)})</small></td>
+        </tr>`,
     )
     .join("");
 
@@ -64,7 +81,7 @@ export function downloadAnnexCPdf(report: AnnexCFacultyReport) {
     <!DOCTYPE html>
     <html>
       <head>
-        <title>Annex C - ${report.faculty_name}</title>
+        <title>Annex C - ${escapeHtml(report.faculty_name)}</title>
         <style>
           @page { size: A4; margin: 15mm; }
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11pt; color: #111; line-height: 1.4; margin: 0; padding: 10px; }
@@ -90,10 +107,10 @@ export function downloadAnnexCPdf(report: AnnexCFacultyReport) {
 
         <div class="section-title">A. Faculty Information</div>
         <div class="info-grid">
-          <div><strong>Name of Faculty Evaluated:</strong> ${report.faculty_name}</div>
-          <div><strong>Department / College:</strong> ${report.department_college}</div>
-          <div><strong>Current Faculty Rank:</strong> ${report.faculty_rank}</div>
-          <div><strong>Semester / Term & A.Y.:</strong> ${report.semester_term} / ${report.school_year}</div>
+          <div><strong>Name of Faculty Evaluated:</strong> ${escapeHtml(report.faculty_name)}</div>
+          <div><strong>Department / College:</strong> ${escapeHtml(report.department_college)}</div>
+          <div><strong>Current Faculty Rank:</strong> ${escapeHtml(report.faculty_rank)}</div>
+          <div><strong>Semester / Term & A.Y.:</strong> ${escapeHtml(report.semester_term)} / ${escapeHtml(report.school_year)}</div>
         </div>
 
         <div class="section-title">B. Summary of Average SET Rating</div>
@@ -162,7 +179,7 @@ export function downloadAnnexCPdf(report: AnnexCFacultyReport) {
 }
 
 /**
- * Downloads / Prints official Annex D (FEDAF) matching CHED CMO 19 s. 2025 page 19.
+ * Downloads / Prints official Annex D (FEDAF) matching CHED CMO 19 s. 2025.
  */
 export function downloadAnnexDPdf(report: AnnexCFacultyReport) {
   const plan = report.fedaf_plan || {
@@ -178,7 +195,7 @@ export function downloadAnnexDPdf(report: AnnexCFacultyReport) {
     <!DOCTYPE html>
     <html>
       <head>
-        <title>Annex D - ${report.faculty_name}</title>
+        <title>Annex D - ${escapeHtml(report.faculty_name)}</title>
         <style>
           @page { size: A4; margin: 15mm; }
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11pt; color: #111; line-height: 1.4; margin: 0; padding: 10px; }
@@ -206,10 +223,10 @@ export function downloadAnnexDPdf(report: AnnexCFacultyReport) {
 
         <div class="section-title">A. Faculty Member Information</div>
         <div class="info-grid">
-          <div><strong>Name of Faculty:</strong> ${report.faculty_name}</div>
-          <div><strong>Department / College:</strong> ${report.department_college}</div>
-          <div><strong>Current Faculty Rank:</strong> ${report.faculty_rank}</div>
-          <div><strong>Semester / Term & Year:</strong> ${report.semester_term} / ${report.school_year}</div>
+          <div><strong>Name of Faculty:</strong> ${escapeHtml(report.faculty_name)}</div>
+          <div><strong>Department / College:</strong> ${escapeHtml(report.department_college)}</div>
+          <div><strong>Current Faculty Rank:</strong> ${escapeHtml(report.faculty_rank)}</div>
+          <div><strong>Semester / Term & Year:</strong> ${escapeHtml(report.semester_term)} / ${escapeHtml(report.school_year)}</div>
         </div>
 
         <div class="section-title">B. Faculty Evaluation Summary</div>
@@ -231,15 +248,15 @@ export function downloadAnnexDPdf(report: AnnexCFacultyReport) {
         <div class="section-title">C. Development Plan (Jointly Accomplished by Supervisor and Faculty)</div>
         <div class="plan-box">
           <div class="plan-label">1. Areas for Improvement:</div>
-          <div>${plan.areas_for_improvement || "None identified."}</div>
+          <div>${escapeHtml(plan.areas_for_improvement) || "None identified."}</div>
         </div>
         <div class="plan-box">
           <div class="plan-label">2. Proposed Learning and Development Activities:</div>
-          <div>${plan.proposed_activities || "None proposed."}</div>
+          <div>${escapeHtml(plan.proposed_activities) || "None proposed."}</div>
         </div>
         <div class="plan-box">
           <div class="plan-label">3. Action Plan & Timelines:</div>
-          <div>${plan.action_plan || "None outlined."}</div>
+          <div>${escapeHtml(plan.action_plan) || "None outlined."}</div>
         </div>
 
         <p style="font-size: 8.5pt; color: #444; font-style: italic; margin-top: 14px;">
@@ -253,7 +270,7 @@ export function downloadAnnexDPdf(report: AnnexCFacultyReport) {
             Prepared by (Designated Staff)
           </div>
           <div>
-            <div style="font-weight: 600; padding-bottom: 4px;">${report.department_college || "College Dean's Office"}</div>
+            <div style="font-weight: 600; padding-bottom: 4px;">${escapeHtml(report.department_college) || "College Dean's Office"}</div>
             <div class="sign-line"></div>
             Reviewed by (Authorized Official / College Dean)
           </div>
