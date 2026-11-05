@@ -788,28 +788,34 @@ export class OfferingService implements IOfferingService {
     tx: PgTransaction,
     fallbackProgramId?: number,
   ): Promise<number> {
-    // 1. Check if ID matches an existing Faculties appointment
-    let [faculty] = await tx
+    // 1. First, search strictly by appointment primary key (Faculties.id)
+    const [facultyById] = await tx
       .select({ id: Faculties.id, accountId: Faculties.account_id })
       .from(Faculties)
       .where(and(eq(Faculties.id, facultyId), isNull(Faculties.deleted_at)));
 
-    // 2. If not found, check if it matches an Accounts.id
-    if (!faculty) {
-      [faculty] = await tx
+    let targetAppointment = facultyById;
+
+    // 2. If no appointment with this primary key exists, verify if an account matches
+    if (!targetAppointment) {
+      const [facultyByAccount] = await tx
         .select({ id: Faculties.id, accountId: Faculties.account_id })
         .from(Faculties)
         .where(and(eq(Faculties.account_id, facultyId), isNull(Faculties.deleted_at)));
+
+      if (facultyByAccount) {
+        targetAppointment = facultyByAccount;
+      }
     }
 
-    // 3. Fallback: If still not appointed, auto-appoint to fallbackProgramId if account has FACULTY/SUPERVISOR role
-    if (!faculty) {
+    // 3. Fallback: Auto-appoint if user is registered with FACULTY/SUPERVISOR role
+    if (!targetAppointment && fallbackProgramId) {
       const [account] = await tx
         .select({ id: Accounts.id })
         .from(Accounts)
         .where(and(eq(Accounts.id, facultyId), isNull(Accounts.deleted_at)));
 
-      if (account && fallbackProgramId) {
+      if (account) {
         const isFaculty = await this.userService.hasRole(account.id, "FACULTY", tx);
         const isSupervisor = await this.userService.hasRole(account.id, "SUPERVISOR", tx);
 
@@ -823,25 +829,29 @@ export class OfferingService implements IOfferingService {
             .returning();
 
           if (autoAppointed) {
-            faculty = { id: autoAppointed.id, accountId: autoAppointed.account_id };
+            targetAppointment = { id: autoAppointed.id, accountId: autoAppointed.account_id };
           }
         }
       }
     }
 
-    if (!faculty) {
+    if (!targetAppointment) {
       throw new AppError(
         400,
         "The selected faculty member does not have an active departmental appointment in Faculties.",
       );
     }
 
-    // 4. Verify roles using the true account_id
-    const isFaculty = await this.userService.hasRole(faculty.accountId, "FACULTY", tx);
-    const isSupervisor = await this.userService.hasRole(faculty.accountId, "SUPERVISOR", tx);
+    // 4. Verify that the associated account possesses teaching roles
+    const isFaculty = await this.userService.hasRole(targetAppointment.accountId, "FACULTY", tx);
+    const isSupervisor = await this.userService.hasRole(
+      targetAppointment.accountId,
+      "SUPERVISOR",
+      tx,
+    );
 
     if ((isFaculty.isOk() && isFaculty.value) || (isSupervisor.isOk() && isSupervisor.value)) {
-      return faculty.id; // Returns canonical Faculties.id
+      return targetAppointment.id; // Returns canonical Faculties.id
     }
 
     throw new AppError(400, "The assigned user must have a FACULTY or SUPERVISOR role.");
