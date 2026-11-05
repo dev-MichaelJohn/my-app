@@ -110,6 +110,7 @@ export interface SupervisorEvaluationFormView {
 }
 
 export interface TeachingStudentItem {
+  student_class_id: number;
   student_account_id: number;
   institutional_id: string;
   first_name: string;
