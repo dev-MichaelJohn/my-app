@@ -64,24 +64,33 @@ export function useLiveEvaluationPulse(initialPulses: LiveEvaluationPulseEvent[]
 
     const socket: Socket = io(socketBaseUrl, {
       path: "/socket.io",
-      auth: { token },
+      // 🛡️ FIX 3: Dynamic auth callback — automatically fetches refreshed token on reconnect
+      auth: (cb) => {
+        cb({ token: localStorage.getItem("access_token") });
+      },
       transports: ["websocket", "polling"],
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
       reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
     });
 
     socketRef.current = socket;
 
-    socket.on("evaluation:pulse", (event: LiveEvaluationPulseEvent) => {
+    const handlePulse = (event: LiveEvaluationPulseEvent) => {
       setLivePulses((prev) => {
         const existingIds = new Set([...initialPulsesRef.current, ...prev].map((p) => p.id));
         if (existingIds.has(event.id)) return prev;
         return [event, ...prev].slice(0, 25);
       });
-    });
+    };
+
+    socket.on("evaluation:pulse", handlePulse);
 
     return () => {
+      // Clean up listeners and disconnect cleanly on unmount
+      socket.off("evaluation:pulse", handlePulse);
       socket.disconnect();
+      socketRef.current = null;
     };
   }, []);
 
