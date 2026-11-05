@@ -468,6 +468,34 @@ export class ClassStudentService implements IClassStudentService {
           );
         }
 
+        if (parsed.class_id && parsed.class_id !== current.class.id) {
+          const oldOfferings = await tx
+            .select({ id: CourseOfferings.id })
+            .from(CourseOfferings)
+            .where(
+              and(
+                eq(CourseOfferings.class_id, current.class.id),
+                eq(CourseOfferings.semester_id, current.semester.id),
+              ),
+            );
+
+          if (oldOfferings.length > 0) {
+            const oldOfferingIds = oldOfferings.map((o) => o.id);
+
+            await tx
+              .update(StudentClasses)
+              .set({ deleted_at: new Date(), updated_at: new Date() })
+              .where(
+                and(
+                  eq(StudentClasses.student_account_id, current.student.account.id),
+                  inArray(StudentClasses.course_offering_id, oldOfferingIds),
+                  isNull(StudentClasses.deleted_at),
+                ),
+              );
+          }
+        }
+        // =========================================================================
+
         const [updated] = await tx
           .update(ClassStudents)
           .set(parsed)
