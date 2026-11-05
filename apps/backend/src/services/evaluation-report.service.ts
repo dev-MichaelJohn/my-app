@@ -66,7 +66,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { type ResultAsync } from "neverthrow";
+import { ResultAsync } from "neverthrow";
 import { logAuditEvent } from "@/libs/audit.lib.js";
 import type { Request } from "express";
 
@@ -182,6 +182,7 @@ export class EvaluationReportService implements IEvaluationReportService {
       formula: formulaId,
     }).asyncAndThen(({ semester_id, formula }) => {
       return WithTransaction(client, async (tx) => {
+        // 1. Validate semester existence
         const [semester] = await tx
           .select()
           .from(Semesters)
@@ -191,9 +192,10 @@ export class EvaluationReportService implements IEvaluationReportService {
           throw new AppError(404, "Academic semester was not found.");
         }
 
+        // 2. Validate evaluation schedules for this semester are concluded
         await this.validateEvaluationWindowsConcluded(semester_id, tx);
 
-        // 🚀 Fix: Join Faculties to extract the real Accounts.id
+        // 3. Collect unique faculty account IDs to process
         const facultyRows = await tx
           .selectDistinct({ accountId: Faculties.account_id })
           .from(CourseOfferings)
@@ -207,41 +209,73 @@ export class EvaluationReportService implements IEvaluationReportService {
             ),
           );
 
-        const accountIds = facultyRows
-          .map((r) => r.accountId)
-          .filter((id): id is number => typeof id === "number");
-
-        let reportsGenerated = 0;
-        for (const accountId of accountIds) {
-          await this.computeAndUpsertReport(semester_id, accountId, formula, tx);
-          reportsGenerated++;
-        }
-
-        await logAuditEvent({
-          actor: actorUser,
-          req,
-          action: "STATUS_CHANGE",
-          entity: "individual_faculty_reports",
-          entityId: semester_id,
-          entityName: `Batch Consolidated ${reportsGenerated} Reports for Semester #${semester_id}`,
-          newRecord: {
-            semester_id,
-            reports_generated: reportsGenerated,
-            formula,
-          },
-          tx,
-        });
-
         return {
-          semester_id,
-          semester_term: semester.semester_term,
-          school_year: `${semester.school_year_start}-${semester.school_year_end}`,
-          total_faculty_processed: accountIds.length,
-          reports_generated: reportsGenerated,
-          calculation_formula: formula,
-          processed_at: new Date().toISOString(),
-          message: `Successfully processed and consolidated ${reportsGenerated} faculty report(s) for the ${semester.semester_term} Semester (A.Y. ${semester.school_year_start}-${semester.school_year_end}).`,
+          semester,
+          accountIds: facultyRows
+            .map((r) => r.accountId)
+            .filter((id): id is number => typeof id === "number"),
         };
+      }).andThen(({ semester, accountIds }) => {
+        // 4. Process each faculty report in isolated transactions to avoid holding long-lived DB locks
+        return ResultAsync.fromPromise(
+          (async () => {
+            let reportsGenerated = 0;
+            const errors: Array<{ facultyId: number; error: string }> = [];
+
+            // Process sequentially or in small chunks
+            for (const accountId of accountIds) {
+              try {
+                // Each faculty member's report is committed in its own transaction
+                await WithTransaction(db, async (perFacultyTx) => {
+                  await this.computeAndUpsertReport(semester_id, accountId, formula, perFacultyTx);
+                });
+                reportsGenerated++;
+              } catch (err: any) {
+                errors.push({
+                  facultyId: accountId,
+                  error: err.message || "Unknown consolidation failure",
+                });
+              }
+            }
+
+            // 5. Document completion in audit log
+            await WithTransaction(db, async (auditTx) => {
+              await logAuditEvent({
+                actor: actorUser,
+                req,
+                action: "STATUS_CHANGE",
+                entity: "individual_faculty_reports",
+                entityId: semester_id,
+                entityName: `Batch Consolidated ${reportsGenerated} Reports for Semester #${semester_id}`,
+                newRecord: {
+                  semester_id,
+                  reports_generated: reportsGenerated,
+                  failed_count: errors.length,
+                  formula,
+                },
+                tx: auditTx,
+              });
+            });
+
+            return {
+              semester_id,
+              semester_term: semester.semester_term,
+              school_year: `${semester.school_year_start}-${semester.school_year_end}`,
+              total_faculty_processed: accountIds.length,
+              reports_generated: reportsGenerated,
+              calculation_formula: formula,
+              processed_at: new Date().toISOString(),
+              message:
+                errors.length === 0
+                  ? `Successfully processed and consolidated ${reportsGenerated} faculty report(s) for the ${semester.semester_term} Semester (A.Y. ${semester.school_year_start}-${semester.school_year_end}).`
+                  : `Consolidated ${reportsGenerated} report(s) with ${errors.length} skipped or failed.`,
+            };
+          })(),
+          (err: any) =>
+            err instanceof AppError
+              ? err
+              : new AppError(500, "Failed during batch consolidation processing."),
+        );
       });
     });
   }
