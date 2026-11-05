@@ -549,18 +549,40 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         }
 
         const [studentClass] = await tx
-          .select()
+          .select({
+            id: StudentClasses.id,
+            student_account_id: StudentClasses.student_account_id,
+            course_offering_id: StudentClasses.course_offering_id,
+            semester_id: CourseOfferings.semester_id,
+            faculty_id: CourseOfferings.faculty_id,
+          })
           .from(StudentClasses)
+          .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
           .where(
             and(
               eq(StudentClasses.id, data.student_class_id),
               eq(StudentClasses.student_account_id, studentAccountId),
               isNull(StudentClasses.deleted_at),
+              isNull(CourseOfferings.deleted_at),
             ),
           );
 
         if (!studentClass) {
-          throw new AppError(403, "You are not enrolled in this course offering.");
+          throw new AppError(403, "You are not actively enrolled in this course offering.");
+        }
+
+        if (!studentClass.faculty_id) {
+          throw new AppError(
+            400,
+            "Cannot evaluate: No faculty instructor is assigned to this course offering.",
+          );
+        }
+
+        if (studentClass.semester_id !== schedule.semester_id) {
+          throw new AppError(
+            400,
+            "This enrolled subject belongs to a different academic semester than the active evaluation schedule.",
+          );
         }
 
         const [existing] = await tx
