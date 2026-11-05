@@ -566,10 +566,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       const chairProgramIds = chairships.map((c) => c.id);
 
       return WithTransaction(client, async (tx) => {
-        await tx
-          .delete(IndividualFacultyReports)
-          .where(eq(IndividualFacultyReports.total_classes, 0));
-
         const filters: SQL[] = [sql`${IndividualFacultyReports.total_classes} > 0`];
 
         if (isSysAdmin || isAdmin) {
@@ -608,7 +604,6 @@ export class EvaluationReportService implements IEvaluationReportService {
               .where(isNull(ProgramChairs.deleted_at));
             const allChairIds = allChairs.map((c) => c.chairId);
 
-            // 🚀 Fixed Join: Route through Faculties -> CourseOfferings
             supervisorScopeFilters.push(
               and(
                 sql`EXISTS (
@@ -665,7 +660,6 @@ export class EvaluationReportService implements IEvaluationReportService {
           );
         }
 
-        // 🚀 Fixed Join: Program filter routes through Faculties
         if (program_id) {
           filters.push(
             sql`EXISTS (
