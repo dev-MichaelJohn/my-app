@@ -1293,6 +1293,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         const students: TeachingStudentItem[] = enrollments.map((s) => {
           const submittedAt = submissionMap.get(s.studentClassId);
           return {
+            student_class_id: s.studentClassId,
             student_account_id: s.accountId,
             institutional_id: s.institutionalId,
             first_name: s.firstName,
