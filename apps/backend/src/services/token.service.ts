@@ -16,6 +16,7 @@ import { Result, ResultAsync, errAsync, okAsync } from "neverthrow";
 import jwt from "jsonwebtoken";
 import env from "@/configs/env.config.js";
 import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
 import db from "@/configs/db.config.js";
 import { and, eq, gt } from "drizzle-orm";
 
@@ -37,6 +38,10 @@ export interface ITokenService {
 }
 
 export class TokenService implements ITokenService {
+  private hashToken(token: string): string {
+    return crypto.createHash("sha256").update(token).digest("hex");
+  }
+
   generateAccessToken(user: GetUser): ResultAsync<string, AppError> {
     return ValidateSchema(GetUserSchema, user).asyncAndThen((parsedUser) => {
       return okAsync(
@@ -79,7 +84,7 @@ export class TokenService implements ITokenService {
     return ValidateSchema(AccountSelect.pick({ id: true, email: true }), user).asyncAndThen(
       (parsedUser) => {
         const expires_at = new Date(Date.now() + REFRESH_COOKIE_LIFETIME);
-        const token_hash = bcrypt.hashSync(token, 10);
+        const token_hash = this.hashToken(token);
 
         return FromDbPromise(
           db.transaction(async (tx) => {
@@ -113,37 +118,52 @@ export class TokenService implements ITokenService {
       (parsedUser) => {
         return FromDbPromise(
           db.transaction(async (tx) => {
-            const tokens = await tx
+            const oldHash = this.hashToken(oldRefreshToken);
+
+            // Fast O(1) indexed lookup by SHA-256 hash
+            let [matchedToken] = await tx
               .select()
               .from(RefreshToken)
               .where(
                 and(
                   eq(RefreshToken.account_id, parsedUser.id),
-                  eq(RefreshToken.email, parsedUser.email),
+                  eq(RefreshToken.token_hash, oldHash),
                   eq(RefreshToken.is_revoked, false),
                   gt(RefreshToken.expires_at, new Date()),
                 ),
               );
 
-            const matchedToken = tokens.find((t) =>
-              bcrypt.compareSync(oldRefreshToken, t.token_hash),
-            );
+            // Backwards-compatibility for existing bcrypt hashes
+            if (!matchedToken) {
+              const legacyTokens = await tx
+                .select()
+                .from(RefreshToken)
+                .where(
+                  and(
+                    eq(RefreshToken.account_id, parsedUser.id),
+                    eq(RefreshToken.is_revoked, false),
+                    gt(RefreshToken.expires_at, new Date()),
+                  ),
+                );
+
+              matchedToken = legacyTokens.find((t) => {
+                if (t.token_hash.startsWith("$2")) {
+                  return bcrypt.compareSync(oldRefreshToken, t.token_hash);
+                }
+                return false;
+              });
+            }
 
             if (!matchedToken) {
               throw new AppError(401, "Refresh token is invalid, expired, or already revoked.");
             }
 
-            const [deletedToken] = await tx
-              .delete(RefreshToken)
-              .where(eq(RefreshToken.id, matchedToken.id))
-              .returning({ id: RefreshToken.id });
+            // Revoke old token
+            await tx.delete(RefreshToken).where(eq(RefreshToken.id, matchedToken.id));
 
-            if (!deletedToken) {
-              throw new AppError(500, "Failed to revoke old token.");
-            }
-
+            // Store new token using SHA-256
             const expires_at = new Date(Date.now() + REFRESH_COOKIE_LIFETIME);
-            const token_hash = await bcrypt.hash(newRefreshToken, 10);
+            const token_hash = this.hashToken(newRefreshToken);
 
             const [insertedToken] = await tx
               .insert(RefreshToken)
@@ -177,6 +197,8 @@ export class TokenService implements ITokenService {
     )();
 
     return verifyResult.asyncAndThen((decodedToken) => {
+      const tokenHash = this.hashToken(token);
+
       return FromDbPromise(
         db
           .select()
@@ -184,19 +206,40 @@ export class TokenService implements ITokenService {
           .where(
             and(
               eq(RefreshToken.account_id, decodedToken.id),
-              eq(RefreshToken.email, decodedToken.email),
+              eq(RefreshToken.token_hash, tokenHash),
               eq(RefreshToken.is_revoked, false),
               gt(RefreshToken.expires_at, new Date()),
             ),
-          ),
-      ).andThen((tokens) => {
-        const matchedToken = tokens.find((rt) => bcrypt.compareSync(token, rt.token_hash));
-
-        if (!matchedToken) {
-          return errAsync(new AppError(401, "Refresh token has been revoked or expired."));
+          )
+          .limit(1),
+      ).andThen(([matchedToken]) => {
+        if (matchedToken) {
+          return okAsync(matchedToken);
         }
 
-        return okAsync(matchedToken);
+        // Backwards compatibility check for bcrypt
+        return FromDbPromise(
+          db
+            .select()
+            .from(RefreshToken)
+            .where(
+              and(
+                eq(RefreshToken.account_id, decodedToken.id),
+                eq(RefreshToken.is_revoked, false),
+                gt(RefreshToken.expires_at, new Date()),
+              ),
+            ),
+        ).andThen((legacyTokens) => {
+          const legacyMatch = legacyTokens.find(
+            (rt) => rt.token_hash.startsWith("$2") && bcrypt.compareSync(token, rt.token_hash),
+          );
+
+          if (!legacyMatch) {
+            return errAsync(new AppError(401, "Refresh token has been revoked or expired."));
+          }
+
+          return okAsync(legacyMatch);
+        });
       });
     });
   }
@@ -212,29 +255,34 @@ export class TokenService implements ITokenService {
     )();
 
     return verifyResult.asyncAndThen((decodedToken) => {
+      const tokenHash = this.hashToken(token);
+
       return FromDbPromise(
         db.transaction(async (tx) => {
-          const tokens = await tx
-            .select()
-            .from(RefreshToken)
+          // Fast delete by hash
+          const [deleted] = await tx
+            .delete(RefreshToken)
             .where(
               and(
                 eq(RefreshToken.account_id, decodedToken.id),
-                eq(RefreshToken.email, decodedToken.email),
-                eq(RefreshToken.is_revoked, false),
+                eq(RefreshToken.token_hash, tokenHash),
               ),
+            )
+            .returning({ id: RefreshToken.id });
+
+          if (!deleted) {
+            // Check legacy bcrypt hashes
+            const legacyTokens = await tx
+              .select()
+              .from(RefreshToken)
+              .where(eq(RefreshToken.account_id, decodedToken.id));
+
+            const matched = legacyTokens.find(
+              (rt) => rt.token_hash.startsWith("$2") && bcrypt.compareSync(token, rt.token_hash),
             );
 
-          const matchedToken = tokens.find((rt) => bcrypt.compareSync(token, rt.token_hash));
-
-          if (matchedToken) {
-            const [deletedToken] = await tx
-              .delete(RefreshToken)
-              .where(eq(RefreshToken.id, matchedToken.id))
-              .returning({ id: RefreshToken.id });
-
-            if (!deletedToken) {
-              throw new AppError(500, "Failed to revoke token.");
+            if (matched) {
+              await tx.delete(RefreshToken).where(eq(RefreshToken.id, matched.id));
             }
           }
 
