@@ -2,6 +2,7 @@ import env from "@/configs/env.config.js";
 import { OTPEmailTemplate, OTPTextTemplate } from "@/libs/email.lib.js";
 import { AppError } from "@/libs/error.lib.js";
 import { runAsync, runMiddleware } from "@/libs/express-adapter.lib.js";
+import { logger } from "@/libs/logger.lib.js";
 import { AuthenticateLocal, AuthenticateOTP, AuthenticateJWT } from "@/libs/passport.lib.js";
 import { AuthService, type IAuthService } from "@/services/auth.service.js";
 import { EmailService, type IEmailService } from "@/services/email.service.js";
@@ -40,6 +41,10 @@ export class AuthController {
           if (!otpCode)
             return errAsync(new AppError(500, "Failed to generate OTP. Please try again."));
 
+          if (env.NODE_ENV !== "production") {
+            logger.info(`🔑 [DEV ONLY] Generated OTP for ${email}: ${otpCode.code}`);
+          }
+
           return this.emailService
             .sendEmail({
               to: email,
@@ -50,8 +55,18 @@ export class AuthController {
               },
             })
             .orElse((err) => {
-              if (env.BYPASS_OTP) return okAsync(undefined);
-              return errAsync(err);
+              return this.otpService.deleteOTP(otpCode.id, email).andThen(() => {
+                if (env.BYPASS_OTP) {
+                  return okAsync(undefined);
+                }
+                logger.error(`Login OTP delivery failed for ${email}: ${err.message}`);
+                return errAsync(
+                  new AppError(
+                    500,
+                    `Failed to deliver verification code to your email: ${err.message}`,
+                  ),
+                );
+              });
             })
             .map(() => {
               const resendAt = this.generateResendTime(otpCode.expires_at);
