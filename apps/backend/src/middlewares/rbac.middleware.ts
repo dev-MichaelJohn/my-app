@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { ResultAsync, okAsync, errAsync } from "neverthrow";
 import db from "@/configs/db.config.js";
 import { Permissions, RolePermissions, Roles } from "@my-app/shared";
@@ -9,50 +9,75 @@ import type { Permission } from "@my-app/shared";
 
 let rolePermissionsCache: Map<string, Set<string>> | null = null;
 let lastCacheTime = 0;
-const CACHE_TTL_MS = 5 * 60 * 1000;
+let lastStateSignature = "";
+
+// Shortened TTL: even without explicit invalidation, nodes stay within 15 seconds of each other
+const CACHE_TTL_MS = 15 * 1000;
 
 export const invalidateRolePermissionsCache = () => {
   rolePermissionsCache = null;
   lastCacheTime = 0;
+  lastStateSignature = "";
 };
 
 const getRolePermissionsMap = (): ResultAsync<Map<string, Set<string>>, AppError> => {
   const now = Date.now();
 
+  // Fast-path: within 15-second TTL and cache exists
   if (rolePermissionsCache && now - lastCacheTime < CACHE_TTL_MS) {
     return okAsync(rolePermissionsCache);
   }
 
+  // Cross-process validation: Check DB state signature (instant index-only scan)
   return FromDbPromise(
     db
       .select({
-        role_name: Roles.system_role,
-        key: Permissions.permission_key,
+        signature: sql<string>`CONCAT(COUNT(*)::text, ':', COALESCE(MAX(${RolePermissions.id}), 0)::text)`,
       })
       .from(RolePermissions)
-      .innerJoin(Permissions, eq(RolePermissions.permission_id, Permissions.id))
-      .innerJoin(Roles, eq(RolePermissions.role_id, Roles.id))
-      .where(
-        and(
-          isNull(RolePermissions.deleted_at),
-          isNull(Roles.deleted_at),
-          isNull(Permissions.deleted_at),
-        ),
-      ),
-  ).map((grants) => {
-    const map = new Map<string, Set<string>>();
+      .where(isNull(RolePermissions.deleted_at)),
+  ).andThen(([state]) => {
+    const currentSignature = state?.signature || "";
 
-    for (const g of grants) {
-      if (!map.has(g.role_name)) {
-        map.set(g.role_name, new Set());
-      }
-      map.get(g.role_name)!.add(g.key);
+    // If cache exists and DB signature hasn't changed, reuse cache and update TTL
+    if (rolePermissionsCache && currentSignature === lastStateSignature) {
+      lastCacheTime = now;
+      return okAsync(rolePermissionsCache);
     }
 
-    rolePermissionsCache = map;
-    lastCacheTime = now;
+    // Refresh full map from database
+    return FromDbPromise(
+      db
+        .select({
+          role_name: Roles.system_role,
+          key: Permissions.permission_key,
+        })
+        .from(RolePermissions)
+        .innerJoin(Permissions, eq(RolePermissions.permission_id, Permissions.id))
+        .innerJoin(Roles, eq(RolePermissions.role_id, Roles.id))
+        .where(
+          and(
+            isNull(RolePermissions.deleted_at),
+            isNull(Roles.deleted_at),
+            isNull(Permissions.deleted_at),
+          ),
+        ),
+    ).map((grants) => {
+      const map = new Map<string, Set<string>>();
 
-    return map;
+      for (const g of grants) {
+        if (!map.has(g.role_name)) {
+          map.set(g.role_name, new Set());
+        }
+        map.get(g.role_name)!.add(g.key);
+      }
+
+      rolePermissionsCache = map;
+      lastCacheTime = now;
+      lastStateSignature = currentSignature;
+
+      return map;
+    });
   });
 };
 
