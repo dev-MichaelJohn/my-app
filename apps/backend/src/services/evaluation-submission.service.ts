@@ -108,6 +108,61 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
     private userService: IUserService = new UserService(),
   ) {}
 
+  private async verifySupervisoryScope(
+    evaluatorAccountId: number,
+    targetFacultyAccountId: number,
+    tx: PgTransaction,
+  ): Promise<boolean> {
+    // 1. Check if evaluator is a College Dean supervising a Program Chair within their college
+    const [deanMatch] = await tx
+      .select({ id: ProgramChairs.id })
+      .from(CollegeDeans)
+      .innerJoin(Programs, eq(CollegeDeans.college_id, Programs.college_id))
+      .innerJoin(ProgramChairs, eq(Programs.id, ProgramChairs.program_id))
+      .where(
+        and(
+          eq(CollegeDeans.dean_id, evaluatorAccountId),
+          eq(ProgramChairs.chair_id, targetFacultyAccountId),
+          isNull(CollegeDeans.deleted_at),
+          isNull(Programs.deleted_at),
+          isNull(ProgramChairs.deleted_at),
+        ),
+      )
+      .limit(1);
+
+    if (deanMatch) return true;
+
+    // 2. Check if evaluator is a Program Chair supervising regular faculty appointed to their program
+    const [chairMatch] = await tx
+      .select({ id: Faculties.id })
+      .from(ProgramChairs)
+      .innerJoin(Faculties, eq(ProgramChairs.program_id, Faculties.program_id))
+      .where(
+        and(
+          eq(ProgramChairs.chair_id, evaluatorAccountId),
+          eq(Faculties.account_id, targetFacultyAccountId),
+          isNull(ProgramChairs.deleted_at),
+          isNull(Faculties.deleted_at),
+        ),
+      )
+      .limit(1);
+
+    if (chairMatch) {
+      // Ensure the target faculty member is not themselves an active Program Chair
+      const [targetIsChair] = await tx
+        .select({ id: ProgramChairs.id })
+        .from(ProgramChairs)
+        .where(
+          and(eq(ProgramChairs.chair_id, targetFacultyAccountId), isNull(ProgramChairs.deleted_at)),
+        )
+        .limit(1);
+
+      if (!targetIsChair) return true;
+    }
+
+    return false;
+  }
+
   // =========================================================================
   // 1. STUDENT (SET) EVALUATION FLOW
   // =========================================================================
@@ -968,6 +1023,20 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
         if (!schedule) {
           throw new AppError(400, "The supervisor evaluation period is closed or not available.");
+        }
+
+        // 🛡️ CRITICAL SCOPE ENFORCEMENT: Enforce supervisory boundaries
+        const isAuthorized = await this.verifySupervisoryScope(
+          evaluatorAccountId,
+          data.faculty_id,
+          tx,
+        );
+
+        if (!isAuthorized) {
+          throw new AppError(
+            403,
+            "Access denied: This faculty member is not within your authorized supervisory scope.",
+          );
         }
 
         const [existing] = await tx
