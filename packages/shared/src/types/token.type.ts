@@ -25,7 +25,7 @@ export const RefreshTokenSelect = createSelectSchema(RefreshToken, {
     schema
       .trim()
       .min(1, "Token hash is required")
-      .regex(/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/, "Invalid bcrypt hash structure"),
+      .regex(/^([a-f0-9]{64}|\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53})$/, "Invalid token hash structure"),
   expires_at: (schema) =>
     schema.refine((date) => date > new Date(), {
       message: "Expiration date must be in the future",
@@ -39,7 +39,7 @@ export const RefreshTokenInsert = createInsertSchema(RefreshToken, {
     schema
       .trim()
       .min(1, "Token hash is required")
-      .regex(/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/, "Invalid bcrypt hash structure"),
+      .regex(/^([a-f0-9]{64}|\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53})$/, "Invalid token hash structure"),
   expires_at: (schema) =>
     schema.refine((date) => date > new Date(), {
       message: "Expiration date must be in the future",
@@ -53,7 +53,7 @@ export const RefreshTokenUpdate = createUpdateSchema(RefreshToken, {
     schema
       .trim()
       .min(1, "Token hash is required")
-      .regex(/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/, "Invalid bcrypt hash structure"),
+      .regex(/^([a-f0-9]{64}|\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53})$/, "Invalid token hash structure"),
   expires_at: (schema) =>
     schema.refine((date) => date > new Date(), {
       message: "Expiration date must be in the future",
