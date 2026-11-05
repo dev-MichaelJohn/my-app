@@ -58,10 +58,7 @@ export default function FacultyTeachingPage() {
     if (!studentToUnenroll || !activeOfferingDetails) return;
 
     try {
-      // Find matching student_class_id
-      const scId =
-        (studentToUnenroll as any).student_class_id || studentToUnenroll.student_account_id;
-      await deleteStudentClassMutation.mutateAsync(scId);
+      await deleteStudentClassMutation.mutateAsync(studentToUnenroll.student_class_id);
       toast.success(`${studentToUnenroll.first_name} ${studentToUnenroll.last_name} unenrolled.`);
       setStudentToUnenroll(null);
       refetch();
