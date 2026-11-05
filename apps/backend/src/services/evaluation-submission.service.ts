@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, lte, gte, isNotNull, desc, asc, ne } from "drizzle-orm";
 import { type ResultAsync } from "neverthrow";
-import db from "@/configs/db.config.js";
+import db, { type PgTransaction } from "@/configs/db.config.js";
 import {
   Accounts,
   Classes,
@@ -1157,21 +1157,47 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         }
 
         if (!data.is_draft) {
-          const facultyUser = await this.userService.getUserById(data.faculty_id, tx);
-          const facultyName = facultyUser.isOk()
-            ? `${facultyUser.value.details.first_name} ${facultyUser.value.details.last_name}`
+          const [facultyInfo] = await tx
+            .select({
+              firstName: PersonalDetails.first_name,
+              lastName: PersonalDetails.last_name,
+              collegeId: Colleges.id,
+              collegeCode: Colleges.initialism,
+              programId: Programs.id,
+              programCode: Programs.initialism,
+            })
+            .from(Accounts)
+            .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
+            .leftJoin(
+              Faculties,
+              and(eq(Faculties.account_id, Accounts.id), isNull(Faculties.deleted_at)),
+            )
+            .leftJoin(
+              Programs,
+              and(eq(Faculties.program_id, Programs.id), isNull(Programs.deleted_at)),
+            )
+            .leftJoin(
+              Colleges,
+              and(eq(Programs.college_id, Colleges.id), isNull(Colleges.deleted_at)),
+            )
+            .where(eq(Accounts.id, data.faculty_id))
+            .limit(1);
+
+          const facultyName = facultyInfo
+            ? `${facultyInfo.firstName} ${facultyInfo.lastName}`
             : "Faculty Member";
 
+          // 🛡️ FIX 2: Correctly pass target collegeId and programId so the supervising Dean & Chair receive the pulse
           emitEvaluationPulse({
             id: `pulse-sef-${evaluationId}`,
             type: "SEF",
             timestamp: now.toISOString(),
-            courseCode: "SEF-TERM",
-            courseName: `Semester Evaluation: ${facultyName}`,
-            programCode: "SUPERVISORY",
-            programId: 0,
-            collegeCode: "ACADEMICS",
-            collegeId: 0,
+            courseCode: "SEF-APPRAISAL",
+            courseName: `Term Appraisal: ${facultyName}`,
+            programCode: facultyInfo?.programCode ?? "DEPT",
+            programId: facultyInfo?.programId ?? 0,
+            collegeCode: facultyInfo?.collegeCode ?? "COLL",
+            collegeId: facultyInfo?.collegeId ?? 0,
             yearLevel: "N/A",
             section: "SEF",
           });

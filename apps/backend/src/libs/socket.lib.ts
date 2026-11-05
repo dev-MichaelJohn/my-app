@@ -14,23 +14,30 @@ export const InitializeSocketServer = (httpServer: HTTPServer) => {
       credentials: true,
     },
     path: "/socket.io",
+    // Ping/pong health checks to prune dead connections
+    pingInterval: 25000,
+    pingTimeout: 20000,
   });
 
-  // JWT Authentication Middleware for WebSockets
+  // 🛡️ Robust JWT Authentication Middleware for WebSockets
   io.use((socket: Socket, next) => {
-    const token =
+    const rawToken =
       socket.handshake.auth?.token ||
-      socket.handshake.headers?.authorization?.replace(/^bearer\s+/i, "");
+      socket.handshake.headers?.authorization ||
+      (socket.handshake.query?.token as string | undefined);
 
-    if (!token) {
+    if (!rawToken) {
       return next(new Error("Authentication token required."));
     }
 
+    const cleanToken = rawToken.replace(/^bearer\s+/i, "").trim();
+
     try {
-      const decoded = jwt.verify(token, env.JWT_SECRET) as GetUser;
+      const decoded = jwt.verify(cleanToken, env.JWT_SECRET) as GetUser;
       socket.data.user = decoded;
       return next();
-    } catch {
+    } catch (err: any) {
+      logger.warn(`WebSocket handshake rejected: ${err.message}`);
       return next(new Error("Invalid session token."));
     }
   });
@@ -41,7 +48,7 @@ export const InitializeSocketServer = (httpServer: HTTPServer) => {
     const isSysAdmin = roles.includes("SYS_ADMIN");
     const isAdmin = roles.includes("ADMIN");
 
-    // 1. Join room based on roles
+    // 1. Join room for Admins
     if (isSysAdmin || isAdmin) {
       socket.join("admin:pulse");
     }
@@ -56,10 +63,10 @@ export const InitializeSocketServer = (httpServer: HTTPServer) => {
       socket.join(`program:pulse:${c.id}`);
     });
 
-    logger.debug(`Socket client connected: User #${user.account.id} (${user.account.email})`);
+    logger.debug(`Socket connected: User #${user.account.id} (${user.account.email})`);
 
-    socket.on("disconnect", () => {
-      logger.debug(`Socket client disconnected: User #${user.account.id}`);
+    socket.on("disconnect", (reason) => {
+      logger.debug(`Socket disconnected: User #${user.account.id} (${reason})`);
     });
   });
 
@@ -75,19 +82,25 @@ export const getIO = (): SocketIOServer => {
 };
 
 /**
- * Emits an anonymous real-time pulse event to the authorized rooms.
+ * Emits an anonymous real-time pulse event with automatic deduplication across rooms.
  */
 export const emitEvaluationPulse = (event: LiveEvaluationPulseEvent) => {
   if (!io) return;
 
-  // Broadcast to Admins
-  io.to("admin:pulse").emit("evaluation:pulse", event);
+  // 🛡️ FIX 1: Chain rooms in a single call to prevent duplicate packet delivery
+  let broadcast = io.to("admin:pulse");
 
-  // Broadcast to relevant College Dean
-  io.to(`college:pulse:${event.collegeId}`).emit("evaluation:pulse", event);
+  if (event.collegeId && event.collegeId > 0) {
+    broadcast = broadcast.to(`college:pulse:${event.collegeId}`);
+  }
 
-  // Broadcast to relevant Program Chair
-  io.to(`program:pulse:${event.programId}`).emit("evaluation:pulse", event);
+  if (event.programId && event.programId > 0) {
+    broadcast = broadcast.to(`program:pulse:${event.programId}`);
+  }
 
-  logger.debug(`Live Pulse broadcasted for ${event.courseCode} (${event.programCode})`);
+  broadcast.emit("evaluation:pulse", event);
+
+  logger.debug(
+    `Live Pulse broadcasted: ${event.type} for ${event.courseCode} (College #${event.collegeId}, Program #${event.programId})`,
+  );
 };
