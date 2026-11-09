@@ -17,7 +17,7 @@ AuthRouter.get(
   authController.getVerificationStatus,
 );
 
-AuthRouter.use(authLimiter);
+//AuthRouter.use(authLimiter);
 AuthRouter.post("/login", authController.login);
 AuthRouter.post("/verify-otp", authController.verifyOTP);
 
