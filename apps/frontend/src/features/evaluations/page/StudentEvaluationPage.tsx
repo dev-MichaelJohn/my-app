@@ -274,6 +274,12 @@ function StudentEvaluationFormContent({
     scheduleAutoSave(ratings, text, 800);
   };
 
+  const handleManualSaveDraft = async () => {
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    await performAutoSave(ratings, comment);
+    toast.success("Draft saved successfully.");
+  };
+
   const handleFinalSubmit = async () => {
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
 
@@ -449,7 +455,7 @@ function StudentEvaluationFormContent({
       {!is_submitted && (
         <div className="sticky bottom-3 z-20 transition-all duration-200">
           <div className="rounded-2xl border border-border/80 bg-background/95 dark:bg-card/95 backdrop-blur-md px-3.5 py-2.5 shadow-lg flex items-center justify-between gap-3">
-            <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+            <div className="text-xs text-muted-foreground hidden sm:flex items-center gap-1.5">
               {isComplete ? (
                 <span className="text-success font-semibold flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" /> All questions answered
@@ -459,22 +465,36 @@ function StudentEvaluationFormContent({
               )}
             </div>
 
-            <Button
-              type="button"
-              size="sm"
-              disabled={!isComplete || submitMutation.isPending}
-              onClick={() => setConfirmSubmitOpen(true)}
-              className="h-8 px-4 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
-            >
-              {submitMutation.isPending ? (
-                <div className="flex items-center gap-1.5">
-                  <Spinner size="xs" className="text-primary-foreground" />
-                  <span>Submitting...</span>
-                </div>
-              ) : (
-                "Submit Final Evaluation"
-              )}
-            </Button>
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              {/* Restored Save Draft Button */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={submitMutation.isPending}
+                onClick={handleManualSaveDraft}
+                className="h-8 px-3 text-xs border-border bg-background/50 hover:bg-muted"
+              >
+                Save Draft
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                disabled={!isComplete || submitMutation.isPending}
+                onClick={() => setConfirmSubmitOpen(true)}
+                className="h-8 px-4 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+              >
+                {submitMutation.isPending ? (
+                  <div className="flex items-center gap-1.5">
+                    <Spinner size="xs" className="text-primary-foreground" />
+                    <span>Submitting...</span>
+                  </div>
+                ) : (
+                  "Submit Final Evaluation"
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       )}
