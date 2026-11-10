@@ -6,6 +6,15 @@ import {
   type UpdateEmailOpts,
 } from "@my-app/shared";
 
+function escapeHtml(str: string = ""): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 const T = {
   maxWidth: "600px",
   borderRadius: "8px",
@@ -96,7 +105,7 @@ export const WelcomeEmailTemplate = ({
       <tr>
         <td style="padding: 8px 0; border-bottom: 1px solid ${T.infoBorder};">
           <span style="display: block; font-size: 11px; font-weight: 600; color: ${T.textMuted}; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 3px;">Temporary Password</span>
-          <code style="font-family: 'SFMono-Regular', Consolas, monospace; background-color: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0.03em;">${generatedPassword}</code>
+          <code style="font-family: 'SFMono-Regular', Consolas, monospace; background-color: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0.03em;">${escapeHtml(generatedPassword)}</code>
         </td>
       </tr>`
     : "";

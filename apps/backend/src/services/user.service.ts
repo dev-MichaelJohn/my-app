@@ -60,6 +60,7 @@ import {
 import env from "@/configs/env.config.js";
 import { logAuditEvent } from "@/libs/audit.lib.js";
 import type { Request } from "express";
+import { generateSecureTemporaryPassword } from "@/libs/password.lib.js";
 
 const toRolesArray = (roles: unknown): SystemRole[] => {
   if (Array.isArray(roles)) return roles as SystemRole[];
@@ -450,7 +451,7 @@ export class UserService implements IUserService {
 
       let plainPassword = info.account.password;
       if (!plainPassword || plainPassword.trim().length === 0) {
-        plainPassword = this.generatePassword(12);
+        plainPassword = generateSecureTemporaryPassword(12);
       }
 
       return WithTransaction(client, async (tx) => {
@@ -1205,7 +1206,7 @@ export class UserService implements IUserService {
         );
       }
 
-      const temporaryPassword = this.generatePassword(12);
+      const temporaryPassword = generateSecureTemporaryPassword(12);
       const hash = await bcrypt.hash(temporaryPassword, 10);
 
       await tx
@@ -1332,7 +1333,7 @@ export class UserService implements IUserService {
         );
       }
 
-      const temporaryPassword = this.generatePassword(12);
+      const temporaryPassword = generateSecureTemporaryPassword(12);
       const hash = await bcrypt.hash(temporaryPassword, 10);
 
       await tx

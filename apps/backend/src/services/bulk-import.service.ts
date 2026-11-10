@@ -34,6 +34,7 @@ import { logger } from "@/libs/logger.lib.js";
 import { env } from "node:process";
 import { WelcomeEmailTemplate, WelcomeTextTemplate } from "@/libs/email.lib.js";
 import { EmailService, type IEmailService } from "./email.service.js";
+import { generateSecureTemporaryPassword } from "@/libs/password.lib.js";
 
 export interface IBulkImportService {
   importColleges(csvContent: string, client?: DbClient): ResultAsync<ImportSummary, AppError>;
@@ -737,7 +738,7 @@ export class BulkImportService implements IBulkImportService {
         const rawPassword =
           data.password && data.password.trim().length >= 6
             ? data.password.trim()
-            : this.generateTemporaryPassword();
+            : generateSecureTemporaryPassword(12);
 
         const passwordHash = await bcrypt.hash(rawPassword, 10);
 
