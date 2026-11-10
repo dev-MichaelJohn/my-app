@@ -35,6 +35,7 @@ import { getErrorMessage } from "@/lib/error.lib";
 import { Lock } from "lucide-react";
 import type { ApiError } from "@/lib/api.lib";
 import { cn } from "@/lib/utils";
+import { PasswordInput } from "@/components/ui/password-input";
 
 interface Props {
   open: boolean;
@@ -383,8 +384,7 @@ function FormInner({ userToEdit, onClose }: { userToEdit?: GetUser | null; onClo
                     ? "New Password (Leave blank to keep current)"
                     : "Initial Password (Optional)"}
                 </Label>
-                <Input
-                  type="password"
+                <PasswordInput
                   value={field.state.value || ""}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
