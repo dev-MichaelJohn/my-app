@@ -14,6 +14,7 @@ import type { ApiError } from "@/lib/api.lib";
 import { Link } from "react-router";
 import { getErrorMessage } from "@/lib/error.lib";
 import { Spinner } from "@/components/ui/spinner";
+import { PasswordInput } from "@/components/ui/password-input";
 
 interface LoginFormProps {
   initialValues?: LoginAccount;
@@ -99,14 +100,13 @@ export const LoginForm = ({ initialValues, onSuccess }: LoginFormProps) => {
             {(field) => (
               <div className="space-y-1.5 text-left">
                 <label className="block text-sm font-medium text-foreground">Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                   placeholder="••••••••"
                   autoComplete="current-password"
-                  className="w-full px-3 py-2 border border-input bg-background text-foreground placeholder:text-muted-foreground rounded-md text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition"
+                  className="bg-background text-foreground"
                 />
                 {field.state.meta.errors.length > 0 && field.state.meta.isTouched ? (
                   <p className="text-destructive text-xs font-medium mt-1">

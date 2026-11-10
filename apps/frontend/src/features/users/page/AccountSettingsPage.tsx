@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useForm } from "@tanstack/react-form";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
@@ -14,6 +13,7 @@ import { User, KeyRound, Shield, Building2, GraduationCap, CheckCircle2 } from "
 import { ChangePasswordSchema, type ChangePassword } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
 import { getErrorMessage } from "@/lib/error.lib";
+import { PasswordInput } from "@/components/ui/password-input";
 
 export default function AccountSettingsPage() {
   const { user } = usePermissions();
@@ -191,13 +191,12 @@ export default function AccountSettingsPage() {
                 return (
                   <div className="space-y-1.5">
                     <Label className="text-foreground text-xs">Current Password</Label>
-                    <Input
-                      type="password"
+                    <PasswordInput
                       value={field.state.value || ""}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
                       placeholder="••••••••"
-                      className="bg-background border-input text-xs h-9"
+                      className="text-xs h-9"
                     />
                     {hasError && (
                       <p className="text-destructive text-xs">
@@ -219,13 +218,12 @@ export default function AccountSettingsPage() {
                 return (
                   <div className="space-y-1.5">
                     <Label className="text-foreground text-xs">New Password</Label>
-                    <Input
-                      type="password"
+                    <PasswordInput
                       value={field.state.value || ""}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
                       placeholder="••••••••"
-                      className="bg-background border-input text-xs h-9"
+                      className="text-xs h-9"
                     />
                     {hasError && (
                       <p className="text-destructive text-xs">

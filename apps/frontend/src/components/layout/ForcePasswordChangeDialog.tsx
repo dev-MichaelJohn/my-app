@@ -8,7 +8,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -20,6 +19,7 @@ import { ShieldAlert, KeyRound } from "lucide-react";
 import { ChangePasswordSchema, type ChangePassword } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
 import { getErrorMessage } from "@/lib/error.lib";
+import { PasswordInput } from "../ui/password-input";
 
 export function ForcePasswordChangeDialog() {
   const { user } = usePermissions();
@@ -92,8 +92,7 @@ export function ForcePasswordChangeDialog() {
             {(field) => (
               <div className="space-y-1.5">
                 <Label className="text-xs text-foreground">Temporary Password</Label>
-                <Input
-                  type="password"
+                <PasswordInput
                   value={field.state.value || ""}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -110,8 +109,7 @@ export function ForcePasswordChangeDialog() {
               return (
                 <div className="space-y-1.5">
                   <Label className="text-xs text-foreground">New Permanent Password</Label>
-                  <Input
-                    type="password"
+                  <PasswordInput
                     value={field.state.value || ""}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
