@@ -227,6 +227,8 @@ function SupervisorEvaluationFormContent({
   const allQuestions = form.categories.flatMap((c) => c.questions);
   const totalRated = allQuestions.filter((q) => ratings[q.id] !== undefined).length;
   const isComplete = totalRated === allQuestions.length;
+  const progressPercent =
+    allQuestions.length > 0 ? Math.round((totalRated / allQuestions.length) * 100) : 0;
 
   const handleRatingSelect = (questionId: number, ratingVal: number) => {
     if (is_submitted) return;
@@ -267,6 +269,26 @@ function SupervisorEvaluationFormContent({
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-24">
+      {!is_submitted && (
+        <div className="sticky top-16 z-20 -mx-2 px-3 py-2 sm:mx-0 sm:px-4 bg-background/95 dark:bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xs transition-all">
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span className="font-semibold text-foreground truncate max-w-[180px] sm:max-w-sm">
+              Appraising: {facultyName}
+            </span>
+            <span className="font-mono font-bold text-primary shrink-0">
+              {totalRated} / {allQuestions.length} ({progressPercent}%)
+            </span>
+          </div>
+
+          <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-300 rounded-full"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       <Button
         variant="ghost"
         size="sm"
@@ -278,7 +300,7 @@ function SupervisorEvaluationFormContent({
       </Button>
 
       {/* ── Form Header ── */}
-      <div className="p-6 border border-border rounded-2xl bg-card shadow-xs space-y-3">
+      <div className="p-5 sm:p-6 border border-border rounded-2xl bg-card shadow-xs space-y-3">
         <div className="flex items-center justify-between">
           <Badge variant="outline" className="font-mono font-bold text-success border-success/20">
             Annex B Instrument
@@ -289,8 +311,8 @@ function SupervisorEvaluationFormContent({
             </Badge>
           )}
         </div>
-        <h1 className="text-2xl font-extrabold text-foreground">{form.title}</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-xl sm:text-2xl font-extrabold text-foreground">{form.title}</h1>
+        <p className="text-xs sm:text-sm text-muted-foreground">
           Evaluating Faculty: <strong className="text-foreground">{facultyName}</strong> (
           {faculty.details.institutional_id})
         </p>
@@ -300,7 +322,7 @@ function SupervisorEvaluationFormContent({
           </p>
         )}
 
-        {/* ── Instructional Reference Audit Banner ── */}
+        {/* Teaching load reference */}
         <div className="p-3 bg-muted/40 border border-border/70 rounded-xl space-y-1.5 text-xs">
           <p className="font-bold text-foreground flex items-center gap-1.5">
             <GraduationCap className="w-4 h-4 text-primary" />
@@ -318,37 +340,19 @@ function SupervisorEvaluationFormContent({
             ))}
           </div>
         </div>
-
-        {/* Progress */}
-        {!is_submitted && (
-          <div className="pt-2">
-            <div className="flex justify-between text-xs font-semibold mb-1">
-              <span className="text-muted-foreground">Appraisal Progress</span>
-              <span className="text-primary font-mono">
-                {totalRated} / {allQuestions.length} Criteria Rated
-              </span>
-            </div>
-            <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary transition-all duration-300"
-                style={{ width: `${(totalRated / allQuestions.length) * 100}%` }}
-              />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* ── Dynamic Rating Scale Guide ── */}
       <RatingScaleGuide minRating={form.min_rating} maxRating={form.max_rating} />
 
       {/* ── Criteria with MOVs ── */}
-      <div className="space-y-6">
+      <div className="space-y-5">
         {form.categories.map((cat, cIdx) => (
           <div
             key={cat.id}
             className="border border-border rounded-2xl bg-card shadow-xs overflow-hidden"
           >
-            <div className="p-4 bg-muted/40 border-b border-border">
+            <div className="p-3.5 sm:p-4 bg-muted/40 border-b border-border">
               <h3 className="font-bold text-sm text-foreground">
                 {cIdx + 1}. {cat.name}
               </h3>
@@ -357,10 +361,10 @@ function SupervisorEvaluationFormContent({
               )}
             </div>
 
-            <div className="p-4 divide-y divide-border/60">
+            <div className="p-3.5 sm:p-4 divide-y divide-border/60">
               {cat.questions.map((q, qIdx) => (
-                <div key={q.id} className="py-4 first:pt-0 last:pb-0 space-y-3">
-                  <p className="text-sm font-medium text-foreground">
+                <div key={q.id} className="py-3.5 first:pt-0 last:pb-0 space-y-2.5">
+                  <p className="text-xs sm:text-sm font-medium text-foreground">
                     {qIdx + 1}. {q.question}
                   </p>
 
@@ -394,7 +398,7 @@ function SupervisorEvaluationFormContent({
         ))}
 
         {/* ── Supervisory Remarks Section ── */}
-        <div className="p-5 border border-border rounded-2xl bg-card shadow-xs space-y-3">
+        <div className="p-4 sm:p-5 border border-border rounded-2xl bg-card shadow-xs space-y-2.5">
           <div className="flex items-center gap-2 text-foreground font-bold text-sm">
             <MessageSquare className="w-4 h-4 text-primary" />
             <span>Supervisory Remarks & Recommendations (Optional)</span>
@@ -404,42 +408,59 @@ function SupervisorEvaluationFormContent({
             disabled={is_submitted}
             onChange={(e) => setComment(e.target.value)}
             placeholder="Document overall semester performance, grade sheet timeliness, syllabus compliance, and development recommendations..."
-            className="min-h-[100px] text-sm bg-background border-input"
+            className="min-h-[90px] text-xs sm:text-sm bg-background border-input"
             maxLength={1000}
           />
           <div className="flex justify-between text-[11px] text-muted-foreground">
-            <span>
-              Remarks are analyzed for sentiment and directly feed into the faculty member's
-              development plan (Annex D).
-            </span>
+            <span>Remarks directly feed into the faculty development plan (Annex D).</span>
             <span>{comment.length}/1000</span>
           </div>
         </div>
       </div>
 
-      {/* ── Action Buttons ── */}
       {!is_submitted && (
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={submitMutation.isPending}
-            onClick={() => handleSave(true)}
-          >
-            Save Draft
-          </Button>
-          <Button
-            type="button"
-            disabled={!isComplete || submitMutation.isPending}
-            onClick={() => setConfirmSubmitOpen(true)}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            {submitMutation.isPending ? (
-              <Spinner size="sm" className="text-white" />
-            ) : (
-              "Submit Semester Appraisal"
-            )}
-          </Button>
+        <div className="sticky bottom-3 z-20 transition-all duration-200">
+          <div className="rounded-2xl border border-border/80 bg-background/95 dark:bg-card/95 backdrop-blur-md px-3.5 py-2.5 shadow-lg flex items-center justify-between gap-3">
+            <div className="text-xs text-muted-foreground hidden sm:flex items-center gap-1.5">
+              {isComplete ? (
+                <span className="text-success font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> All criteria appraised
+                </span>
+              ) : (
+                <span>{allQuestions.length - totalRated} criteria remaining</span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={submitMutation.isPending}
+                onClick={() => handleSave(true)}
+                className="h-8 px-3 text-xs border-border bg-background/50 hover:bg-muted"
+              >
+                Save Draft
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                disabled={!isComplete || submitMutation.isPending}
+                onClick={() => setConfirmSubmitOpen(true)}
+                className="h-8 px-3.5 sm:px-4 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+              >
+                {submitMutation.isPending ? (
+                  <div className="flex items-center gap-1.5">
+                    <Spinner size="xs" className="text-primary-foreground" />
+                    <span>Submitting...</span>
+                  </div>
+                ) : (
+                  "Submit Appraisal"
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
