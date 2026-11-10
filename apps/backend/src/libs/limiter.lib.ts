@@ -41,7 +41,7 @@ export const standardApiLimiter = rateLimit({
 
 export const evaluationExecutionLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
-  max: 100,
+  max: 300,
   keyGenerator: UserKeyGenerator,
   validate: { keyGeneratorIpFallback: false },
   standardHeaders: true,

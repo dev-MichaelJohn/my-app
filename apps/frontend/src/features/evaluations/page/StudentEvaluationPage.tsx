@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   useStudentSubjects,
   useStudentFormView,
@@ -12,9 +12,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { toast } from "sonner";
-import { CheckCircle2, ChevronRight, FileCheck2, ArrowLeft, MessageSquare } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronRight,
+  FileCheck2,
+  ArrowLeft,
+  MessageSquare,
+  Check,
+} from "lucide-react";
 import type { EvaluableStudentSubject } from "@my-app/shared";
-import type { ApiError } from "@/lib/api.lib";
 
 export default function StudentEvaluationPage() {
   const { data: subjects, isLoading } = useStudentSubjects();
@@ -186,6 +192,9 @@ function StudentEvaluationFormContent({
   );
   const [comment, setComment] = useState<string>(() => viewData.saved_comment ?? "");
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">(
+    viewData.saved_ratings && Object.keys(viewData.saved_ratings).length > 0 ? "saved" : "idle",
+  );
 
   const { form, offering, is_submitted } = viewData;
   const facultyName = offering.faculty
@@ -198,19 +207,83 @@ function StudentEvaluationFormContent({
   const progressPercent =
     allQuestions.length > 0 ? Math.round((totalRated / allQuestions.length) * 100) : 0;
 
+  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const performAutoSave = useCallback(
+    async (targetRatings: Record<number, number>, targetComment: string) => {
+      if (is_submitted) return;
+
+      const ratingItems = Object.entries(targetRatings).map(([qId, val]) => ({
+        question_id: Number(qId),
+        rating: val,
+      }));
+
+      if (ratingItems.length === 0 && !targetComment.trim()) return;
+
+      setSaveStatus("saving");
+      try {
+        await submitMutation.mutateAsync({
+          schedule_id: viewData.schedule_id,
+          student_class_id: studentClassId,
+          ratings: ratingItems,
+          comment: targetComment.trim() || undefined,
+          is_draft: true,
+        });
+        setSaveStatus("saved");
+      } catch {
+        setSaveStatus("error");
+      }
+    },
+    [is_submitted, viewData.schedule_id, studentClassId, submitMutation],
+  );
+
+  const scheduleAutoSave = useCallback(
+    (nextRatings: Record<number, number>, nextComment: string, debounceMs = 350) => {
+      if (is_submitted) return;
+
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+
+      setSaveStatus("saving");
+      autosaveTimerRef.current = setTimeout(() => {
+        performAutoSave(nextRatings, nextComment);
+      }, debounceMs);
+    },
+    [is_submitted, performAutoSave],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleRatingSelect = (questionId: number, ratingVal: number) => {
     if (is_submitted) return;
-    setRatings((prev) => ({ ...prev, [questionId]: ratingVal }));
+    const nextRatings = { ...ratings, [questionId]: ratingVal };
+    setRatings(nextRatings);
+    scheduleAutoSave(nextRatings, comment, 300);
   };
 
-  const handleSave = async (isDraft: boolean) => {
+  const handleCommentChange = (text: string) => {
+    if (is_submitted) return;
+    setComment(text);
+    scheduleAutoSave(ratings, text, 800);
+  };
+
+  const handleFinalSubmit = async () => {
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+
     const ratingItems = Object.entries(ratings).map(([qId, val]) => ({
       question_id: Number(qId),
       rating: val,
     }));
 
-    if (!isDraft && ratingItems.length < allQuestions.length) {
-      toast.error("Please provide a rating for all questions before submitting.");
+    if (ratingItems.length < allQuestions.length) {
+      toast.error("Please answer all questions before submitting.");
       return;
     }
 
@@ -220,18 +293,14 @@ function StudentEvaluationFormContent({
         student_class_id: studentClassId,
         ratings: ratingItems,
         comment: comment.trim() || undefined,
-        is_draft: isDraft,
+        is_draft: false,
       });
 
-      if (isDraft) {
-        toast.success("Draft saved successfully.");
-      } else {
-        toast.success("Evaluation submitted successfully. Thank you for your feedback!");
-        setConfirmSubmitOpen(false);
-        onBack();
-      }
-    } catch (err) {
-      toast.error((err as ApiError).message || "Failed to submit evaluation.");
+      toast.success("Evaluation submitted successfully. Thank you for your feedback!");
+      setConfirmSubmitOpen(false);
+      onBack();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit evaluation.");
     }
   };
 
@@ -240,15 +309,39 @@ function StudentEvaluationFormContent({
       {!is_submitted && (
         <div className="sticky top-16 z-20 -mx-2 px-3 py-2 sm:mx-0 sm:px-4 bg-background/95 dark:bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xs transition-all">
           <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="font-semibold text-foreground truncate max-w-[180px] sm:max-w-sm">
+            <span className="font-semibold text-foreground truncate max-w-[170px] sm:max-w-sm">
               Evaluating: {offering.course_curriculum.course.initialism} • {facultyName}
             </span>
-            <span className="font-mono font-bold text-primary shrink-0">
-              {totalRated} / {allQuestions.length} ({progressPercent}%)
-            </span>
+
+            <div className="flex items-center gap-3 shrink-0">
+              {saveStatus === "saving" && (
+                <span className="flex items-center gap-1 text-[11px] text-muted-foreground animate-pulse">
+                  <Spinner size="xs" />
+                  <span className="hidden sm:inline">Saving draft...</span>
+                </span>
+              )}
+              {saveStatus === "saved" && (
+                <span className="flex items-center gap-1 text-[11px] text-success font-medium">
+                  <Check className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Draft saved</span>
+                </span>
+              )}
+              {saveStatus === "error" && (
+                <button
+                  type="button"
+                  onClick={() => performAutoSave(ratings, comment)}
+                  className="text-[11px] text-destructive hover:underline"
+                >
+                  Save failed. Retry?
+                </button>
+              )}
+
+              <span className="font-mono font-bold text-primary">
+                {totalRated} / {allQuestions.length} ({progressPercent}%)
+              </span>
+            </div>
           </div>
 
-          {/* Ultra-slim progress bar line */}
           <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
             <div
               className="h-full bg-primary transition-all duration-300 rounded-full"
@@ -293,7 +386,6 @@ function StudentEvaluationFormContent({
         )}
       </div>
 
-      {/* ── Dynamic Rating Scale Guide ── */}
       <RatingScaleGuide minRating={form.min_rating} maxRating={form.max_rating} />
 
       {/* ── Questions Hierarchy ── */}
@@ -342,13 +434,13 @@ function StudentEvaluationFormContent({
           <Textarea
             value={comment}
             disabled={is_submitted}
-            onChange={(e) => setComment(e.target.value)}
+            onChange={(e) => handleCommentChange(e.target.value)}
             placeholder="Share specific observations regarding instructional delivery, strengths, and recommendations..."
             className="min-h-[90px] text-xs sm:text-sm bg-background border-input"
             maxLength={1000}
           />
           <div className="flex justify-between text-[11px] text-muted-foreground">
-            <span>Feedback comments are analyzed anonymously for faculty development.</span>
+            <span>Selections and text auto-save as draft as you go.</span>
             <span>{comment.length}/1000</span>
           </div>
         </div>
@@ -357,45 +449,32 @@ function StudentEvaluationFormContent({
       {!is_submitted && (
         <div className="sticky bottom-3 z-20 transition-all duration-200">
           <div className="rounded-2xl border border-border/80 bg-background/95 dark:bg-card/95 backdrop-blur-md px-3.5 py-2.5 shadow-lg flex items-center justify-between gap-3">
-            <div className="text-xs text-muted-foreground hidden sm:flex items-center gap-1.5">
+            <div className="text-xs text-muted-foreground flex items-center gap-1.5">
               {isComplete ? (
                 <span className="text-success font-semibold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Ready for submission
+                  <CheckCircle2 className="w-3.5 h-3.5" /> All questions answered
                 </span>
               ) : (
                 <span>{allQuestions.length - totalRated} question(s) remaining</span>
               )}
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={submitMutation.isPending}
-                onClick={() => handleSave(true)}
-                className="h-8 px-3 text-xs border-border bg-background/50 hover:bg-muted"
-              >
-                Save Draft
-              </Button>
-
-              <Button
-                type="button"
-                size="sm"
-                disabled={!isComplete || submitMutation.isPending}
-                onClick={() => setConfirmSubmitOpen(true)}
-                className="h-8 px-3.5 sm:px-4 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
-              >
-                {submitMutation.isPending ? (
-                  <div className="flex items-center gap-1.5">
-                    <Spinner size="xs" className="text-primary-foreground" />
-                    <span>Submitting...</span>
-                  </div>
-                ) : (
-                  "Submit Final Evaluation"
-                )}
-              </Button>
-            </div>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!isComplete || submitMutation.isPending}
+              onClick={() => setConfirmSubmitOpen(true)}
+              className="h-8 px-4 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+            >
+              {submitMutation.isPending ? (
+                <div className="flex items-center gap-1.5">
+                  <Spinner size="xs" className="text-primary-foreground" />
+                  <span>Submitting...</span>
+                </div>
+              ) : (
+                "Submit Final Evaluation"
+              )}
+            </Button>
           </div>
         </div>
       )}
@@ -413,7 +492,7 @@ function StudentEvaluationFormContent({
         confirmLabel="Yes, Submit Evaluation"
         variant="primary"
         isLoading={submitMutation.isPending}
-        onConfirm={() => handleSave(false)}
+        onConfirm={handleFinalSubmit}
       />
     </div>
   );

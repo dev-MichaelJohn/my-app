@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   useSupervisorFaculty,
   useSupervisorFormView,
@@ -21,9 +21,9 @@ import {
   FileText,
   GraduationCap,
   BookOpen,
+  Check,
 } from "lucide-react";
 import type { EvaluableSupervisorFaculty } from "@my-app/shared";
-import type { ApiError } from "@/lib/api.lib";
 
 export default function SupervisorEvaluationPage() {
   const { data: facultyList, isLoading } = useSupervisorFaculty();
@@ -116,7 +116,6 @@ export default function SupervisorEvaluationPage() {
                 </CardHeader>
 
                 <CardContent className="space-y-3 pt-2">
-                  {/* Teaching Load Context Chips */}
                   <div className="p-2.5 bg-muted/40 border border-border/60 rounded-xl space-y-1.5 text-xs">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                       <BookOpen className="w-3 h-3 text-primary" />
@@ -172,7 +171,6 @@ export default function SupervisorEvaluationPage() {
   );
 }
 
-// ── 1. Container: Handles loading & mounts content with a unique key ──
 function SupervisorEvaluationFormViewComponent({
   facultyId,
   onBack,
@@ -200,7 +198,6 @@ function SupervisorEvaluationFormViewComponent({
   );
 }
 
-// ── 2. Content Form: Directly initializes ratings and comments without linter warnings ──
 function SupervisorEvaluationFormContent({
   facultyId,
   viewData,
@@ -212,12 +209,14 @@ function SupervisorEvaluationFormContent({
 }) {
   const submitMutation = useSubmitSupervisorEvaluation();
 
-  // ✅ Initialized directly on mount — zero useEffect, zero cascading renders
   const [ratings, setRatings] = useState<Record<number, number>>(
     () => viewData.saved_ratings ?? {},
   );
   const [comment, setComment] = useState<string>(() => viewData.saved_comment ?? "");
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">(
+    viewData.saved_ratings && Object.keys(viewData.saved_ratings).length > 0 ? "saved" : "idle",
+  );
 
   const { form, faculty, teaching_classes, is_submitted } = viewData;
   const facultyName = `${faculty.details.first_name} ${faculty.details.last_name}${
@@ -230,19 +229,83 @@ function SupervisorEvaluationFormContent({
   const progressPercent =
     allQuestions.length > 0 ? Math.round((totalRated / allQuestions.length) * 100) : 0;
 
+  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const performAutoSave = useCallback(
+    async (targetRatings: Record<number, number>, targetComment: string) => {
+      if (is_submitted) return;
+
+      const ratingItems = Object.entries(targetRatings).map(([qId, val]) => ({
+        question_id: Number(qId),
+        rating: val,
+      }));
+
+      if (ratingItems.length === 0 && !targetComment.trim()) return;
+
+      setSaveStatus("saving");
+      try {
+        await submitMutation.mutateAsync({
+          schedule_id: viewData.schedule_id,
+          faculty_id: facultyId,
+          ratings: ratingItems,
+          comment: targetComment.trim() || undefined,
+          is_draft: true,
+        });
+        setSaveStatus("saved");
+      } catch {
+        setSaveStatus("error");
+      }
+    },
+    [is_submitted, viewData.schedule_id, facultyId, submitMutation],
+  );
+
+  const scheduleAutoSave = useCallback(
+    (nextRatings: Record<number, number>, nextComment: string, debounceMs = 350) => {
+      if (is_submitted) return;
+
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+
+      setSaveStatus("saving");
+      autosaveTimerRef.current = setTimeout(() => {
+        performAutoSave(nextRatings, nextComment);
+      }, debounceMs);
+    },
+    [is_submitted, performAutoSave],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleRatingSelect = (questionId: number, ratingVal: number) => {
     if (is_submitted) return;
-    setRatings((prev) => ({ ...prev, [questionId]: ratingVal }));
+    const nextRatings = { ...ratings, [questionId]: ratingVal };
+    setRatings(nextRatings);
+    scheduleAutoSave(nextRatings, comment, 300);
   };
 
-  const handleSave = async (isDraft: boolean) => {
+  const handleCommentChange = (text: string) => {
+    if (is_submitted) return;
+    setComment(text);
+    scheduleAutoSave(ratings, text, 800);
+  };
+
+  const handleFinalSubmit = async () => {
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+
     const ratingItems = Object.entries(ratings).map(([qId, val]) => ({
       question_id: Number(qId),
       rating: val,
     }));
 
-    if (!isDraft && ratingItems.length < allQuestions.length) {
-      toast.error("Please provide a rating for all supervisory criteria before submitting.");
+    if (ratingItems.length < allQuestions.length) {
+      toast.error("Please answer all supervisory criteria before submitting.");
       return;
     }
 
@@ -252,18 +315,14 @@ function SupervisorEvaluationFormContent({
         faculty_id: facultyId,
         ratings: ratingItems,
         comment: comment.trim() || undefined,
-        is_draft: isDraft,
+        is_draft: false,
       });
 
-      if (isDraft) {
-        toast.success("Supervisor evaluation draft saved.");
-      } else {
-        toast.success("Supervisor evaluation submitted successfully.");
-        setConfirmSubmitOpen(false);
-        onBack();
-      }
-    } catch (err) {
-      toast.error((err as ApiError).message || "Failed to submit supervisor evaluation.");
+      toast.success("Supervisor evaluation submitted successfully.");
+      setConfirmSubmitOpen(false);
+      onBack();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit evaluation.");
     }
   };
 
@@ -272,12 +331,37 @@ function SupervisorEvaluationFormContent({
       {!is_submitted && (
         <div className="sticky top-16 z-20 -mx-2 px-3 py-2 sm:mx-0 sm:px-4 bg-background/95 dark:bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xs transition-all">
           <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="font-semibold text-foreground truncate max-w-[180px] sm:max-w-sm">
+            <span className="font-semibold text-foreground truncate max-w-[170px] sm:max-w-sm">
               Appraising: {facultyName}
             </span>
-            <span className="font-mono font-bold text-primary shrink-0">
-              {totalRated} / {allQuestions.length} ({progressPercent}%)
-            </span>
+
+            <div className="flex items-center gap-3 shrink-0">
+              {saveStatus === "saving" && (
+                <span className="flex items-center gap-1 text-[11px] text-muted-foreground animate-pulse">
+                  <Spinner size="xs" />
+                  <span className="hidden sm:inline">Saving draft...</span>
+                </span>
+              )}
+              {saveStatus === "saved" && (
+                <span className="flex items-center gap-1 text-[11px] text-success font-medium">
+                  <Check className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Draft saved</span>
+                </span>
+              )}
+              {saveStatus === "error" && (
+                <button
+                  type="button"
+                  onClick={() => performAutoSave(ratings, comment)}
+                  className="text-[11px] text-destructive hover:underline"
+                >
+                  Save failed. Retry?
+                </button>
+              )}
+
+              <span className="font-mono font-bold text-primary">
+                {totalRated} / {allQuestions.length} ({progressPercent}%)
+              </span>
+            </div>
           </div>
 
           <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
@@ -322,7 +406,6 @@ function SupervisorEvaluationFormContent({
           </p>
         )}
 
-        {/* Teaching load reference */}
         <div className="p-3 bg-muted/40 border border-border/70 rounded-xl space-y-1.5 text-xs">
           <p className="font-bold text-foreground flex items-center gap-1.5">
             <GraduationCap className="w-4 h-4 text-primary" />
@@ -342,7 +425,6 @@ function SupervisorEvaluationFormContent({
         </div>
       </div>
 
-      {/* ── Dynamic Rating Scale Guide ── */}
       <RatingScaleGuide minRating={form.min_rating} maxRating={form.max_rating} />
 
       {/* ── Criteria with MOVs ── */}
@@ -368,7 +450,6 @@ function SupervisorEvaluationFormContent({
                     {qIdx + 1}. {q.question}
                   </p>
 
-                  {/* MOVs List */}
                   {q.means && q.means.length > 0 && (
                     <div className="p-3 bg-muted/40 border border-border/60 rounded-xl space-y-1 text-xs">
                       <span className="font-semibold text-muted-foreground flex items-center gap-1 text-[11px] uppercase tracking-wider">
@@ -406,13 +487,13 @@ function SupervisorEvaluationFormContent({
           <Textarea
             value={comment}
             disabled={is_submitted}
-            onChange={(e) => setComment(e.target.value)}
+            onChange={(e) => handleCommentChange(e.target.value)}
             placeholder="Document overall semester performance, grade sheet timeliness, syllabus compliance, and development recommendations..."
             className="min-h-[90px] text-xs sm:text-sm bg-background border-input"
             maxLength={1000}
           />
           <div className="flex justify-between text-[11px] text-muted-foreground">
-            <span>Remarks directly feed into the faculty development plan (Annex D).</span>
+            <span>Selections and remarks auto-save as draft as you go.</span>
             <span>{comment.length}/1000</span>
           </div>
         </div>
@@ -421,7 +502,7 @@ function SupervisorEvaluationFormContent({
       {!is_submitted && (
         <div className="sticky bottom-3 z-20 transition-all duration-200">
           <div className="rounded-2xl border border-border/80 bg-background/95 dark:bg-card/95 backdrop-blur-md px-3.5 py-2.5 shadow-lg flex items-center justify-between gap-3">
-            <div className="text-xs text-muted-foreground hidden sm:flex items-center gap-1.5">
+            <div className="text-xs text-muted-foreground flex items-center gap-1.5">
               {isComplete ? (
                 <span className="text-success font-semibold flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" /> All criteria appraised
@@ -431,35 +512,22 @@ function SupervisorEvaluationFormContent({
               )}
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={submitMutation.isPending}
-                onClick={() => handleSave(true)}
-                className="h-8 px-3 text-xs border-border bg-background/50 hover:bg-muted"
-              >
-                Save Draft
-              </Button>
-
-              <Button
-                type="button"
-                size="sm"
-                disabled={!isComplete || submitMutation.isPending}
-                onClick={() => setConfirmSubmitOpen(true)}
-                className="h-8 px-3.5 sm:px-4 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
-              >
-                {submitMutation.isPending ? (
-                  <div className="flex items-center gap-1.5">
-                    <Spinner size="xs" className="text-primary-foreground" />
-                    <span>Submitting...</span>
-                  </div>
-                ) : (
-                  "Submit Appraisal"
-                )}
-              </Button>
-            </div>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!isComplete || submitMutation.isPending}
+              onClick={() => setConfirmSubmitOpen(true)}
+              className="h-8 px-4 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+            >
+              {submitMutation.isPending ? (
+                <div className="flex items-center gap-1.5">
+                  <Spinner size="xs" className="text-primary-foreground" />
+                  <span>Submitting...</span>
+                </div>
+              ) : (
+                "Submit Appraisal"
+              )}
+            </Button>
           </div>
         </div>
       )}
@@ -478,7 +546,7 @@ function SupervisorEvaluationFormContent({
         confirmLabel="Yes, Submit Appraisal"
         variant="primary"
         isLoading={submitMutation.isPending}
-        onConfirm={() => handleSave(false)}
+        onConfirm={handleFinalSubmit}
       />
     </div>
   );
