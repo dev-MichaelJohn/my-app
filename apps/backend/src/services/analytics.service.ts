@@ -31,6 +31,7 @@ import {
   type IndicatorAnalytics,
   type DashboardOverviewStats,
   type LiveEvaluationPulseEvent,
+  StudentEvaluationTurnout,
 } from "@my-app/shared";
 import {
   and,
@@ -247,43 +248,35 @@ export class AnalyticsService implements IAnalyticsService {
       const totalEnrolled = enrolledCount?.total ?? 0;
 
       const [completedCount] = await tx
-        .select({ total: count(StudentEvaluations.id) })
-        .from(StudentEvaluations)
-        .innerJoin(StudentClasses, eq(StudentEvaluations.student_class_id, StudentClasses.id))
-        .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
+        .select({ total: count(StudentEvaluationTurnout.id) })
+        .from(StudentEvaluationTurnout)
+        .innerJoin(
+          CourseOfferings,
+          eq(StudentEvaluationTurnout.course_offering_id, CourseOfferings.id),
+        )
         .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
         .innerJoin(Programs, eq(Classes.program_id, Programs.id))
-        .where(
-          and(
-            ...scopeConditions,
-            isNull(StudentClasses.deleted_at),
-            isNotNull(StudentEvaluations.submitted_at),
-          ),
-        );
+        .where(and(...scopeConditions));
 
       const completedSubmissions = completedCount?.total ?? 0;
       const pendingSubmissions = Math.max(0, totalEnrolled - completedSubmissions);
       const completionPercentage =
         totalEnrolled > 0 ? Number(((completedSubmissions / totalEnrolled) * 100).toFixed(1)) : 0;
 
+      // 2. Evaluated Faculty Count
       const [distinctFacultyCount] = await tx
         .select({ total: countDistinct(CourseOfferings.faculty_id) })
         .from(CourseOfferings)
         .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
         .innerJoin(Programs, eq(Classes.program_id, Programs.id))
-        .innerJoin(StudentClasses, eq(StudentClasses.course_offering_id, CourseOfferings.id))
-        .innerJoin(StudentEvaluations, eq(StudentEvaluations.student_class_id, StudentClasses.id))
-        .where(
-          and(
-            ...scopeConditions,
-            isNull(StudentClasses.deleted_at),
-            isNotNull(StudentEvaluations.submitted_at),
-          ),
-        );
+        .innerJoin(
+          StudentEvaluationTurnout,
+          eq(StudentEvaluationTurnout.course_offering_id, CourseOfferings.id),
+        )
+        .where(and(...scopeConditions));
 
       const totalFacultyEvaluated = distinctFacultyCount?.total ?? 0;
 
-      // 🚀 Fixed: Route supervisory count through Accounts.id
       let sefFacultyScopeFilter: SQL | undefined = undefined;
 
       if (isDean) {
@@ -308,7 +301,6 @@ export class AnalyticsService implements IAnalyticsService {
           .where(isNull(ProgramChairs.deleted_at));
         const allChairIds = new Set(allChairs.map((c) => c.chairId));
 
-        // 🚀 Join Faculties to get the real account_id
         const deptOfferings = await tx
           .selectDistinct({ accountId: Faculties.account_id })
           .from(CourseOfferings)
@@ -364,11 +356,11 @@ export class AnalyticsService implements IAnalyticsService {
           collegeName: Colleges.name,
           collegeCode: Colleges.initialism,
           totalExpected: sql<number>`COUNT(DISTINCT ${StudentClasses.id})::int`,
-          completed: sql<number>`COUNT(DISTINCT ${StudentEvaluations.id}) FILTER (WHERE ${StudentEvaluations.submitted_at} IS NOT NULL)::int`,
+          completed: sql<number>`COUNT(DISTINCT ${StudentEvaluationTurnout.id})::int`,
           percentage: sql<number>`
             ROUND(
               COALESCE(
-                (COUNT(DISTINCT ${StudentEvaluations.id}) FILTER (WHERE ${StudentEvaluations.submitted_at} IS NOT NULL)::numeric / 
+                (COUNT(DISTINCT ${StudentEvaluationTurnout.id})::numeric / 
                  NULLIF(COUNT(DISTINCT ${StudentClasses.id}), 0)::numeric) * 100, 
                 0
               ), 1
@@ -394,7 +386,10 @@ export class AnalyticsService implements IAnalyticsService {
             isNull(StudentClasses.deleted_at),
           ),
         )
-        .leftJoin(StudentEvaluations, eq(StudentEvaluations.student_class_id, StudentClasses.id))
+        .leftJoin(
+          StudentEvaluationTurnout,
+          eq(StudentEvaluationTurnout.course_offering_id, CourseOfferings.id),
+        )
         .where(collegeQueryCondition)
         .groupBy(Colleges.id, Colleges.name, Colleges.initialism);
 
