@@ -1439,7 +1439,7 @@ export class EvaluationReportService implements IEvaluationReportService {
           StudentEvaluationCategories,
           eq(StudentEvaluationQuestions.category_id, StudentEvaluationCategories.id),
         )
-        .where(inArray(StudentEvaluationRatings.evaluation_id, studentBallotIds));
+        .where(inArray(StudentEvaluationRatings.evaluation_id, studentEvalIds));
     }
 
     const questionMap = new Map<
