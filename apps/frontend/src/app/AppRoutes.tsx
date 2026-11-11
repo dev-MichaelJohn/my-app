@@ -10,6 +10,7 @@ import AuditLogPage from "@/features/audit-logs/page/AuditLogPage";
 // ── Lazy-Loaded Pages ──
 const LandingPage = lazy(() => import("@/features/landing/page/LandingPage"));
 const LoginPage = lazy(() => import("@/features/auth/page/LoginPage"));
+const ForgotPasswordPage = lazy(() => import("@/features/auth/page/ForgotPasswordPage"));
 const DashboardPage = lazy(() => import("@/features/dashboard/page/DashboardPage"));
 const AccountSettingsPage = lazy(() => import("@/features/users/page/AccountSettingsPage"));
 const UserPage = lazy(() => import("@/features/users/page/UserPage"));
@@ -64,6 +65,10 @@ const router = createBrowserRouter([
       {
         path: "/login",
         element: <LazyRoute Component={LoginPage} />,
+      },
+      {
+        path: "/forgot-password",
+        element: <LazyRoute Component={ForgotPasswordPage} />,
       },
     ],
   },

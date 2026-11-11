@@ -1,5 +1,11 @@
 import { http, setAccessToken, type ApiError } from "@/lib/api.lib";
-import type { GetUser, LoginAccount, VerifyOTP } from "@my-app/shared";
+import type {
+  GetUser,
+  LoginAccount,
+  VerifyOTP,
+  ForgotPasswordRequest,
+  ResetPasswordWithOtp,
+} from "@my-app/shared";
 import type { ResultAsync } from "neverthrow";
 
 export interface LoginResponse {
@@ -35,6 +41,14 @@ export class AuthAPI {
 
   getVerificationStatus(): ResultAsync<VerificationStatusResponse, ApiError> {
     return http.get<VerificationStatusResponse>("/auth/verification-status");
+  }
+
+  requestPasswordReset(payload: ForgotPasswordRequest): ResultAsync<LoginResponse, ApiError> {
+    return http.post<LoginResponse>("/auth/forgot-password", payload);
+  }
+
+  resetPasswordWithOtp(payload: ResetPasswordWithOtp): ResultAsync<void, ApiError> {
+    return http.post<void>("/auth/reset-password", payload);
   }
 
   logout(): ResultAsync<void, ApiError> {

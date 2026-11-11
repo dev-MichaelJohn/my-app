@@ -2,7 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AuthAPI } from "../api/auth.api";
 import { toQuery } from "@/lib/query.lib";
 import { setAccessToken } from "@/lib/api.lib";
-import { ONE_MINUTE, type LoginAccount, type VerifyOTP } from "@my-app/shared";
+import {
+  ONE_MINUTE,
+  type LoginAccount,
+  type VerifyOTP,
+  type ForgotPasswordRequest,
+  type ResetPasswordWithOtp,
+} from "@my-app/shared";
 
 export const AUTH_QUERY_KEY = ["auth", "me"] as const;
 
@@ -56,5 +62,17 @@ export const useLogout = () => {
       // 4. Force full page reload into /login
       window.location.href = "/login";
     },
+  });
+};
+
+export const useRequestPasswordReset = () => {
+  return useMutation({
+    mutationFn: (payload: ForgotPasswordRequest) => toQuery(authAPI.requestPasswordReset(payload)),
+  });
+};
+
+export const useResetPasswordWithOtp = () => {
+  return useMutation({
+    mutationFn: (payload: ResetPasswordWithOtp) => toQuery(authAPI.resetPasswordWithOtp(payload)),
   });
 };

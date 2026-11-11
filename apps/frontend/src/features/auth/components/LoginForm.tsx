@@ -137,7 +137,7 @@ export const LoginForm = ({ initialValues, onSuccess }: LoginFormProps) => {
       <CardFooter className="flex-col gap-2">
         <div className="flex w-full justify-between text-xs pt-1">
           <Link
-            to="/auth/forgot-password"
+            to="/forgot-password"
             className="text-primary underline-offset-4 hover:underline font-medium"
           >
             Forgot password?
