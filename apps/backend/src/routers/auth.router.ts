@@ -20,5 +20,7 @@ AuthRouter.get(
 //AuthRouter.use(authLimiter);
 AuthRouter.post("/login", authController.login);
 AuthRouter.post("/verify-otp", authController.verifyOTP);
+AuthRouter.post("/forgot-password", authController.forgotPassword);
+AuthRouter.post("/reset-password", authController.resetPasswordWithOtp);
 
 export default AuthRouter;

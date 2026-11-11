@@ -4,11 +4,13 @@ import { AppError } from "@/libs/error.lib.js";
 import { runAsync, runMiddleware } from "@/libs/express-adapter.lib.js";
 import { logger } from "@/libs/logger.lib.js";
 import { AuthenticateLocal, AuthenticateOTP, AuthenticateJWT } from "@/libs/passport.lib.js";
+import { ValidateSchema } from "@/libs/result.lib.js";
 import { AuthService, type IAuthService } from "@/services/auth.service.js";
 import { EmailService, type IEmailService } from "@/services/email.service.js";
 import { OTPService, type IOTPService } from "@/services/otp.service.js";
 import { TokenService, type ITokenService } from "@/services/token.service.js";
 import { UserService, type IUserService } from "@/services/user.service.js";
+import { ForgotPasswordRequestSchema, ResetPasswordWithOtpSchema } from "@my-app/shared";
 import { errAsync, okAsync } from "neverthrow";
 
 export class AuthController {
@@ -197,6 +199,38 @@ export class AuthController {
         message: "Verification status retrieved.",
         isVerified,
       };
+    });
+  });
+
+  forgotPassword = runAsync((req) => {
+    return ValidateSchema(ForgotPasswordRequestSchema, req.body).asyncAndThen((body) => {
+      return this.authService.requestPasswordReset(body).map((result) => ({
+        status: 200,
+        message: result.email
+          ? "Password reset verification code sent to your email."
+          : "If an account matches that ID, a password reset code has been sent.",
+        data: result,
+      }));
+    });
+  });
+
+  resetPasswordWithOtp = runAsync((req, res) => {
+    return ValidateSchema(ResetPasswordWithOtpSchema, req.body).asyncAndThen((body) => {
+      return this.authService.resetPasswordWithOtp(body, req).map(() => {
+        const isProduction = process.env.NODE_ENV === "production";
+        res.clearCookie("refresh", {
+          httpOnly: true,
+          secure: isProduction,
+          sameSite: isProduction ? "none" : "lax",
+          path: "/",
+        });
+
+        return {
+          status: 200,
+          message: "Password reset successfully. You can now log in with your new password.",
+          data: null,
+        };
+      });
     });
   });
 
