@@ -11,6 +11,8 @@ import {
   ProgramChairs,
   Programs,
   Semesters,
+  StudentBallotRatings,
+  StudentBallots,
   StudentClasses,
   StudentEvaluationCategories,
   StudentEvaluationForms,
@@ -961,62 +963,99 @@ export class EvaluationReportService implements IEvaluationReportService {
     let grandTotalStudents = 0;
     let grandTotalWeightedScore = 0;
     const allCollectedStudentComments: AnonymousFeedbackComment[] = [];
-    const allStudentEvaluationIds: number[] = [];
+    const allStudentBallotIds: number[] = [];
 
     for (let i = 0; i < offerings.length; i++) {
       const off = offerings[i]!;
 
-      const enrolled = await tx
-        .select({ id: StudentClasses.id })
-        .from(StudentClasses)
+      // ── 🛡️ Query Anonymous Ballot Box directly by course_offering_id ──
+      const ballots = await tx
+        .select({
+          id: StudentBallots.id,
+          setRating: StudentBallots.set_rating,
+          comment: StudentBallots.comment,
+          commentScore: StudentBallots.comment_score,
+          commentSentiment: StudentBallots.comment_sentiment,
+        })
+        .from(StudentBallots)
         .where(
           and(
-            eq(StudentClasses.course_offering_id, off.offeringId),
-            isNull(StudentClasses.deleted_at),
+            eq(StudentBallots.course_offering_id, off.offeringId),
+            eq(StudentBallots.schedule_id, semesterId), // schedule for this term
           ),
         );
 
-      const enrolledIds = enrolled.map((e) => e.id);
-      let classEvaluatedStudents = 0;
+      let classEvaluatedStudents = ballots.length;
       let averageSetRating = 0;
       let weightedScore = 0;
 
-      if (enrolledIds.length > 0) {
-        const submissions = await tx
-          .select({
-            id: StudentEvaluations.id,
-            setRating: StudentEvaluations.set_rating,
-            comment: StudentEvaluations.comment,
-            commentScore: StudentEvaluations.comment_score,
-            commentSentiment: StudentEvaluations.comment_sentiment,
-          })
-          .from(StudentEvaluations)
+      // Fallback for pre-migration historical submissions
+      if (classEvaluatedStudents === 0) {
+        const enrolled = await tx
+          .select({ id: StudentClasses.id })
+          .from(StudentClasses)
           .where(
             and(
-              inArray(StudentEvaluations.student_class_id, enrolledIds),
-              isNotNull(StudentEvaluations.submitted_at),
+              eq(StudentClasses.course_offering_id, off.offeringId),
+              isNull(StudentClasses.deleted_at),
             ),
           );
+        const enrolledIds = enrolled.map((e) => e.id);
 
-        classEvaluatedStudents = submissions.length;
+        if (enrolledIds.length > 0) {
+          const legacySubmissions = await tx
+            .select({
+              id: StudentEvaluations.id,
+              setRating: StudentEvaluations.set_rating,
+              comment: StudentEvaluations.comment,
+              commentScore: StudentEvaluations.comment_score,
+              commentSentiment: StudentEvaluations.comment_sentiment,
+            })
+            .from(StudentEvaluations)
+            .where(
+              and(
+                inArray(StudentEvaluations.student_class_id, enrolledIds),
+                isNotNull(StudentEvaluations.submitted_at),
+              ),
+            );
 
-        if (classEvaluatedStudents > 0) {
-          submissions.forEach((s) => allStudentEvaluationIds.push(s.id));
-          const ratingSum = submissions.reduce(
-            (acc, curr) => acc + (curr.setRating ? Number(curr.setRating) : 0),
-            0,
-          );
-          averageSetRating = Number((ratingSum / classEvaluatedStudents).toFixed(2));
-          weightedScore = Number((classEvaluatedStudents * averageSetRating).toFixed(2));
+          classEvaluatedStudents = legacySubmissions.length;
+          if (classEvaluatedStudents > 0) {
+            legacySubmissions.forEach((s) => allStudentBallotIds.push(s.id));
+            const ratingSum = legacySubmissions.reduce(
+              (acc, curr) => acc + (curr.setRating ? Number(curr.setRating) : 0),
+              0,
+            );
+            averageSetRating = Number((ratingSum / classEvaluatedStudents).toFixed(2));
+            weightedScore = Number((classEvaluatedStudents * averageSetRating).toFixed(2));
 
-          for (const sub of submissions) {
-            if (sub.comment && sub.comment.trim().length > 3) {
-              allCollectedStudentComments.push({
-                comment: sub.comment.trim(),
-                sentiment: sub.commentSentiment || "NEUTRAL",
-                score: sub.commentScore ? Number(sub.commentScore) : 0,
-              });
+            for (const sub of legacySubmissions) {
+              if (sub.comment && sub.comment.trim().length > 3) {
+                allCollectedStudentComments.push({
+                  comment: sub.comment.trim(),
+                  sentiment: sub.commentSentiment || "NEUTRAL",
+                  score: sub.commentScore ? Number(sub.commentScore) : 0,
+                });
+              }
             }
+          }
+        }
+      } else {
+        ballots.forEach((b) => allStudentBallotIds.push(b.id));
+        const ratingSum = ballots.reduce(
+          (acc, curr) => acc + (curr.setRating ? Number(curr.setRating) : 0),
+          0,
+        );
+        averageSetRating = Number((ratingSum / classEvaluatedStudents).toFixed(2));
+        weightedScore = Number((classEvaluatedStudents * averageSetRating).toFixed(2));
+
+        for (const b of ballots) {
+          if (b.comment && b.comment.trim().length > 3) {
+            allCollectedStudentComments.push({
+              comment: b.comment.trim(),
+              sentiment: b.commentSentiment || "NEUTRAL",
+              score: b.commentScore ? Number(b.commentScore) : 0,
+            });
           }
         }
       }
@@ -1095,7 +1134,7 @@ export class EvaluationReportService implements IEvaluationReportService {
     }
 
     const { setCategories, setIndicators } = await this.computeSetAnalytics(
-      allStudentEvaluationIds,
+      allStudentBallotIds,
       minRating,
       maxRating,
       tx,
@@ -1357,9 +1396,9 @@ export class EvaluationReportService implements IEvaluationReportService {
       return { setCategories: [], setIndicators: [] };
     }
 
-    const ratingRecords = await tx
+    let ratingRecords = await tx
       .select({
-        rating: StudentEvaluationRatings.rating,
+        rating: StudentBallotRatings.rating,
         questionId: StudentEvaluationQuestions.id,
         questionText: StudentEvaluationQuestions.question,
         questionOrder: StudentEvaluationQuestions.order,
@@ -1368,16 +1407,40 @@ export class EvaluationReportService implements IEvaluationReportService {
         categoryName: StudentEvaluationCategories.name,
         categoryOrder: StudentEvaluationCategories.order,
       })
-      .from(StudentEvaluationRatings)
+      .from(StudentBallotRatings)
       .innerJoin(
         StudentEvaluationQuestions,
-        eq(StudentEvaluationRatings.question_id, StudentEvaluationQuestions.id),
+        eq(StudentBallotRatings.question_id, StudentEvaluationQuestions.id),
       )
       .innerJoin(
         StudentEvaluationCategories,
         eq(StudentEvaluationQuestions.category_id, StudentEvaluationCategories.id),
       )
-      .where(inArray(StudentEvaluationRatings.evaluation_id, studentEvalIds));
+      .where(inArray(StudentBallotRatings.ballot_id, studentEvalIds));
+
+    if (ratingRecords.length === 0) {
+      ratingRecords = await tx
+        .select({
+          rating: StudentEvaluationRatings.rating,
+          questionId: StudentEvaluationQuestions.id,
+          questionText: StudentEvaluationQuestions.question,
+          questionOrder: StudentEvaluationQuestions.order,
+          questionMaxRating: StudentEvaluationQuestions.max_rating,
+          categoryId: StudentEvaluationCategories.id,
+          categoryName: StudentEvaluationCategories.name,
+          categoryOrder: StudentEvaluationCategories.order,
+        })
+        .from(StudentEvaluationRatings)
+        .innerJoin(
+          StudentEvaluationQuestions,
+          eq(StudentEvaluationRatings.question_id, StudentEvaluationQuestions.id),
+        )
+        .innerJoin(
+          StudentEvaluationCategories,
+          eq(StudentEvaluationQuestions.category_id, StudentEvaluationCategories.id),
+        )
+        .where(inArray(StudentEvaluationRatings.evaluation_id, studentBallotIds));
+    }
 
     const questionMap = new Map<
       number,

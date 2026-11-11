@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lte, gte, isNotNull, desc, asc, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, gte, isNotNull, desc, asc, ne } from "drizzle-orm";
 import { type ResultAsync } from "neverthrow";
 import db from "@/configs/db.config.js";
 import {
