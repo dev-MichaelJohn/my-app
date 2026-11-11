@@ -218,3 +218,36 @@ export type UpdateUser = z.infer<typeof UpdateUserSchema>;
 export type ChangePassword = z.infer<typeof ChangePasswordSchema>;
 export type ManageUserRoles = z.infer<typeof ManageUserRolesSchema>;
 export type SystemRole = z.infer<typeof SystemRoleSchema>;
+
+export const ForgotPasswordRequestSchema = z.object({
+  institutional_id: institutionalIdField(z.string()),
+});
+
+export const ResetPasswordWithOtpSchema = z.object({
+  email: z.string().trim().toLowerCase().pipe(z.email("Invalid email address format.")),
+  code: z
+    .string()
+    .trim()
+    .length(6, "Verification code must be 6 digits.")
+    .regex(/^\d+$/, "Verification code must contain digits only."),
+  new_password: z
+    .string()
+    .trim()
+    .min(8, "Password must be at least 8 characters long.")
+    .max(72, "Password cannot exceed 72 characters.")
+    .refine((v) => /[A-Z]/.test(v), {
+      message: "Password must contain at least one uppercase letter.",
+    })
+    .refine((v) => /[a-z]/.test(v), {
+      message: "Password must contain at least one lowercase letter.",
+    })
+    .refine((v) => /[0-9]/.test(v), {
+      message: "Password must contain at least one number.",
+    })
+    .refine((v) => /[!@#$%^&*_-]/.test(v), {
+      message: 'Password must contain at least one special character ("!@#$%^&*_-").',
+    }),
+});
+
+export type ForgotPasswordRequest = z.infer<typeof ForgotPasswordRequestSchema>;
+export type ResetPasswordWithOtp = z.infer<typeof ResetPasswordWithOtpSchema>;
