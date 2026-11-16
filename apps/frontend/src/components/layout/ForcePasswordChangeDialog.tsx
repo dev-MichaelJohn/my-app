@@ -16,7 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AUTH_QUERY_KEY } from "@/features/auth/hooks/useAuth";
 import { toast } from "sonner";
 import { ShieldAlert, KeyRound } from "lucide-react";
-import { ChangePasswordSchema, type ChangePassword } from "@my-app/shared";
+import { ChangePasswordSchema, type ChangePassword, type GetUser } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
 import { getErrorMessage } from "@/lib/error.lib";
 import { PasswordInput } from "../ui/password-input";
@@ -32,7 +32,6 @@ export function ForcePasswordChangeDialog() {
 
   const form = useForm({
     defaultValues: {
-      current_password: "",
       new_password: "",
     } as ChangePassword,
     validators: {
@@ -41,9 +40,15 @@ export function ForcePasswordChangeDialog() {
     onSubmit: async ({ value }) => {
       setError(null);
       try {
-        await changePasswordMutation.mutateAsync(value);
+        await changePasswordMutation.mutateAsync({
+          new_password: value.new_password,
+        });
         toast.success("Password set successfully! Your account is now activated.");
-        // Refetches session so is_verified becomes true
+
+        // Immediately mark user as verified in cache and refetch /auth/me
+        queryClient.setQueryData<GetUser>(AUTH_QUERY_KEY, (old) =>
+          old ? { ...old, account: { ...old.account, is_verified: true } } : old,
+        );
         await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY });
       } catch (err) {
         const apiErr = err as ApiError;
@@ -69,8 +74,8 @@ export function ForcePasswordChangeDialog() {
             Activate Your Account
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
-            You are currently logged in with a temporary password. For security compliance, please
-            create a personal password before continuing.
+            You are currently logged in with a temporary password. Please set your personal password
+            to verify and activate your account.
           </DialogDescription>
         </DialogHeader>
 
@@ -87,21 +92,6 @@ export function ForcePasswordChangeDialog() {
               {error}
             </div>
           )}
-
-          <form.Field name="current_password">
-            {(field) => (
-              <div className="space-y-1.5">
-                <Label className="text-xs text-foreground">Temporary Password</Label>
-                <PasswordInput
-                  value={field.state.value || ""}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="Enter the password from your email"
-                  className="bg-background text-xs h-9"
-                />
-              </div>
-            )}
-          </form.Field>
 
           <form.Field name="new_password">
             {(field) => {

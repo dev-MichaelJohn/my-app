@@ -1270,7 +1270,11 @@ export class UserService implements IUserService {
 
         if (!account) throw new AppError(404, "User account not found.");
 
-        if (isSelfService) {
+        const isOnboarding = !account.is_verified;
+
+        // Only require current_password if the account is already verified (e.g. Account Settings).
+        // First-time onboarding users (!is_verified) skip current_password and become verified below.
+        if (isSelfService && !isOnboarding) {
           if (!parsed.current_password) {
             throw new AppError(400, "Current password is required to change your password.");
           }
