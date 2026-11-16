@@ -28,12 +28,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Spinner } from "@/components/ui/spinner";
-import { StudentClassFormDialog } from "@/features/student-classes/components/StudentClassFormDialog";
-import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import { useDeleteStudentClass } from "@/features/student-classes/hooks/useStudentClasses";
-import { toast } from "sonner";
-import { BookOpen, Users, CheckCircle2, Clock, Search, Lock, UserPlus, Trash2 } from "lucide-react";
-import type { FacultyTeachingOffering, TeachingStudentItem } from "@my-app/shared";
+import { BookOpen, Users, CheckCircle2, Clock, Search, Lock } from "lucide-react";
+import type { FacultyTeachingOffering } from "@my-app/shared";
 
 export default function FacultyTeachingPage() {
   const { data: activeSemester } = useActiveSemester();
@@ -44,28 +40,11 @@ export default function FacultyTeachingPage() {
   const currentSemesterId = selectedSemesterId ?? activeSemester?.id;
   const selectedSemester = semestersList.find((s) => s.id === currentSemesterId);
 
-  const { data: offerings, isLoading, refetch } = useFacultyTeachingOfferings(currentSemesterId);
+  const { data: offerings, isLoading } = useFacultyTeachingOfferings(currentSemesterId);
 
   const [activeOfferingDetails, setActiveOfferingDetails] =
     useState<FacultyTeachingOffering | null>(null);
   const [studentSearch, setStudentSearch] = useState("");
-  const [enrollModalOpen, setEnrollModalOpen] = useState(false);
-  const [studentToUnenroll, setStudentToUnenroll] = useState<TeachingStudentItem | null>(null);
-
-  const deleteStudentClassMutation = useDeleteStudentClass();
-
-  const handleConfirmUnenroll = async () => {
-    if (!studentToUnenroll || !activeOfferingDetails) return;
-
-    try {
-      await deleteStudentClassMutation.mutateAsync(studentToUnenroll.student_class_id);
-      toast.success(`${studentToUnenroll.first_name} ${studentToUnenroll.last_name} unenrolled.`);
-      setStudentToUnenroll(null);
-      refetch();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to unenroll student.");
-    }
-  };
 
   const filteredStudents = (activeOfferingDetails?.students ?? []).filter((s) => {
     const term = studentSearch.toLowerCase();
@@ -82,8 +61,8 @@ export default function FacultyTeachingPage() {
             My Teaching Classes & Evaluation Tracker
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Monitor class rosters, add/unenroll students for your assigned course offerings, and
-            track evaluation status.
+            Monitor class rosters and track student evaluation completion for your assigned course
+            offerings.
           </p>
         </div>
 
@@ -203,7 +182,7 @@ export default function FacultyTeachingPage() {
                     className="w-full text-xs gap-1.5 h-8 border-border bg-card hover:bg-muted"
                   >
                     <Users className="w-3.5 h-3.5 text-primary" />
-                    <span>Manage Roster ({item.total_students})</span>
+                    <span>View Roster ({item.total_students})</span>
                   </Button>
                 </CardFooter>
               </Card>
@@ -212,7 +191,7 @@ export default function FacultyTeachingPage() {
         </div>
       )}
 
-      {/* 🚀 Student List & Management Modal */}
+      {/* Read-Only Student Roster Modal */}
       {activeOfferingDetails && (
         <Dialog
           open={Boolean(activeOfferingDetails)}
@@ -220,23 +199,13 @@ export default function FacultyTeachingPage() {
         >
           <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto border-border bg-card text-card-foreground">
             <DialogHeader>
-              <div className="flex items-center justify-between pr-4">
-                <DialogTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
-                  <Users className="w-5 h-5 text-primary" />
-                  <span>
-                    {activeOfferingDetails.offering.course_curriculum.course.initialism} — Class
-                    Roster
-                  </span>
-                </DialogTitle>
-                <Button
-                  size="sm"
-                  onClick={() => setEnrollModalOpen(true)}
-                  className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span>Enroll Student</span>
-                </Button>
-              </div>
+              <DialogTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
+                <Users className="w-5 h-5 text-primary" />
+                <span>
+                  {activeOfferingDetails.offering.course_curriculum.course.initialism} — Class
+                  Roster
+                </span>
+              </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
                 {activeOfferingDetails.offering.class.program.initialism}{" "}
                 {activeOfferingDetails.offering.class.year_level}-
@@ -250,8 +219,8 @@ export default function FacultyTeachingPage() {
             <div className="p-3 bg-muted/60 border border-border rounded-xl flex items-start gap-2.5 text-xs text-muted-foreground">
               <Lock className="w-4 h-4 text-primary shrink-0 mt-0.5" />
               <span>
-                <strong>Class Management:</strong> You can enroll irregular students or remove
-                students who are not in your class. Submissions remain strictly anonymous.
+                <strong>Read-Only Roster:</strong> Submissions remain strictly anonymous. Contact an
+                administrator if class list adjustments are needed.
               </span>
             </div>
 
@@ -266,7 +235,7 @@ export default function FacultyTeachingPage() {
               />
             </div>
 
-            {/* Students Table with Unenroll Action */}
+            {/* Students Table */}
             <div className="border border-border rounded-xl overflow-hidden">
               <Table>
                 <TableHeader className="bg-muted/40">
@@ -274,14 +243,13 @@ export default function FacultyTeachingPage() {
                     <TableHead className="text-xs font-bold">Student Name</TableHead>
                     <TableHead className="text-xs font-bold">ID Number</TableHead>
                     <TableHead className="text-xs font-bold text-center">Status</TableHead>
-                    <TableHead className="text-xs font-bold text-right w-[80px]">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredStudents.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={4}
+                        colSpan={3}
                         className="text-center py-6 text-xs text-muted-foreground"
                       >
                         No matching students found.
@@ -310,17 +278,6 @@ export default function FacultyTeachingPage() {
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setStudentToUnenroll(s)}
-                            className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                            title="Unenroll Student"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -330,38 +287,6 @@ export default function FacultyTeachingPage() {
           </DialogContent>
         </Dialog>
       )}
-
-      {/* Enroll Student Dialog for this Offering */}
-      {enrollModalOpen && activeOfferingDetails && (
-        <StudentClassFormDialog
-          open={enrollModalOpen}
-          onOpenChange={(open) => {
-            setEnrollModalOpen(open);
-            if (!open) refetch();
-          }}
-          offering={activeOfferingDetails.offering}
-        />
-      )}
-
-      {/* Unenroll Student Confirmation */}
-      <ConfirmActionDialog
-        open={Boolean(studentToUnenroll)}
-        onOpenChange={(open) => !open && setStudentToUnenroll(null)}
-        title="Unenroll Student from Class?"
-        description={
-          <span>
-            Are you sure you want to unenroll{" "}
-            <strong>
-              {studentToUnenroll?.first_name} {studentToUnenroll?.last_name}
-            </strong>{" "}
-            from this course offering?
-          </span>
-        }
-        confirmLabel="Unenroll"
-        variant="destructive"
-        isLoading={deleteStudentClassMutation.isPending}
-        onConfirm={handleConfirmUnenroll}
-      />
     </div>
   );
 }

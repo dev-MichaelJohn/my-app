@@ -6,7 +6,6 @@ import {
   CourseCurriculums,
   CourseOfferings,
   Courses,
-  Faculties,
   PersonalDetails,
   Programs,
   Semesters,
@@ -176,6 +175,15 @@ export class StudentClassService implements IStudentClassService {
       )
     `,
   };
+
+  private assertAdminActor(actorUser?: GetUser) {
+    if (!actorUser) return;
+    const roles = actorUser.roles ?? [];
+    const isAdmin = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+    if (!isAdmin) {
+      throw new AppError(403, "Only administrators can modify class lists.");
+    }
+  }
 
   getStudentClassById(
     id: number,
@@ -379,6 +387,8 @@ export class StudentClassService implements IStudentClassService {
   ): ResultAsync<GetStudentClass, AppError> {
     return ValidateSchema(StudentClassInsert, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
+        this.assertAdminActor(actorUser);
+
         const isStudent = await this.userService.hasRole(parsed.student_account_id, "STUDENT", tx);
         if (isStudent.isErr()) throw isStudent.error;
         if (!isStudent.value) {
@@ -393,28 +403,6 @@ export class StudentClassService implements IStudentClassService {
         const offering = offeringResult.value;
 
         await this.semesterService.validateSemesterOpen(offering.semester.id, tx);
-
-        if (actorUser) {
-          const roles = actorUser.roles ?? [];
-          const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
-          const isSupervisor = roles.includes("SUPERVISOR");
-
-          if (!isPrivileged && !isSupervisor && roles.includes("FACULTY")) {
-            const [myFaculty] = await tx
-              .select({ id: Faculties.id })
-              .from(Faculties)
-              .where(
-                and(eq(Faculties.account_id, actorUser.account.id), isNull(Faculties.deleted_at)),
-              );
-
-            if (!myFaculty || offering.faculty?.account.id !== actorUser.account.id) {
-              throw new AppError(
-                403,
-                "You can only enroll students into course offerings assigned to you.",
-              );
-            }
-          }
-        }
 
         const [existing] = await tx
           .select()
@@ -487,6 +475,8 @@ export class StudentClassService implements IStudentClassService {
       }
 
       return WithTransaction(client, async (tx) => {
+        this.assertAdminActor(actorUser);
+
         const existing = await this.getStudentClassById(id, tx);
         if (existing.isErr()) throw existing.error;
 
@@ -544,26 +534,13 @@ export class StudentClassService implements IStudentClassService {
     req?: Request,
   ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
+      this.assertAdminActor(actorUser);
+
       const existing = await this.getStudentClassById(id, tx);
       if (existing.isErr()) throw existing.error;
       const current = existing.value;
 
       await this.semesterService.validateSemesterOpen(current.offering.semester.id, tx);
-
-      if (actorUser) {
-        const roles = actorUser.roles ?? [];
-        const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
-        const isSupervisor = roles.includes("SUPERVISOR");
-
-        if (!isPrivileged && !isSupervisor && roles.includes("FACULTY")) {
-          if (current.offering.faculty?.account.id !== actorUser.account.id) {
-            throw new AppError(
-              403,
-              "You can only unenroll students from course offerings assigned to you.",
-            );
-          }
-        }
-      }
 
       const [deleted] = await tx
         .update(StudentClasses)
@@ -595,6 +572,8 @@ export class StudentClassService implements IStudentClassService {
     req?: Request,
   ): ResultAsync<GetStudentClass, AppError> {
     return WithTransaction(client, async (tx) => {
+      this.assertAdminActor(actorUser);
+
       const existing = await this.getStudentClassById(id, tx, true);
       if (existing.isErr()) throw existing.error;
       const current = existing.value;

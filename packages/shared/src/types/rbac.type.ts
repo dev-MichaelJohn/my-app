@@ -182,7 +182,7 @@ export const ROLE_PERMISSION_MATRIX: Record<RoleName, readonly Permission[]> = {
   ],
 
   // ── 3. SUPERVISOR (College Deans & Program Chairs) ──
-  // Can manage institutional data within their college / program scope
+  // Read-only access to student class lists/rosters; cannot add or remove students
   [SYSTEM_ROLES.SUPERVISOR]: [
     PERMISSIONS.COLLEGE_READ,
     PERMISSIONS.COLLEGE_UPDATE,
@@ -219,15 +219,8 @@ export const ROLE_PERMISSION_MATRIX: Record<RoleName, readonly Permission[]> = {
     PERMISSIONS.COURSE_OFFERING_UPDATE,
     PERMISSIONS.COURSE_OFFERING_DELETE,
 
-    PERMISSIONS.CLASS_STUDENT_CREATE,
     PERMISSIONS.CLASS_STUDENT_READ,
-    PERMISSIONS.CLASS_STUDENT_UPDATE,
-    PERMISSIONS.CLASS_STUDENT_DELETE,
-
-    PERMISSIONS.STUDENT_CLASS_CREATE,
     PERMISSIONS.STUDENT_CLASS_READ,
-    PERMISSIONS.STUDENT_CLASS_UPDATE,
-    PERMISSIONS.STUDENT_CLASS_DELETE,
 
     PERMISSIONS.STUDENT_READ,
 
@@ -245,13 +238,11 @@ export const ROLE_PERMISSION_MATRIX: Record<RoleName, readonly Permission[]> = {
   ],
 
   // ── 4. FACULTY ──
-  // Can manage students enrolled in the class-courses they teach
+  // Read-only access to teaching classes, class rosters, self-reports, and analytics
   [SYSTEM_ROLES.FACULTY]: [
     PERMISSIONS.SEMESTER_READ,
     PERMISSIONS.COURSE_OFFERING_READ,
     PERMISSIONS.STUDENT_CLASS_READ,
-    PERMISSIONS.STUDENT_CLASS_CREATE,
-    PERMISSIONS.STUDENT_CLASS_DELETE,
     PERMISSIONS.EVALUATION_PERIOD_READ,
     PERMISSIONS.EVALUATION_REPORT_VIEW_SELF, // Only Annex D (FEDAF) returned
     PERMISSIONS.ACCOUNT_UPDATE_OWN,
