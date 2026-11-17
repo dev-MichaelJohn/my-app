@@ -10,7 +10,6 @@ import {
   Accounts,
   CourseOfferings,
   Faculties,
-  FacultyInsert,
   FacultyQuerySchema,
   FacultyUpdate,
   PersonalDetails,

@@ -1,5 +1,10 @@
 import { http, type ApiError } from "@/lib/api.lib";
-import type { GetFaculty, IFacultyInsert, IFacultyUpdate, PaginatedData } from "@my-app/shared";
+import type {
+  CreateFacultyPayload,
+  GetFaculty,
+  IFacultyUpdate,
+  PaginatedData,
+} from "@my-app/shared";
 import type { ResultAsync } from "neverthrow";
 
 export class FacultyAPI {
@@ -11,7 +16,7 @@ export class FacultyAPI {
     return http.get<GetFaculty>(`/faculties/${id}`);
   }
 
-  createFaculty(info: IFacultyInsert): ResultAsync<GetFaculty, ApiError> {
+  createFaculty(info: CreateFacultyPayload): ResultAsync<GetFaculty, ApiError> {
     return http.post<GetFaculty>("/faculties", info);
   }
 

@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toQuery } from "@/lib/query.lib";
-import type { IFacultyInsert, IFacultyUpdate } from "@my-app/shared";
+import type { CreateFacultyPayload, IFacultyUpdate } from "@my-app/shared";
 import { FacultyAPI } from "../api/faculty.api";
 
 const facultyApi = new FacultyAPI();
@@ -40,13 +40,11 @@ export const useCreateFaculty = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (info: IFacultyInsert) => toQuery(facultyApi.createFaculty(info)),
+    mutationFn: (info: CreateFacultyPayload) => toQuery(facultyApi.createFaculty(info)),
     onSuccess: () => {
-      // Invalidate all faculty listings
       queryClient.invalidateQueries({ queryKey: FACULTY_KEYS.all });
-      // Invalidate offerings so the assigned instructor dropdown picks up the new faculty
+      queryClient.invalidateQueries({ queryKey: ["users"] });
       queryClient.invalidateQueries({ queryKey: ["offerings"] });
-      // Invalidate programs so department counts refresh
       queryClient.invalidateQueries({ queryKey: ["programs"] });
     },
   });
