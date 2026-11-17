@@ -1299,21 +1299,17 @@ export class EvaluationReportService implements IEvaluationReportService {
       total_weighted_score: isOwnReport ? 0 : Number(report.total_weighted_score),
       calculation_formula: report.calculation_formula,
       class_breakdown: isOwnReport ? [] : rawClassBreakdown,
-      student_comments: isOwnReport
-        ? []
-        : (report.student_comments as AnonymousFeedbackComment[]) || [],
+      student_comments: (report.student_comments as AnonymousFeedbackComment[]) || [],
       supervisor_comments: (report.supervisor_comments as SupervisorFeedbackComment[]) || [],
-      set_category_analytics: isOwnReport
-        ? []
-        : (report.set_category_analytics as CategoryAnalytics[]) || [],
-      set_indicator_analytics: isOwnReport
-        ? []
-        : (report.set_indicator_analytics as IndicatorAnalytics[]) || [],
+      set_category_analytics: (report.set_category_analytics as CategoryAnalytics[]) || [],
+      set_indicator_analytics: (report.set_indicator_analytics as IndicatorAnalytics[]) || [],
       sef_category_analytics: (report.sef_category_analytics as CategoryAnalytics[]) || [],
       sef_indicator_analytics: (report.sef_indicator_analytics as IndicatorAnalytics[]) || [],
-      analytics_summary: isOwnReport
-        ? { highestIndicators: [], lowestIndicators: [], categoryComparison: [] }
-        : (report.analytics_summary as any),
+      analytics_summary: (report.analytics_summary as any) || {
+        highestIndicators: [],
+        lowestIndicators: [],
+        categoryComparison: [],
+      },
       fedaf_plan: rawPlan,
       status: report.status as ReportStatus,
       created_at: report.created_at.toISOString(),
