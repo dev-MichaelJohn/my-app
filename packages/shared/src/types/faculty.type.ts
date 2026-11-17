@@ -1,6 +1,6 @@
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-orm/zod";
 import { Faculties } from "../schemas/institution.schema.js";
-import { GetUserSchema } from "./user.type.js";
+import { CreateUserSchema, GetUserSchema } from "./user.type.js";
 import { ProgramSelect } from "./program.type.js";
 import z from "zod";
 
@@ -9,6 +9,13 @@ export const FacultyInsert = createInsertSchema(Faculties, {
   account_id: z.number().int().positive("Please select a valid user account."),
   program_id: z.number().int().positive("Please select a valid program."),
 }).omit({ created_at: true, updated_at: true, deleted_at: true });
+
+export const CreateFacultyNewUserSchema = z.object({
+  program_id: z.number().int().positive("Please select a valid program."),
+  new_user: CreateUserSchema.pick({ account: true, details: true }),
+});
+
+export const CreateFacultyPayloadSchema = z.union([FacultyInsert, CreateFacultyNewUserSchema]);
 
 export const FacultyUpdate = createUpdateSchema(Faculties).omit({
   id: true,
@@ -30,11 +37,13 @@ export const FacultyQuerySchema = z.object({
   program_id: z.coerce.number().int().positive().optional(),
   college_id: z.coerce.number().int().positive().optional(),
   is_archived: z.preprocess((val) => val === "true" || val === true, z.boolean()).default(false),
-  unscoped: z.preprocess((val) => val === "true" || val === true, z.boolean()).optional(), // 👈 Allows fetching all university faculty
+  unscoped: z.preprocess((val) => val === "true" || val === true, z.boolean()).optional(),
 });
 
 export type IFacultySelect = z.infer<typeof FacultySelect>;
 export type IFacultyInsert = z.infer<typeof FacultyInsert>;
+export type ICreateFacultyNewUser = z.infer<typeof CreateFacultyNewUserSchema>;
+export type CreateFacultyPayload = z.infer<typeof CreateFacultyPayloadSchema>;
 export type IFacultyUpdate = z.infer<typeof FacultyUpdate>;
 export type GetFaculty = z.infer<typeof GetFacultySchema>;
 export type FacultyQuery = z.infer<typeof FacultyQuerySchema>;
