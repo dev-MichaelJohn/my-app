@@ -371,6 +371,8 @@ export class ProgramService implements IProgramService {
           throw new AppError(500, "Failed to assign program chair to the program.");
         }
 
+        await this.ensureFacultyAppointment(account_id, programRecord.id, tx, actorUser, req);
+
         await logAuditEvent({
           actor: actorUser,
           req,
@@ -408,6 +410,22 @@ export class ProgramService implements IProgramService {
         const getProgram = await this.getProgramById(id, tx);
         if (getProgram.isErr()) throw getProgram.error;
         const existingProgram = getProgram.value;
+
+        const actorRoles = actorUser?.roles ?? [];
+        const isPrivilegedAdmin = actorRoles.includes("SYS_ADMIN") || actorRoles.includes("ADMIN");
+
+        if (
+          hasChairInfo &&
+          !isPrivilegedAdmin &&
+          actorUser &&
+          existingProgram.chair?.account.id === actorUser.account.id &&
+          (chair === null || !this.sameChairInfo(chair, existingProgram))
+        ) {
+          throw new AppError(
+            403,
+            "You cannot demote or remove yourself as Program Chair. Only your College Dean or an administrator can reassign this office.",
+          );
+        }
 
         let updatedProgramRecord = existingProgram.program;
         let finalChairUser: GetUser | null = existingProgram.chair;
@@ -565,6 +583,14 @@ export class ProgramService implements IProgramService {
                 throw new AppError(500, "Failed to assign new chair to program.");
               }
 
+              await this.ensureFacultyAppointment(
+                account_id,
+                updatedProgramRecord.id,
+                tx,
+                actorUser,
+                req,
+              );
+
               await logAuditEvent({
                 actor: actorUser,
                 req,
@@ -599,6 +625,16 @@ export class ProgramService implements IProgramService {
       const existingProgram = getProgram.value;
 
       await this.checkProgramDependencies(existingProgram.program.id, tx);
+      const actorRoles = actorUser?.roles ?? [];
+      const isPrivilegedAdmin = actorRoles.includes("SYS_ADMIN") || actorRoles.includes("ADMIN");
+
+      if (
+        !isPrivilegedAdmin &&
+        actorUser &&
+        existingProgram.chair?.account.id === actorUser.account.id
+      ) {
+        throw new AppError(403, "You cannot archive a program while serving as its Program Chair.");
+      }
 
       if (existingProgram.chair) {
         const chairId = existingProgram.chair.account.id;
@@ -802,6 +838,77 @@ export class ProgramService implements IProgramService {
           ", ",
         )}. Please transfer or archive them first.`,
       );
+    }
+  }
+
+  private async ensureFacultyAppointment(
+    accountId: number,
+    programId: number,
+    tx: PgTransaction,
+    actorUser?: GetUser,
+    req?: Request,
+  ): Promise<void> {
+    const grantFacultyRes = await this.userService.grantRole(accountId, "FACULTY", tx);
+    if (grantFacultyRes.isErr()) throw grantFacultyRes.error;
+
+    const [activeAppointment] = await tx
+      .select()
+      .from(Faculties)
+      .where(and(eq(Faculties.account_id, accountId), isNull(Faculties.deleted_at)));
+
+    if (activeAppointment) {
+      return; // Already holds an active departmental faculty appointment
+    }
+
+    const [archivedForProgram] = await tx
+      .select()
+      .from(Faculties)
+      .where(
+        and(
+          eq(Faculties.account_id, accountId),
+          eq(Faculties.program_id, programId),
+          isNotNull(Faculties.deleted_at),
+        ),
+      );
+
+    if (archivedForProgram) {
+      const [restored] = await tx
+        .update(Faculties)
+        .set({ deleted_at: null, updated_at: new Date() })
+        .where(eq(Faculties.id, archivedForProgram.id))
+        .returning();
+
+      if (restored) {
+        await logAuditEvent({
+          actor: actorUser,
+          req,
+          action: "RESTORE",
+          entity: "faculties",
+          entityId: restored.id,
+          entityName: `Auto-appointed Faculty #${accountId} to Program #${programId}`,
+          newRecord: restored,
+          tx,
+        });
+      }
+      return;
+    }
+
+    const [created] = await tx
+      .insert(Faculties)
+      .values({ account_id: accountId, program_id: programId })
+      .returning();
+
+    if (created) {
+      await logAuditEvent({
+        actor: actorUser,
+        req,
+        action: "CREATE",
+        entity: "faculties",
+        entityId: created.id,
+        entityName: `Auto-appointed Faculty #${accountId} to Program #${programId}`,
+        newRecord: created,
+        tx,
+      });
     }
   }
 }

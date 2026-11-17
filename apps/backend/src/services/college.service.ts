@@ -397,6 +397,22 @@ export class CollegeService implements ICollegeService {
         if (getCollege.isErr()) throw getCollege.error;
         const existingCollege = getCollege.value;
 
+        const actorRoles = actorUser?.roles ?? [];
+        const isPrivilegedAdmin = actorRoles.includes("SYS_ADMIN") || actorRoles.includes("ADMIN");
+
+        if (
+          hasDeanInfo &&
+          !isPrivilegedAdmin &&
+          actorUser &&
+          existingCollege.dean?.account.id === actorUser.account.id &&
+          (dean === null || !this.sameDeanInfo(dean, existingCollege))
+        ) {
+          throw new AppError(
+            403,
+            "You cannot demote or remove yourself as Dean of this college. Only an administrator can reassign this office.",
+          );
+        }
+
         let updatedCollegeRecord: ICollegeSelect = existingCollege.college;
         let finalDeanUser: GetUser | null = existingCollege.dean;
 
@@ -572,6 +588,17 @@ export class CollegeService implements ICollegeService {
       const result = await this.getCollegeById(id, tx);
       if (result.isErr()) throw result.error;
       const existingCollege = result.value;
+
+      const actorRoles = actorUser?.roles ?? [];
+      const isPrivilegedAdmin = actorRoles.includes("SYS_ADMIN") || actorRoles.includes("ADMIN");
+
+      if (
+        !isPrivilegedAdmin &&
+        actorUser &&
+        existingCollege.dean?.account.id === actorUser.account.id
+      ) {
+        throw new AppError(403, "You cannot archive a college while serving as its Dean.");
+      }
 
       const programs = await tx
         .select()

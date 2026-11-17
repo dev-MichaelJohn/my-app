@@ -630,6 +630,15 @@ export class UserService implements IUserService {
           const chairships = target.offices?.chairships ?? [];
           const isHoldingOffice = deanships.length > 0 || chairships.length > 0;
 
+          if (
+            isSelf &&
+            !isSysAdmin &&
+            parsed.role !== targetRoles[0] &&
+            !targetRoles.includes(parsed.role)
+          ) {
+            throw new AppError(403, "You cannot modify or demote your own assigned roles.");
+          }
+
           if (isHoldingOffice && parsed.role !== "SUPERVISOR") {
             const deanStr = deanships.map((d) => d.initialism).join(", ");
             const chairStr = chairships.map((c) => c.initialism).join(", ");
@@ -1095,6 +1104,9 @@ export class UserService implements IUserService {
             403,
             "Only System Administrators can manage roles for administrative accounts.",
           );
+        }
+        if (actorUser?.account?.id === accountId && !isSysAdmin) {
+          throw new AppError(403, "You cannot modify or demote your own system roles.");
         }
         if ((parsed.roles.includes("ADMIN") || parsed.roles.includes("SYS_ADMIN")) && !isSysAdmin) {
           throw new AppError(403, "Only System Administrators can grant administrative roles.");

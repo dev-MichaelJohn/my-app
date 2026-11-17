@@ -430,6 +430,16 @@ export class FacultyService implements IFacultyService {
         const existing = await this.getFacultyById(id, tx);
         if (existing.isErr()) throw existing.error;
 
+        const actorRoles = actorUser?.roles ?? [];
+        const isPrivilegedAdmin = actorRoles.includes("SYS_ADMIN") || actorRoles.includes("ADMIN");
+
+        if (!isPrivilegedAdmin && actorUser && existing.value.account_id === actorUser.account.id) {
+          throw new AppError(
+            403,
+            "You cannot transfer or modify your own departmental faculty appointment.",
+          );
+        }
+
         await this.assertSupervisoryProgramScope(existing.value.program_id, actorUser, tx);
 
         if (parsed.program_id) {
@@ -477,6 +487,13 @@ export class FacultyService implements IFacultyService {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getFacultyById(id, tx);
       if (existing.isErr()) throw existing.error;
+
+      const actorRoles = actorUser?.roles ?? [];
+      const isPrivilegedAdmin = actorRoles.includes("SYS_ADMIN") || actorRoles.includes("ADMIN");
+
+      if (!isPrivilegedAdmin && actorUser && existing.value.account_id === actorUser.account.id) {
+        throw new AppError(403, "You cannot remove your own departmental faculty appointment.");
+      }
 
       await this.assertSupervisoryProgramScope(existing.value.program_id, actorUser, tx);
 

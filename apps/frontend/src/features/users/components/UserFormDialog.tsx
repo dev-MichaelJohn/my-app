@@ -84,6 +84,15 @@ function FormInner({ userToEdit, onClose }: { userToEdit?: GetUser | null; onClo
     ? SystemRoles.enumValues
     : SystemRoles.enumValues.filter((r) => r !== "ADMIN" && r !== "SYS_ADMIN");
 
+  const getInitialRole = (): SystemRole => {
+    const roles = userToEdit?.roles ?? [];
+    if (isHoldingOffice || roles.includes("SUPERVISOR")) return "SUPERVISOR";
+    if (roles.includes("SYS_ADMIN")) return "SYS_ADMIN";
+    if (roles.includes("ADMIN")) return "ADMIN";
+    if (roles.includes("FACULTY")) return "FACULTY";
+    return (roles[0] as SystemRole) || "STUDENT";
+  };
+
   const [defaultValues] = useState<CreateUser>(() => ({
     account: {
       email: userToEdit?.account.email || "",
@@ -96,7 +105,7 @@ function FormInner({ userToEdit, onClose }: { userToEdit?: GetUser | null; onClo
       middle_name: userToEdit?.details.middle_name || "",
       suffix: userToEdit?.details.suffix || "",
     },
-    role: (userToEdit?.roles?.[0] as SystemRole) || "STUDENT",
+    role: getInitialRole(),
   }));
 
   const form = useForm({
@@ -146,7 +155,7 @@ function FormInner({ userToEdit, onClose }: { userToEdit?: GetUser | null; onClo
               password: pendingValues.account.password || undefined,
             },
             details: pendingValues.details,
-            role: pendingValues.role,
+            ...(isHoldingOffice ? {} : { role: pendingValues.role }),
           },
         });
         toast.success(
