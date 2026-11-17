@@ -149,8 +149,9 @@ export function AnnexCDocument({ report }: Props) {
                     {row.courseCode}
                   </TableCell>
                   <TableCell className="font-medium">{row.yearSection}</TableCell>
-                  {/* 🔒 Mask individual student count for anonymity */}
-                  <TableCell className="text-center font-mono text-muted-foreground">-</TableCell>
+                  <TableCell className="text-center font-mono text-muted-foreground">
+                    {row.noOfStudents ?? "-"}
+                  </TableCell>
                   <TableCell className="text-right font-mono font-semibold">
                     {row.averageSetRating.toFixed(2)}
                   </TableCell>
