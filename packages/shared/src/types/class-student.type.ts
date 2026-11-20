@@ -2,7 +2,7 @@ import { createInsertSchema, createSelectSchema, createUpdateSchema } from "driz
 import { ClassStudents } from "../schemas/institution.schema.js";
 import z from "zod";
 import { GetClassSchema } from "./class.type.js";
-import { GetUserSchema } from "./user.type.js";
+import { CreateUserSchema, GetUserSchema } from "./user.type.js";
 import { SemesterSelect } from "./semester.type.js";
 
 const classIdField = (schema: z.ZodNumber) =>
@@ -26,6 +26,17 @@ export const ClassStudentInsert = createInsertSchema(ClassStudents, {
   semester_id: semesterIdField,
 });
 
+export const CreateClassStudentNewUserSchema = z.object({
+  class_id: z.number().int().positive("Please select a valid class."),
+  semester_id: z.number().int().positive("Please select a valid semester."),
+  new_user: CreateUserSchema.pick({ account: true, details: true }),
+});
+
+export const CreateClassStudentPayloadSchema = z.union([
+  ClassStudentInsert,
+  CreateClassStudentNewUserSchema,
+]);
+
 export const ClassStudentUpdate = createUpdateSchema(ClassStudents, {
   class_id: classIdField,
   student_account_id: studentIdField,
@@ -34,6 +45,8 @@ export const ClassStudentUpdate = createUpdateSchema(ClassStudents, {
 
 export type IClassStudentSelect = z.infer<typeof ClassStudentSelect>;
 export type IClassStudentInsert = z.infer<typeof ClassStudentInsert>;
+export type ICreateClassStudentNewUser = z.infer<typeof CreateClassStudentNewUserSchema>;
+export type CreateClassStudentPayload = z.infer<typeof CreateClassStudentPayloadSchema>;
 export type IClassStudentUpdate = z.infer<typeof ClassStudentUpdate>;
 
 export const GetClassStudentSchema = ClassStudentSelect.extend({

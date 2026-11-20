@@ -6,7 +6,6 @@ import type {
   GetSupervisorEvaluationForm,
 } from "./evaluation-instrument.type.js";
 
-// ── Rating Submission Payload ──
 export const EvaluationRatingItemSchema = z.object({
   question_id: z.number().int().positive("Question ID is required."),
   rating: z.number().int().min(1, "Rating must be at least 1."),
@@ -14,13 +13,12 @@ export const EvaluationRatingItemSchema = z.object({
 
 export const SubmitStudentEvaluationSchema = z.object({
   schedule_id: z.number().int().positive("Schedule ID is required."),
-  student_class_id: z.number().int().positive("Student class enrollment ID is required."),
+  offering_student_id: z.number().int().positive("Offering student enrollment ID is required."),
   ratings: z.array(EvaluationRatingItemSchema).min(1, "At least one rating is required."),
   comment: z.string().trim().max(1000, "Comment cannot exceed 1000 characters.").optional(),
   is_draft: z.boolean().default(false),
 });
 
-// ── 🔑 SEF Submission Payload (Evaluates Faculty for the Term) ──
 export const SubmitSupervisorEvaluationSchema = z.object({
   schedule_id: z.number().int().positive("Schedule ID is required."),
   faculty_id: z.number().int().positive("Faculty ID is required."),
@@ -32,7 +30,6 @@ export const SubmitSupervisorEvaluationSchema = z.object({
 export type SubmitStudentEvaluation = z.infer<typeof SubmitStudentEvaluationSchema>;
 export type SubmitSupervisorEvaluation = z.infer<typeof SubmitSupervisorEvaluationSchema>;
 
-// ── Sentiment Analysis Models ──
 export type SentimentClassification = "POSITIVE" | "NEUTRAL" | "NEGATIVE" | "MIXED";
 
 export interface AspectBreakdown {
@@ -53,9 +50,8 @@ export interface SentimentAnalysisResult {
   summary: string;
 }
 
-// ── Evaluable Item Models ──
 export interface EvaluableStudentSubject {
-  student_class_id: number;
+  offering_student_id: number;
   offering: GetOffering;
   has_submitted: boolean;
   is_draft: boolean;
@@ -64,17 +60,16 @@ export interface EvaluableStudentSubject {
   evaluation_id: number | null;
 }
 
-// ── 🔑 Course Load Context Item (Shown to supervisor while assessing faculty) ──
 export interface SupervisorTeachingLoadItem {
   offering_id: number;
   course_code: string;
   course_name: string;
+  course_type: "PROFESSIONAL" | "GENERAL_EDUCATION";
   year_level: string;
   section: string;
   program_code: string;
 }
 
-// ── 🔑 Evaluable Faculty for Supervisors ──
 export interface EvaluableSupervisorFaculty {
   faculty: GetUser;
   has_submitted: boolean;
@@ -87,7 +82,7 @@ export interface EvaluableSupervisorFaculty {
 
 export interface StudentEvaluationFormView {
   schedule_id: number;
-  student_class_id: number;
+  offering_student_id: number;
   form: GetStudentEvaluationForm;
   offering: GetOffering;
   saved_ratings: Record<number, number>;
@@ -96,7 +91,6 @@ export interface StudentEvaluationFormView {
   submitted_at: Date | string | null;
 }
 
-// ── 🔑 Supervisor Questionnaire View ──
 export interface SupervisorEvaluationFormView {
   schedule_id: number;
   faculty_id: number;
@@ -110,7 +104,7 @@ export interface SupervisorEvaluationFormView {
 }
 
 export interface TeachingStudentItem {
-  student_class_id: number;
+  offering_student_id: number;
   student_account_id: number;
   institutional_id: string;
   first_name: string;

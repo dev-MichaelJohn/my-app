@@ -1,5 +1,5 @@
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-orm/zod";
-import { Courses } from "../schemas/institution.schema.js";
+import { Courses, CourseTypeEnum } from "../schemas/institution.schema.js";
 import z from "zod";
 
 const nameField = (schema: z.ZodString) =>
@@ -44,6 +44,7 @@ export const CourseQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(10),
   search: z.string().trim().optional(),
   program_id: z.coerce.number().int().positive().optional(),
+  course_type: z.enum(CourseTypeEnum.enumValues).optional(),
   is_archived: z
     .preprocess((val) => {
       if (val === "true" || val === true || val === "1" || val === 1) return true;

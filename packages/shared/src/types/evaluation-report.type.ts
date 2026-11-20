@@ -71,7 +71,6 @@ export interface EvaluationAnalyticsSummary {
     categoryName: string;
     setAverage: number | null;
     sefAverage: number | null;
-    gap: number | null; // sef - set difference
   }[];
 }
 

@@ -30,7 +30,6 @@ export interface DomainCompetencyMetric {
   sefScore: number | null;
   institutionBenchmark: number;
   deltaFromBenchmark: number;
-  perceptionGap: number | null;
 }
 
 export interface IndicatorDiagnosis {
@@ -49,7 +48,6 @@ export interface EntityBarComparison {
   entityCode: string;
   setRating: number;
   sefRating: number | null;
-  perceptionGap: number | null;
   totalFaculty: number;
   totalEvaluations: number;
   rank?: number | undefined;
@@ -74,7 +72,6 @@ export interface ComprehensiveAnalyticsReport {
   kpis: {
     overallSet: number;
     overallSef: number | null;
-    perceptionGap: number | null;
     setChangePercentage: number;
     sefChangePercentage: number;
     totalEvaluations: number;
@@ -102,7 +99,6 @@ export interface LiveEvaluationPulseEvent {
   collegeId: number;
   yearLevel: string;
   section: string;
-  // 🔒 Strict Privacy: Student identity, exact rating, and qualitative text are NEVER emitted
 }
 
 export interface DashboardOverviewStats {

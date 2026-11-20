@@ -1,7 +1,7 @@
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-orm/zod";
-import { StudentClasses } from "../schemas/institution.schema.js";
+import { OfferingStudents } from "../schemas/institution.schema.js";
 import z from "zod";
-import { GetUserSchema } from "./user.type.js";
+import { CreateUserSchema, GetUserSchema } from "./user.type.js";
 import { GetOfferingSchema } from "./offering.type.js";
 
 const studentIdField = (schema: z.ZodNumber) =>
@@ -12,26 +12,38 @@ const offeringIdField = (schema: z.ZodNumber) =>
     .int("Course offering ID must be an integer.")
     .positive("Please select a valid course offering.");
 
-export const StudentClassSelect = createSelectSchema(StudentClasses, {
+export const OfferingStudentSelect = createSelectSchema(OfferingStudents, {
   student_account_id: studentIdField,
   course_offering_id: offeringIdField,
 });
 
-export const StudentClassInsert = createInsertSchema(StudentClasses, {
+export const OfferingStudentInsert = createInsertSchema(OfferingStudents, {
   student_account_id: studentIdField,
   course_offering_id: offeringIdField,
 });
 
-export const StudentClassUpdate = createUpdateSchema(StudentClasses, {
+export const CreateOfferingStudentNewUserSchema = z.object({
+  course_offering_id: z.number().int().positive("Please select a valid course offering."),
+  new_user: CreateUserSchema.pick({ account: true, details: true }),
+});
+
+export const CreateOfferingStudentPayloadSchema = z.union([
+  OfferingStudentInsert,
+  CreateOfferingStudentNewUserSchema,
+]);
+
+export const OfferingStudentUpdate = createUpdateSchema(OfferingStudents, {
   student_account_id: studentIdField,
   course_offering_id: offeringIdField,
 });
 
-export type IStudentClassSelect = z.infer<typeof StudentClassSelect>;
-export type IStudentClassInsert = z.infer<typeof StudentClassInsert>;
-export type IStudentClassUpdate = z.infer<typeof StudentClassUpdate>;
+export type IOfferingStudentSelect = z.infer<typeof OfferingStudentSelect>;
+export type IOfferingStudentInsert = z.infer<typeof OfferingStudentInsert>;
+export type ICreateOfferingStudentNewUser = z.infer<typeof CreateOfferingStudentNewUserSchema>;
+export type CreateOfferingStudentPayload = z.infer<typeof CreateOfferingStudentPayloadSchema>;
+export type IOfferingStudentUpdate = z.infer<typeof OfferingStudentUpdate>;
 
-export const GetStudentClassSchema = StudentClassSelect.extend({
+export const GetOfferingStudentSchema = OfferingStudentSelect.extend({
   student: GetUserSchema.omit({ roles: true }),
   offering: GetOfferingSchema,
 }).omit({
@@ -39,7 +51,7 @@ export const GetStudentClassSchema = StudentClassSelect.extend({
   course_offering_id: true,
 });
 
-export const StudentClassQuerySchema = z.object({
+export const OfferingStudentQuerySchema = z.object({
   paginate: z
     .preprocess((val) => {
       if (val === "false" || val === false || val === "0" || val === 0) return false;
@@ -62,5 +74,5 @@ export const StudentClassQuerySchema = z.object({
   order: z.enum(["asc", "desc"]).default("asc"),
 });
 
-export type GetStudentClass = z.infer<typeof GetStudentClassSchema>;
-export type StudentClassQuery = z.infer<typeof StudentClassQuerySchema>;
+export type GetOfferingStudent = z.infer<typeof GetOfferingStudentSchema>;
+export type OfferingStudentQuery = z.infer<typeof OfferingStudentQuerySchema>;

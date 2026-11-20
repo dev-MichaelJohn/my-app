@@ -8,6 +8,7 @@ export const FacultySelect = createSelectSchema(Faculties);
 export const FacultyInsert = createInsertSchema(Faculties, {
   account_id: z.number().int().positive("Please select a valid user account."),
   program_id: z.number().int().positive("Please select a valid program."),
+  is_home: z.boolean().default(true).optional(),
 }).omit({ created_at: true, updated_at: true, deleted_at: true });
 
 export const CreateFacultyNewUserSchema = z.object({
