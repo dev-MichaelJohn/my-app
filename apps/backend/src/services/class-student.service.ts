@@ -3,22 +3,22 @@ import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
 import {
   Accounts,
   Classes,
-  ClassStudentInsert,
   ClassStudentQuerySchema,
   ClassStudents,
   ClassStudentUpdate,
   CourseOfferings,
+  CreateClassStudentPayloadSchema,
+  OfferingStudents,
   PersonalDetails,
   Programs,
   Semesters,
-  StudentClasses,
+  type CreateClassStudentPayload,
   type GetClassStudent,
   type GetUser,
-  type IClassStudentInsert,
   type IClassStudentUpdate,
   type PaginatedData,
 } from "@my-app/shared";
-import { errAsync, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import { ClassService, type IClassService } from "./class.service.js";
 import { UserService, type IUserService } from "./user.service.js";
 import db, { type PgTransaction } from "@/configs/db.config.js";
@@ -47,6 +47,7 @@ export interface IClassStudentService {
     id: number,
     client?: DbClient,
     includeArchived?: boolean,
+    actorUser?: GetUser,
   ): ResultAsync<GetClassStudent, AppError>;
   getClassStudents(
     rawQuery: unknown,
@@ -54,7 +55,7 @@ export interface IClassStudentService {
     actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetClassStudent[]>, AppError>;
   createClassStudent(
-    classStudentInfo: IClassStudentInsert,
+    classStudentInfo: CreateClassStudentPayload,
     client?: DbClient,
     actorUser?: GetUser,
     req?: Request,
@@ -142,10 +143,41 @@ export class ClassStudentService implements IClassStudentService {
     `,
   };
 
+  private async assertClassStudentScope(
+    programId: number,
+    actorUser: GetUser | undefined,
+    tx: PgTransaction,
+    mode: "read" | "write",
+  ): Promise<void> {
+    if (!actorUser) return;
+    const roles = actorUser.roles ?? [];
+    if (roles.includes("VPAA") || roles.includes("CLERK")) return;
+
+    const chairships = actorUser.offices?.chairships || [];
+    if (chairships.some((c) => c.id === programId)) return;
+
+    if (mode === "read") {
+      const deanships = actorUser.offices?.deanships || [];
+      if (deanships.length > 0) {
+        const [prog] = await tx
+          .select({ college_id: Programs.college_id })
+          .from(Programs)
+          .where(eq(Programs.id, programId));
+        if (prog && deanships.some((d) => d.id === prog.college_id)) return;
+      }
+    }
+
+    throw new AppError(
+      403,
+      "Access denied: You can only manage class rosters within your authorized program scope.",
+    );
+  }
+
   getClassStudentById(
     id: number,
     client: DbClient = db,
     includeArchived: boolean = false,
+    actorUser?: GetUser,
   ): ResultAsync<GetClassStudent, AppError> {
     return WithTransaction(client, async (tx) => {
       const [record] = await tx
@@ -166,6 +198,8 @@ export class ClassStudentService implements IClassStudentService {
       if (!record) {
         throw new AppError(404, "Class student enrollment record not found.");
       }
+
+      await this.assertClassStudentScope(record.class.program.id, actorUser, tx, "read");
 
       return record;
     });
@@ -198,7 +232,7 @@ export class ClassStudentService implements IClassStudentService {
       ];
 
       const roles = actorUser?.roles ?? [];
-      const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+      const isPrivileged = roles.includes("VPAA") || roles.includes("CLERK");
 
       if (!isPrivileged && actorUser) {
         const deanships = actorUser.offices?.deanships || [];
@@ -210,6 +244,10 @@ export class ClassStudentService implements IClassStudentService {
         } else if (deanships.length > 0) {
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Programs.college_id, deanCollegeIds));
+        } else {
+          return okAsync(
+            createPaginatedData({ data: [], currentPage: 1, pageSize: limit, totalItems: 0 }),
+          );
         }
       }
 
@@ -292,114 +330,135 @@ export class ClassStudentService implements IClassStudentService {
   }
 
   createClassStudent(
-    classStudentInfo: IClassStudentInsert,
+    classStudentInfo: CreateClassStudentPayload,
     client: DbClient = db,
     actorUser?: GetUser,
     req?: Request,
   ): ResultAsync<GetClassStudent, AppError> {
-    return ValidateSchema(ClassStudentInsert, classStudentInfo).asyncAndThen((parsed) => {
-      return WithTransaction(client, async (tx) => {
-        const classResult = await this.classService.getClassById(parsed.class_id, tx);
-        if (classResult.isErr()) throw classResult.error;
+    return ValidateSchema(CreateClassStudentPayloadSchema, classStudentInfo).asyncAndThen(
+      (parsed) => {
+        return WithTransaction(client, async (tx) => {
+          const classResult = await this.classService.getClassById(parsed.class_id, tx);
+          if (classResult.isErr()) throw classResult.error;
 
-        await this.validateSemesterOpen(parsed.semester_id, tx);
+          await this.assertClassStudentScope(classResult.value.program.id, actorUser, tx, "write");
+          await this.validateSemesterOpen(parsed.semester_id, tx);
 
-        const isStudent = await this.userService.hasRole(parsed.student_account_id, "STUDENT", tx);
-        if (isStudent.isErr()) throw isStudent.error;
-        if (!isStudent.value) {
-          throw new AppError(400, "The selected account does not have a STUDENT role.");
-        }
+          let studentAccountId: number;
 
-        const [activeEnrollment] = await tx
-          .select({
-            id: ClassStudents.id,
-            classId: ClassStudents.class_id,
-            section: Classes.section,
-            yearLevel: Classes.year_level,
-            programCode: Programs.initialism,
-          })
-          .from(ClassStudents)
-          .innerJoin(Classes, eq(ClassStudents.class_id, Classes.id))
-          .innerJoin(Programs, eq(Classes.program_id, Programs.id))
-          .where(
-            and(
-              eq(ClassStudents.semester_id, parsed.semester_id),
-              eq(ClassStudents.student_account_id, parsed.student_account_id),
-              isNull(ClassStudents.deleted_at),
-            ),
-          );
+          if ("new_user" in parsed) {
+            const createdUser = await this.userService.createUser(
+              { ...parsed.new_user, role: "STUDENT" },
+              tx,
+              actorUser,
+              req,
+            );
+            if (createdUser.isErr()) throw createdUser.error;
+            studentAccountId = createdUser.value.account.id;
+          } else {
+            studentAccountId = parsed.student_account_id;
+            const isStudent = await this.userService.hasRole(studentAccountId, "STUDENT", tx);
+            if (isStudent.isErr()) throw isStudent.error;
+            if (!isStudent.value) {
+              throw new AppError(400, "The selected account does not have a STUDENT role.");
+            }
+          }
 
-        if (activeEnrollment) {
-          if (activeEnrollment.classId === parsed.class_id) {
+          const [activeEnrollment] = await tx
+            .select({
+              id: ClassStudents.id,
+              classId: ClassStudents.class_id,
+              section: Classes.section,
+              yearLevel: Classes.year_level,
+              programCode: Programs.initialism,
+            })
+            .from(ClassStudents)
+            .innerJoin(Classes, eq(ClassStudents.class_id, Classes.id))
+            .innerJoin(Programs, eq(Classes.program_id, Programs.id))
+            .where(
+              and(
+                eq(ClassStudents.semester_id, parsed.semester_id),
+                eq(ClassStudents.student_account_id, studentAccountId),
+                isNull(ClassStudents.deleted_at),
+              ),
+            );
+
+          if (activeEnrollment) {
+            if (activeEnrollment.classId === parsed.class_id) {
+              throw new AppError(
+                409,
+                "This student is already enrolled in this class section for this semester.",
+              );
+            }
+
             throw new AppError(
               409,
-              "This student is already enrolled in this class section for this semester.",
+              `Cannot enroll: Student is already enrolled in section ${activeEnrollment.programCode} ${activeEnrollment.yearLevel}-${activeEnrollment.section} for this semester. A student can only be enrolled in one class roster per semester.`,
             );
           }
 
-          throw new AppError(
-            409,
-            `Cannot enroll: Student is already enrolled in section ${activeEnrollment.programCode} ${activeEnrollment.yearLevel}-${activeEnrollment.section} for this semester. A student can only be enrolled in one class roster per semester.`,
+          const [existingDeleted] = await tx
+            .select()
+            .from(ClassStudents)
+            .where(
+              and(
+                eq(ClassStudents.class_id, parsed.class_id),
+                eq(ClassStudents.semester_id, parsed.semester_id),
+                eq(ClassStudents.student_account_id, studentAccountId),
+                isNotNull(ClassStudents.deleted_at),
+              ),
+            );
+
+          let enrollmentId: number;
+
+          if (existingDeleted) {
+            const [restored] = await tx
+              .update(ClassStudents)
+              .set({ deleted_at: null })
+              .where(eq(ClassStudents.id, existingDeleted.id))
+              .returning({ id: ClassStudents.id });
+
+            if (!restored) throw new AppError(500, "Failed to restore enrollment record.");
+            enrollmentId = restored.id;
+          } else {
+            const [created] = await tx
+              .insert(ClassStudents)
+              .values({
+                class_id: parsed.class_id,
+                semester_id: parsed.semester_id,
+                student_account_id: studentAccountId,
+              })
+              .returning({ id: ClassStudents.id });
+
+            if (!created) throw new AppError(500, "Failed to enroll student into class.");
+            enrollmentId = created.id;
+          }
+
+          await this.syncStudentWithClassOfferings(
+            studentAccountId,
+            parsed.class_id,
+            parsed.semester_id,
+            tx,
           );
-        }
 
-        const [existingDeleted] = await tx
-          .select()
-          .from(ClassStudents)
-          .where(
-            and(
-              eq(ClassStudents.class_id, parsed.class_id),
-              eq(ClassStudents.semester_id, parsed.semester_id),
-              eq(ClassStudents.student_account_id, parsed.student_account_id),
-              isNotNull(ClassStudents.deleted_at),
-            ),
-          );
+          const fullRecord = await this.getClassStudentById(enrollmentId, tx);
+          if (fullRecord.isErr()) throw fullRecord.error;
 
-        let enrollmentId: number;
+          await logAuditEvent({
+            actor: actorUser,
+            req,
+            action: "CREATE",
+            entity: "class_students",
+            entityId: fullRecord.value.id,
+            entityName: `${fullRecord.value.student.details.last_name}, ${fullRecord.value.student.details.first_name} in ${fullRecord.value.class.program.initialism} ${fullRecord.value.class.year_level}-${fullRecord.value.class.section}`,
+            newRecord: fullRecord.value,
+            tx,
+          });
 
-        if (existingDeleted) {
-          const [restored] = await tx
-            .update(ClassStudents)
-            .set({ deleted_at: null })
-            .where(eq(ClassStudents.id, existingDeleted.id))
-            .returning({ id: ClassStudents.id });
-
-          if (!restored) throw new AppError(500, "Failed to restore enrollment record.");
-          enrollmentId = restored.id;
-        } else {
-          const [created] = await tx
-            .insert(ClassStudents)
-            .values(parsed)
-            .returning({ id: ClassStudents.id });
-
-          if (!created) throw new AppError(500, "Failed to enroll student into class.");
-          enrollmentId = created.id;
-        }
-
-        await this.syncStudentWithClassOfferings(
-          parsed.student_account_id,
-          parsed.class_id,
-          parsed.semester_id,
-          tx,
-        );
-
-        const fullRecord = await this.getClassStudentById(enrollmentId, tx);
-        if (fullRecord.isErr()) throw fullRecord.error;
-
-        await logAuditEvent({
-          actor: actorUser,
-          req,
-          action: "CREATE",
-          entity: "class_students",
-          entityId: fullRecord.value.id,
-          entityName: `${fullRecord.value.student.details.last_name}, ${fullRecord.value.student.details.first_name} in ${fullRecord.value.class.program.initialism} ${fullRecord.value.class.year_level}-${fullRecord.value.class.section}`,
-          newRecord: fullRecord.value,
-          tx,
+          return fullRecord.value;
         });
-
-        return fullRecord.value;
-      });
-    });
+      },
+    );
   }
 
   updateClassStudent(
@@ -420,9 +479,12 @@ export class ClassStudentService implements IClassStudentService {
         if (existing.isErr()) throw existing.error;
         const current = existing.value;
 
+        await this.assertClassStudentScope(current.class.program.id, actorUser, tx, "write");
+
         if (parsed.class_id) {
           const classResult = await this.classService.getClassById(parsed.class_id, tx);
           if (classResult.isErr()) throw classResult.error;
+          await this.assertClassStudentScope(classResult.value.program.id, actorUser, tx, "write");
         }
 
         if (parsed.semester_id) await this.validateSemesterOpen(parsed.semester_id, tx);
@@ -483,18 +545,17 @@ export class ClassStudentService implements IClassStudentService {
             const oldOfferingIds = oldOfferings.map((o) => o.id);
 
             await tx
-              .update(StudentClasses)
+              .update(OfferingStudents)
               .set({ deleted_at: new Date(), updated_at: new Date() })
               .where(
                 and(
-                  eq(StudentClasses.student_account_id, current.student.account.id),
-                  inArray(StudentClasses.course_offering_id, oldOfferingIds),
-                  isNull(StudentClasses.deleted_at),
+                  eq(OfferingStudents.student_account_id, current.student.account.id),
+                  inArray(OfferingStudents.course_offering_id, oldOfferingIds),
+                  isNull(OfferingStudents.deleted_at),
                 ),
               );
           }
         }
-        // =========================================================================
 
         const [updated] = await tx
           .update(ClassStudents)
@@ -537,11 +598,13 @@ export class ClassStudentService implements IClassStudentService {
       if (existing.isErr()) throw existing.error;
       const current = existing.value;
 
+      await this.assertClassStudentScope(current.class.program.id, actorUser, tx, "write");
+
       const deleteTime = new Date();
 
       const [deleted] = await tx
         .update(ClassStudents)
-        .set({ deleted_at: new Date() })
+        .set({ deleted_at: deleteTime })
         .where(and(eq(ClassStudents.id, id), isNull(ClassStudents.deleted_at)))
         .returning({ id: ClassStudents.id });
 
@@ -563,13 +626,13 @@ export class ClassStudentService implements IClassStudentService {
         const offeringIds = classOfferings.map((o) => o.id);
 
         await tx
-          .update(StudentClasses)
+          .update(OfferingStudents)
           .set({ deleted_at: deleteTime })
           .where(
             and(
-              eq(StudentClasses.student_account_id, current.student.account.id),
-              inArray(StudentClasses.course_offering_id, offeringIds),
-              isNull(StudentClasses.deleted_at),
+              eq(OfferingStudents.student_account_id, current.student.account.id),
+              inArray(OfferingStudents.course_offering_id, offeringIds),
+              isNull(OfferingStudents.deleted_at),
             ),
           );
       }
@@ -599,6 +662,8 @@ export class ClassStudentService implements IClassStudentService {
       const existing = await this.getClassStudentById(id, tx, true);
       if (existing.isErr()) throw existing.error;
       const current = existing.value;
+
+      await this.assertClassStudentScope(current.class.program.id, actorUser, tx, "write");
 
       if (!current.deleted_at) {
         throw new AppError(400, "This enrollment record is already active.");
@@ -716,21 +781,21 @@ export class ClassStudentService implements IClassStudentService {
     if (offerings.length === 0) return;
 
     const offeringIds = offerings.map((o) => o.id);
-    const existingStudentClasses = await tx
+    const existingOfferingStudents = await tx
       .select({
-        id: StudentClasses.id,
-        offeringId: StudentClasses.course_offering_id,
-        deletedAt: StudentClasses.deleted_at,
+        id: OfferingStudents.id,
+        offeringId: OfferingStudents.course_offering_id,
+        deletedAt: OfferingStudents.deleted_at,
       })
-      .from(StudentClasses)
+      .from(OfferingStudents)
       .where(
         and(
-          eq(StudentClasses.student_account_id, studentAccountId),
-          inArray(StudentClasses.course_offering_id, offeringIds),
+          eq(OfferingStudents.student_account_id, studentAccountId),
+          inArray(OfferingStudents.course_offering_id, offeringIds),
         ),
       );
 
-    const existingMap = new Map(existingStudentClasses.map((sc) => [sc.offeringId, sc]));
+    const existingMap = new Map(existingOfferingStudents.map((os) => [os.offeringId, os]));
     const newEnrollments: { student_account_id: number; course_offering_id: number }[] = [];
 
     for (const offering of offerings) {
@@ -743,14 +808,14 @@ export class ClassStudentService implements IClassStudentService {
         });
       } else if (match.deletedAt !== null) {
         await tx
-          .update(StudentClasses)
+          .update(OfferingStudents)
           .set({ deleted_at: null, updated_at: new Date() })
-          .where(eq(StudentClasses.id, match.id));
+          .where(eq(OfferingStudents.id, match.id));
       }
     }
 
     if (newEnrollments.length > 0) {
-      await tx.insert(StudentClasses).values(newEnrollments);
+      await tx.insert(OfferingStudents).values(newEnrollments);
     }
   }
 }

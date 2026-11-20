@@ -13,11 +13,13 @@ export class ClassStudentController {
 
   getClassStudentById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((classStudentId) => {
-      return this.classStudentService.getClassStudentById(classStudentId).map((data) => ({
-        status: 200,
-        message: "Class-student details retrieved successfully.",
-        data,
-      }));
+      return this.classStudentService
+        .getClassStudentById(classStudentId, undefined, false, req.user)
+        .map((data) => ({
+          status: 200,
+          message: "Class-student details retrieved successfully.",
+          data,
+        }));
     });
   });
 

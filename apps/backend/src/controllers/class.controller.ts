@@ -10,7 +10,7 @@ export class ClassController {
 
   getClassById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((classId) => {
-      return this.classService.getClassById(classId).map((data) => ({
+      return this.classService.getClassById(classId, undefined, false, req.user).map((data) => ({
         status: 200,
         message: "Class details retrieved successfully.",
         data,

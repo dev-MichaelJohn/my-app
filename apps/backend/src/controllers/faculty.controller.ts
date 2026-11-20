@@ -10,7 +10,7 @@ export class FacultyController {
 
   getFacultyById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((id) => {
-      return this.facultyService.getFacultyById(id).map((data) => ({
+      return this.facultyService.getFacultyById(id, undefined, false, req.user).map((data) => ({
         status: 200,
         message: "Faculty details retrieved.",
         data,

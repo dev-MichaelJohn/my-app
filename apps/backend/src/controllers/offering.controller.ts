@@ -10,11 +10,13 @@ export class OfferingController {
 
   getOfferingById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((offeringId) => {
-      return this.offeringService.getOfferingById(offeringId).map((data) => ({
-        status: 200,
-        message: "Offering details retrieved successfully.",
-        data,
-      }));
+      return this.offeringService
+        .getOfferingById(offeringId, undefined, false, req.user)
+        .map((data) => ({
+          status: 200,
+          message: "Offering details retrieved successfully.",
+          data,
+        }));
     });
   });
 

@@ -25,22 +25,41 @@ export class BulkImportController {
       .andThen((csvContent) => {
         switch (normalizedEntity) {
           case "colleges":
-            return this.bulkImportService.importColleges(csvContent);
+            return this.bulkImportService.importColleges(csvContent, undefined, req.user);
 
           case "programs":
-            return this.bulkImportService.importPrograms(csvContent);
+            return this.bulkImportService.importPrograms(csvContent, undefined, req.user);
 
           case "courses":
-            return this.bulkImportService.importCourses(csvContent);
+            return this.bulkImportService.importCourses(csvContent, undefined, req.user);
 
           case "curriculums":
-            return this.bulkImportService.importCurriculums(csvContent);
+            return this.bulkImportService.importCurriculums(csvContent, undefined, req.user);
 
           case "classes":
-            return this.bulkImportService.importClasses(csvContent);
+            return this.bulkImportService.importClasses(csvContent, undefined, req.user);
 
           case "users":
-            return this.bulkImportService.importUsers(csvContent);
+            return this.bulkImportService.importUsers(csvContent, undefined, req.user);
+
+          case "faculties":
+            return this.bulkImportService.importFaculties(csvContent, undefined, req.user);
+
+          case "class-students":
+            return this.bulkImportService.importClassStudents(
+              csvContent,
+              req.query.semester_id ? Number(req.query.semester_id) : undefined,
+              undefined,
+              req.user,
+            );
+
+          case "offering-students":
+            return this.bulkImportService.importOfferingStudents(
+              csvContent,
+              req.query.course_offering_id ? Number(req.query.course_offering_id) : undefined,
+              undefined,
+              req.user,
+            );
 
           default:
             return errAsync(new AppError(400, `Unknown import entity "${normalizedEntity}".`));
@@ -51,65 +70,5 @@ export class BulkImportController {
         message: `Bulk import completed for ${summary.entity}.`,
         data: summary,
       }));
-  });
-
-  importColleges = runAsync((req) => {
-    return this.getCsvContent(req).andThen((csv) =>
-      this.bulkImportService.importColleges(csv).map((data) => ({
-        status: 200,
-        message: "Colleges bulk imported successfully.",
-        data,
-      })),
-    );
-  });
-
-  importPrograms = runAsync((req) => {
-    return this.getCsvContent(req).andThen((csv) =>
-      this.bulkImportService.importPrograms(csv).map((data) => ({
-        status: 200,
-        message: "Academic programs bulk imported successfully.",
-        data,
-      })),
-    );
-  });
-
-  importCourses = runAsync((req) => {
-    return this.getCsvContent(req).andThen((csv) =>
-      this.bulkImportService.importCourses(csv).map((data) => ({
-        status: 200,
-        message: "Courses bulk imported successfully.",
-        data,
-      })),
-    );
-  });
-
-  importCurriculums = runAsync((req) => {
-    return this.getCsvContent(req).andThen((csv) =>
-      this.bulkImportService.importCurriculums(csv).map((data) => ({
-        status: 200,
-        message: "Course curriculums bulk imported successfully.",
-        data,
-      })),
-    );
-  });
-
-  importClasses = runAsync((req) => {
-    return this.getCsvContent(req).andThen((csv) =>
-      this.bulkImportService.importClasses(csv).map((data) => ({
-        status: 200,
-        message: "Academic classes bulk imported successfully.",
-        data,
-      })),
-    );
-  });
-
-  importUsers = runAsync((req) => {
-    return this.getCsvContent(req).andThen((csv) =>
-      this.bulkImportService.importUsers(csv).map((data) => ({
-        status: 200,
-        message: "User accounts bulk imported successfully.",
-        data,
-      })),
-    );
   });
 }

@@ -49,6 +49,7 @@ export interface ICollegeService {
     id: number,
     client?: DbClient,
     includeArchived?: boolean,
+    actorUser?: GetUser,
   ): ResultAsync<GetCollege, AppError>;
   getColleges(
     rawQuery: unknown,
@@ -91,18 +92,33 @@ export interface ICollegeService {
 export class CollegeService implements ICollegeService {
   constructor(private userService: IUserService = new UserService()) {}
 
+  private assertCollegeReadScope(collegeId: number, actorUser?: GetUser): void {
+    if (!actorUser) return;
+    const roles = actorUser.roles ?? [];
+    if (roles.includes("VPAA") || roles.includes("CLERK")) return;
+
+    const deanships = actorUser.offices?.deanships || [];
+    if (deanships.some((d) => d.id === collegeId)) return;
+
+    throw new AppError(403, "Access denied: You can only view your assigned college.");
+  }
+
   getCollegeById(
     id: number,
     client: DbClient = db,
     includeArchived: boolean = false,
+    actorUser?: GetUser,
   ): ResultAsync<GetCollege, AppError> {
     return WithTransaction(client, async (tx) => {
+      this.assertCollegeReadScope(id, actorUser);
+
       const [college] = await tx
         .select({
           college: {
             id: Colleges.id,
             name: Colleges.name,
             initialism: Colleges.initialism,
+            is_service_college: Colleges.is_service_college,
             created_at: Colleges.created_at,
             updated_at: Colleges.updated_at,
             deleted_at: Colleges.deleted_at,
@@ -169,7 +185,7 @@ export class CollegeService implements ICollegeService {
       ];
 
       const roles = actorUser?.roles ?? [];
-      const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+      const isPrivileged = roles.includes("VPAA") || roles.includes("CLERK");
 
       if (!isPrivileged && actorUser) {
         const deanships = actorUser.offices?.deanships || [];
@@ -179,6 +195,10 @@ export class CollegeService implements ICollegeService {
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Colleges.id, deanCollegeIds));
         } else if (chairships.length > 0) {
+          return okAsync(
+            createPaginatedData({ data: [], currentPage: 1, pageSize: limit, totalItems: 0 }),
+          );
+        } else {
           return okAsync(
             createPaginatedData({ data: [], currentPage: 1, pageSize: limit, totalItems: 0 }),
           );
@@ -216,6 +236,7 @@ export class CollegeService implements ICollegeService {
               id: Colleges.id,
               name: Colleges.name,
               initialism: Colleges.initialism,
+              is_service_college: Colleges.is_service_college,
               created_at: Colleges.created_at,
               updated_at: Colleges.updated_at,
               deleted_at: Colleges.deleted_at,
@@ -284,6 +305,10 @@ export class CollegeService implements ICollegeService {
         const countQuery = tx
           .select({ total: countDistinct(Colleges.id) })
           .from(Colleges)
+          .leftJoin(
+            CollegeDeans,
+            and(eq(Colleges.id, CollegeDeans.college_id), isNull(CollegeDeans.deleted_at)),
+          )
           .where(whereCondition);
 
         const [colleges, countResult] = await Promise.all([paginatedDataQuery, countQuery]);
@@ -347,7 +372,8 @@ export class CollegeService implements ICollegeService {
           account_id = deanUser.account.id;
         }
 
-        await this.userService.grantRole(account_id, "SUPERVISOR", tx);
+        const grantRes = await this.userService.grantRole(account_id, "COLLEGE_DEAN", tx);
+        if (grantRes.isErr()) throw grantRes.error;
 
         const [deanAssignment] = await tx
           .insert(CollegeDeans)
@@ -368,6 +394,9 @@ export class CollegeService implements ICollegeService {
           newRecord: deanAssignment,
           tx,
         });
+
+        const refreshedUser = await this.userService.getUserById(account_id, tx);
+        if (refreshedUser.isOk()) deanUser = refreshedUser.value;
 
         return {
           college: collegeRecord,
@@ -393,25 +422,16 @@ export class CollegeService implements ICollegeService {
       }
 
       return WithTransaction(client, async (tx) => {
+        const actorRoles = actorUser?.roles ?? [];
+        const isPrivilegedAdmin = actorRoles.includes("VPAA") || actorRoles.includes("CLERK");
+
+        if (actorUser && !isPrivilegedAdmin) {
+          throw new AppError(403, "Only VPAA and Clerk can modify colleges and dean assignments.");
+        }
+
         const getCollege = await this.getCollegeById(id, tx);
         if (getCollege.isErr()) throw getCollege.error;
         const existingCollege = getCollege.value;
-
-        const actorRoles = actorUser?.roles ?? [];
-        const isPrivilegedAdmin = actorRoles.includes("SYS_ADMIN") || actorRoles.includes("ADMIN");
-
-        if (
-          hasDeanInfo &&
-          !isPrivilegedAdmin &&
-          actorUser &&
-          existingCollege.dean?.account.id === actorUser.account.id &&
-          (dean === null || !this.sameDeanInfo(dean, existingCollege))
-        ) {
-          throw new AppError(
-            403,
-            "You cannot demote or remove yourself as Dean of this college. Only an administrator can reassign this office.",
-          );
-        }
 
         let updatedCollegeRecord: ICollegeSelect = existingCollege.college;
         let finalDeanUser: GetUser | null = existingCollege.dean;
@@ -470,10 +490,8 @@ export class CollegeService implements ICollegeService {
               }
 
               const hasOtherDeanships = await this.hasDeanships(oldDeanId, tx);
-              const hasProgramChair = await this.hasProgramChairRecords(oldDeanId, tx);
-
-              if (!hasOtherDeanships && !hasProgramChair) {
-                const revokeRes = await this.userService.revokeRole(oldDeanId, "SUPERVISOR", tx);
+              if (!hasOtherDeanships) {
+                const revokeRes = await this.userService.revokeRole(oldDeanId, "COLLEGE_DEAN", tx);
                 if (revokeRes.isErr()) throw revokeRes.error;
               }
 
@@ -535,15 +553,17 @@ export class CollegeService implements ICollegeService {
                 }
 
                 const hasOtherDeanships = await this.hasDeanships(oldDeanId, tx);
-                const hasProgramChair = await this.hasProgramChairRecords(oldDeanId, tx);
-
-                if (!hasOtherDeanships && !hasProgramChair) {
-                  const revokeRes = await this.userService.revokeRole(oldDeanId, "SUPERVISOR", tx);
+                if (!hasOtherDeanships) {
+                  const revokeRes = await this.userService.revokeRole(
+                    oldDeanId,
+                    "COLLEGE_DEAN",
+                    tx,
+                  );
                   if (revokeRes.isErr()) throw revokeRes.error;
                 }
               }
 
-              const grantRes = await this.userService.grantRole(account_id, "SUPERVISOR", tx);
+              const grantRes = await this.userService.grantRole(account_id, "COLLEGE_DEAN", tx);
               if (grantRes.isErr()) throw grantRes.error;
 
               const [newDeanRecord] = await tx
@@ -566,6 +586,9 @@ export class CollegeService implements ICollegeService {
                 newRecord: newDeanRecord,
                 tx,
               });
+
+              const refreshedUser = await this.userService.getUserById(account_id, tx);
+              if (refreshedUser.isOk()) finalDeanUser = refreshedUser.value;
             }
           }
         }
@@ -585,20 +608,16 @@ export class CollegeService implements ICollegeService {
     req?: Request,
   ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
+      const actorRoles = actorUser?.roles ?? [];
+      const isPrivilegedAdmin = actorRoles.includes("VPAA") || actorRoles.includes("CLERK");
+
+      if (actorUser && !isPrivilegedAdmin) {
+        throw new AppError(403, "Only VPAA and Clerk can archive colleges.");
+      }
+
       const result = await this.getCollegeById(id, tx);
       if (result.isErr()) throw result.error;
       const existingCollege = result.value;
-
-      const actorRoles = actorUser?.roles ?? [];
-      const isPrivilegedAdmin = actorRoles.includes("SYS_ADMIN") || actorRoles.includes("ADMIN");
-
-      if (
-        !isPrivilegedAdmin &&
-        actorUser &&
-        existingCollege.dean?.account.id === actorUser.account.id
-      ) {
-        throw new AppError(403, "You cannot archive a college while serving as its Dean.");
-      }
 
       const programs = await tx
         .select()
@@ -627,10 +646,8 @@ export class CollegeService implements ICollegeService {
           );
 
         const hasOtherDeanships = await this.hasDeanships(deanId, tx);
-        const hasProgramChair = await this.hasProgramChairRecords(deanId, tx);
-
-        if (!hasOtherDeanships && !hasProgramChair) {
-          const revokeRes = await this.userService.revokeRole(deanId, "SUPERVISOR", tx);
+        if (!hasOtherDeanships) {
+          const revokeRes = await this.userService.revokeRole(deanId, "COLLEGE_DEAN", tx);
           if (revokeRes.isErr()) throw revokeRes.error;
         }
       }
@@ -663,6 +680,13 @@ export class CollegeService implements ICollegeService {
     req?: Request,
   ): ResultAsync<GetCollege, AppError> {
     return WithTransaction(client, async (tx) => {
+      const actorRoles = actorUser?.roles ?? [];
+      const isPrivilegedAdmin = actorRoles.includes("VPAA") || actorRoles.includes("CLERK");
+
+      if (actorUser && !isPrivilegedAdmin) {
+        throw new AppError(403, "Only VPAA and Clerk can restore colleges.");
+      }
+
       const existing = await this.getCollegeById(id, tx, true);
       if (existing.isErr()) throw existing.error;
       const current = existing.value;
@@ -736,13 +760,20 @@ export class CollegeService implements ICollegeService {
       .from(AccountRoles)
       .innerJoin(Roles, and(eq(Roles.id, AccountRoles.role_id), isNull(Roles.deleted_at)))
       .where(and(eq(AccountRoles.account_id, accountId), isNull(AccountRoles.deleted_at)));
-    const nonAssignableRoles = ["SYS_ADMIN", "ADMIN", "STUDENT"];
+    const nonAssignableRoles = ["VPAA", "CLERK", "STUDENT"];
     if (roles.some((r) => nonAssignableRoles.includes(r.system_role)))
       throw new AppError(400, "This account's role is not eligible to be assigned as a dean.");
 
     const hasDeanships = await this.hasDeanships(accountId, tx, excludeCollegeId);
     if (hasDeanships)
       throw new AppError(409, "This account is already assigned as the dean of another college.");
+
+    const hasChairs = await this.hasProgramChairRecords(accountId, tx);
+    if (hasChairs)
+      throw new AppError(
+        409,
+        "This account is currently assigned as a Department Chair and cannot simultaneously hold a College Dean appointment.",
+      );
   }
 
   async hasDeanships(accountId: number, tx: PgTransaction, excludeCollegeId?: number) {

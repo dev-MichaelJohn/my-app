@@ -1,6 +1,6 @@
 import { WithTransaction, type DbClient } from "@/libs/transaction.lib.js";
 import { UserService, type IUserService } from "./user.service.js";
-import { errAsync, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import {
   AccountRoles,
   Accounts,
@@ -51,6 +51,7 @@ export interface IProgramService {
     id: number,
     client?: DbClient,
     includeArchived?: boolean,
+    actorUser?: GetUser,
   ): ResultAsync<GetProgram, AppError>;
   getPrograms(
     rawQuery: unknown,
@@ -90,10 +91,36 @@ export class ProgramService implements IProgramService {
     private collegeService: ICollegeService = new CollegeService(),
   ) {}
 
+  private assertProgramScope(
+    programId: number | undefined,
+    collegeId: number,
+    actorUser: GetUser | undefined,
+    mode: "read" | "write",
+  ): void {
+    if (!actorUser) return;
+    const roles = actorUser.roles ?? [];
+    if (roles.includes("VPAA") || roles.includes("CLERK")) return;
+
+    const deanships = actorUser.offices?.deanships || [];
+    const chairships = actorUser.offices?.chairships || [];
+
+    if (deanships.some((d) => d.id === collegeId)) return;
+
+    if (mode === "read" && programId && chairships.some((c) => c.id === programId)) {
+      return;
+    }
+
+    throw new AppError(
+      403,
+      "Access denied: You can only manage programs belonging to your own college.",
+    );
+  }
+
   getProgramById(
     id: number,
     client: DbClient = db,
     includeArchived: boolean = false,
+    actorUser?: GetUser,
   ): ResultAsync<GetProgram, AppError> {
     return WithTransaction(client, async (tx) => {
       const [program] = await tx
@@ -154,6 +181,9 @@ export class ProgramService implements IProgramService {
         .groupBy(Programs.id, Accounts.id, PersonalDetails.id);
 
       if (!program) throw new AppError(404, "No program record found.");
+
+      this.assertProgramScope(program.program.id, program.program.college_id, actorUser, "read");
+
       return program;
     });
   }
@@ -172,7 +202,7 @@ export class ProgramService implements IProgramService {
       ];
 
       const roles = actorUser?.roles ?? [];
-      const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+      const isPrivileged = roles.includes("VPAA") || roles.includes("CLERK");
 
       if (!isPrivileged && actorUser) {
         const deanships = actorUser.offices?.deanships || [];
@@ -184,6 +214,10 @@ export class ProgramService implements IProgramService {
         } else if (deanships.length > 0) {
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Programs.college_id, deanCollegeIds));
+        } else {
+          return okAsync(
+            createPaginatedData({ data: [], currentPage: 1, pageSize: limit, totalItems: 0 }),
+          );
         }
       }
 
@@ -292,6 +326,10 @@ export class ProgramService implements IProgramService {
         const countQuery = tx
           .select({ total: countDistinct(Programs.id) })
           .from(Programs)
+          .leftJoin(
+            ProgramChairs,
+            and(eq(Programs.id, ProgramChairs.program_id), isNull(ProgramChairs.deleted_at)),
+          )
           .where(whereCondition);
 
         const [programs, countResult] = await Promise.all([paginatedDataQuery, countQuery]);
@@ -314,6 +352,8 @@ export class ProgramService implements IProgramService {
   ): ResultAsync<GetProgram, AppError> {
     return ValidateSchema(CreateProgramSchema, programInfo).asyncAndThen(({ program, chair }) => {
       return WithTransaction(client, async (tx) => {
+        this.assertProgramScope(undefined, program.college_id, actorUser, "write");
+
         const collegeResult = await this.collegeService.getCollegeById(program.college_id, tx);
         if (collegeResult.isErr()) throw collegeResult.error;
 
@@ -342,7 +382,7 @@ export class ProgramService implements IProgramService {
         let account_id: number;
 
         if (chair.type === "existing") {
-          await this.validChairCandidate(chair.account_id, tx);
+          await this.validChairCandidate(chair.account_id, tx, programRecord.id);
           account_id = chair.account_id;
 
           const userRecord = await this.userService.getUserById(account_id, tx);
@@ -358,7 +398,8 @@ export class ProgramService implements IProgramService {
           account_id = chairUser.account.id;
         }
 
-        await this.userService.grantRole(account_id, "SUPERVISOR", tx);
+        const grantChairRes = await this.userService.grantRole(account_id, "DEPARTMENT_CHAIR", tx);
+        if (grantChairRes.isErr()) throw grantChairRes.error;
 
         const [chairAssignment] = await tx
           .insert(ProgramChairs)
@@ -368,7 +409,7 @@ export class ProgramService implements IProgramService {
           })
           .returning();
         if (!chairAssignment) {
-          throw new AppError(500, "Failed to assign program chair to the program.");
+          throw new AppError(500, "Failed to assign department chair to the program.");
         }
 
         await this.ensureFacultyAppointment(account_id, programRecord.id, tx, actorUser, req);
@@ -383,6 +424,9 @@ export class ProgramService implements IProgramService {
           newRecord: chairAssignment,
           tx,
         });
+
+        const refreshedUser = await this.userService.getUserById(account_id, tx);
+        if (refreshedUser.isOk()) chairUser = refreshedUser.value;
 
         return {
           program: programRecord,
@@ -411,8 +455,19 @@ export class ProgramService implements IProgramService {
         if (getProgram.isErr()) throw getProgram.error;
         const existingProgram = getProgram.value;
 
+        this.assertProgramScope(
+          existingProgram.program.id,
+          existingProgram.program.college_id,
+          actorUser,
+          "write",
+        );
+
+        if (program?.college_id && program.college_id !== existingProgram.program.college_id) {
+          this.assertProgramScope(id, program.college_id, actorUser, "write");
+        }
+
         const actorRoles = actorUser?.roles ?? [];
-        const isPrivilegedAdmin = actorRoles.includes("SYS_ADMIN") || actorRoles.includes("ADMIN");
+        const isPrivilegedAdmin = actorRoles.includes("VPAA") || actorRoles.includes("CLERK");
 
         if (
           hasChairInfo &&
@@ -423,7 +478,7 @@ export class ProgramService implements IProgramService {
         ) {
           throw new AppError(
             403,
-            "You cannot demote or remove yourself as Program Chair. Only your College Dean or an administrator can reassign this office.",
+            "You cannot demote or remove yourself as Department Chair. Only your College Dean or VPAA can reassign this office.",
           );
         }
 
@@ -492,10 +547,13 @@ export class ProgramService implements IProgramService {
                 oldChairId,
                 tx,
               );
-              const hasDeanships = await this.collegeService.hasDeanships(oldChairId, tx);
 
-              if (!hasOtherChairs && !hasDeanships) {
-                const revokeRes = await this.userService.revokeRole(oldChairId, "SUPERVISOR", tx);
+              if (!hasOtherChairs) {
+                const revokeRes = await this.userService.revokeRole(
+                  oldChairId,
+                  "DEPARTMENT_CHAIR",
+                  tx,
+                );
                 if (revokeRes.isErr()) throw revokeRes.error;
               }
 
@@ -508,7 +566,7 @@ export class ProgramService implements IProgramService {
               let account_id: number;
 
               if (chair.type === "existing") {
-                await this.validChairCandidate(chair.account_id, tx);
+                await this.validChairCandidate(chair.account_id, tx, existingProgram.program.id);
                 account_id = chair.account_id;
 
                 const userRecord = await this.userService.getUserById(account_id, tx);
@@ -560,15 +618,18 @@ export class ProgramService implements IProgramService {
                   oldChairId,
                   tx,
                 );
-                const hasDeanships = await this.collegeService.hasDeanships(oldChairId, tx);
 
-                if (!hasOtherChairs && !hasDeanships) {
-                  const revokeRes = await this.userService.revokeRole(oldChairId, "SUPERVISOR", tx);
+                if (!hasOtherChairs) {
+                  const revokeRes = await this.userService.revokeRole(
+                    oldChairId,
+                    "DEPARTMENT_CHAIR",
+                    tx,
+                  );
                   if (revokeRes.isErr()) throw revokeRes.error;
                 }
               }
 
-              const grantRes = await this.userService.grantRole(account_id, "SUPERVISOR", tx);
+              const grantRes = await this.userService.grantRole(account_id, "DEPARTMENT_CHAIR", tx);
               if (grantRes.isErr()) throw grantRes.error;
 
               const [newChairRecord] = await tx
@@ -601,6 +662,9 @@ export class ProgramService implements IProgramService {
                 newRecord: newChairRecord,
                 tx,
               });
+
+              const refreshedUser = await this.userService.getUserById(account_id, tx);
+              if (refreshedUser.isOk()) finalChairUser = refreshedUser.value;
             }
           }
         }
@@ -624,16 +688,26 @@ export class ProgramService implements IProgramService {
       if (getProgram.isErr()) throw getProgram.error;
       const existingProgram = getProgram.value;
 
+      this.assertProgramScope(
+        existingProgram.program.id,
+        existingProgram.program.college_id,
+        actorUser,
+        "write",
+      );
+
       await this.checkProgramDependencies(existingProgram.program.id, tx);
       const actorRoles = actorUser?.roles ?? [];
-      const isPrivilegedAdmin = actorRoles.includes("SYS_ADMIN") || actorRoles.includes("ADMIN");
+      const isPrivilegedAdmin = actorRoles.includes("VPAA") || actorRoles.includes("CLERK");
 
       if (
         !isPrivilegedAdmin &&
         actorUser &&
         existingProgram.chair?.account.id === actorUser.account.id
       ) {
-        throw new AppError(403, "You cannot archive a program while serving as its Program Chair.");
+        throw new AppError(
+          403,
+          "You cannot archive a program while serving as its Department Chair.",
+        );
       }
 
       if (existingProgram.chair) {
@@ -665,10 +739,9 @@ export class ProgramService implements IProgramService {
         }
 
         const hasOtherChairs = await this.collegeService.hasProgramChairRecords(chairId, tx);
-        const hasDeanships = await this.collegeService.hasDeanships(chairId, tx);
 
-        if (!hasOtherChairs && !hasDeanships) {
-          const revokeRes = await this.userService.revokeRole(chairId, "SUPERVISOR", tx);
+        if (!hasOtherChairs) {
+          const revokeRes = await this.userService.revokeRole(chairId, "DEPARTMENT_CHAIR", tx);
           if (revokeRes.isErr()) throw revokeRes.error;
         }
       }
@@ -705,6 +778,8 @@ export class ProgramService implements IProgramService {
       const existing = await this.getProgramById(id, tx, true);
       if (existing.isErr()) throw existing.error;
       const current = existing.value;
+
+      this.assertProgramScope(current.program.id, current.program.college_id, actorUser, "write");
 
       if (!current.program.deleted_at) {
         throw new AppError(400, "This program is already active and not archived.");
@@ -767,7 +842,11 @@ export class ProgramService implements IProgramService {
     });
   }
 
-  private async validChairCandidate(accountId: number, tx: PgTransaction) {
+  private async validChairCandidate(
+    accountId: number,
+    tx: PgTransaction,
+    excludeProgramId?: number,
+  ) {
     const [account] = await tx
       .select()
       .from(Accounts)
@@ -779,9 +858,27 @@ export class ProgramService implements IProgramService {
       .from(AccountRoles)
       .innerJoin(Roles, and(eq(Roles.id, AccountRoles.role_id), isNull(Roles.deleted_at)))
       .where(and(eq(AccountRoles.account_id, accountId), isNull(AccountRoles.deleted_at)));
-    const nonAssignableRoles = ["SYS_ADMIN", "ADMIN", "STUDENT"];
+    const nonAssignableRoles = ["VPAA", "CLERK", "STUDENT"];
     if (roles.some((r) => nonAssignableRoles.includes(r.system_role)))
       throw new AppError(400, "This account's role is not eligible to be assigned as a chair.");
+
+    const hasDeanships = await this.collegeService.hasDeanships(accountId, tx);
+    if (hasDeanships)
+      throw new AppError(
+        409,
+        "This account is currently serving as a College Dean and cannot simultaneously hold a Department Chair office.",
+      );
+
+    const hasOtherChairs = await this.collegeService.hasProgramChairRecords(
+      accountId,
+      tx,
+      excludeProgramId,
+    );
+    if (hasOtherChairs)
+      throw new AppError(
+        409,
+        "This account is already assigned as the Department Chair of another program.",
+      );
   }
 
   private sameChairInfo(info: CreateProgramChair, existingProgram: GetProgram): boolean {
@@ -811,7 +908,6 @@ export class ProgramService implements IProgramService {
         .where(
           and(eq(CourseCurriculums.program_id, programId), isNull(CourseCurriculums.deleted_at)),
         ),
-      // 🛡️ Check for active faculty appointments
       tx
         .select({ total: count(Faculties.id) })
         .from(Faculties)
@@ -851,13 +947,19 @@ export class ProgramService implements IProgramService {
     const grantFacultyRes = await this.userService.grantRole(accountId, "FACULTY", tx);
     if (grantFacultyRes.isErr()) throw grantFacultyRes.error;
 
-    const [activeAppointment] = await tx
+    const [activeForProgram] = await tx
       .select()
       .from(Faculties)
-      .where(and(eq(Faculties.account_id, accountId), isNull(Faculties.deleted_at)));
+      .where(
+        and(
+          eq(Faculties.account_id, accountId),
+          eq(Faculties.program_id, programId),
+          isNull(Faculties.deleted_at),
+        ),
+      );
 
-    if (activeAppointment) {
-      return; // Already holds an active departmental faculty appointment
+    if (activeForProgram) {
+      return;
     }
 
     const [archivedForProgram] = await tx
@@ -871,10 +973,23 @@ export class ProgramService implements IProgramService {
         ),
       );
 
+    const [anyActiveHome] = await tx
+      .select({ id: Faculties.id })
+      .from(Faculties)
+      .where(
+        and(
+          eq(Faculties.account_id, accountId),
+          eq(Faculties.is_home, true),
+          isNull(Faculties.deleted_at),
+        ),
+      );
+
+    const shouldBeHome = !anyActiveHome;
+
     if (archivedForProgram) {
       const [restored] = await tx
         .update(Faculties)
-        .set({ deleted_at: null, updated_at: new Date() })
+        .set({ deleted_at: null, is_home: shouldBeHome, updated_at: new Date() })
         .where(eq(Faculties.id, archivedForProgram.id))
         .returning();
 
@@ -895,7 +1010,7 @@ export class ProgramService implements IProgramService {
 
     const [created] = await tx
       .insert(Faculties)
-      .values({ account_id: accountId, program_id: programId })
+      .values({ account_id: accountId, program_id: programId, is_home: shouldBeHome })
       .returning();
 
     if (created) {

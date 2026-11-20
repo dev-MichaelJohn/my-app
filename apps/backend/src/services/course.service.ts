@@ -14,7 +14,7 @@ import {
   type ICourseUpdate,
   type PaginatedData,
 } from "@my-app/shared";
-import type { ResultAsync } from "neverthrow";
+import { okAsync, type ResultAsync } from "neverthrow";
 import { ProgramService, type IProgramService } from "./program.service.js";
 import db, { type PgTransaction } from "@/configs/db.config.js";
 import {
@@ -41,6 +41,7 @@ export interface ICourseService {
     id: number,
     client?: DbClient,
     includeArchived?: boolean,
+    actorUser?: GetUser,
   ): ResultAsync<ICourseSelect, AppError>;
   getCourses(
     rawQuery: unknown,
@@ -77,10 +78,41 @@ export interface ICourseService {
 export class CourseService implements ICourseService {
   constructor(private programService: IProgramService = new ProgramService()) {}
 
+  private async assertCourseScope(
+    programId: number,
+    actorUser: GetUser | undefined,
+    tx: PgTransaction,
+    mode: "read" | "write",
+  ): Promise<void> {
+    if (!actorUser) return;
+    const roles = actorUser.roles ?? [];
+    if (roles.includes("VPAA") || roles.includes("CLERK")) return;
+
+    const chairships = actorUser.offices?.chairships || [];
+    if (chairships.some((c) => c.id === programId)) return;
+
+    if (mode === "read") {
+      const deanships = actorUser.offices?.deanships || [];
+      if (deanships.length > 0) {
+        const [prog] = await tx
+          .select({ college_id: Programs.college_id })
+          .from(Programs)
+          .where(eq(Programs.id, programId));
+        if (prog && deanships.some((d) => d.id === prog.college_id)) return;
+      }
+    }
+
+    throw new AppError(
+      403,
+      "Access denied: You can only manage courses within your authorized program scope.",
+    );
+  }
+
   getCourseById(
     id: number,
     client: DbClient = db,
     includeArchived: boolean = false,
+    actorUser?: GetUser,
   ): ResultAsync<ICourseSelect, AppError> {
     return WithTransaction(client, async (tx) => {
       const [course] = await tx
@@ -88,6 +120,8 @@ export class CourseService implements ICourseService {
         .from(Courses)
         .where(and(eq(Courses.id, id), includeArchived ? undefined : isNull(Courses.deleted_at)));
       if (!course) throw new AppError(404, "No course record found.");
+
+      await this.assertCourseScope(course.program_id, actorUser, tx, "read");
 
       return course;
     });
@@ -99,14 +133,24 @@ export class CourseService implements ICourseService {
     actorUser?: GetUser,
   ): ResultAsync<PaginatedData<ICourseSelect[]>, AppError> {
     return ValidateSchema(CourseQuerySchema, rawQuery).asyncAndThen((parsed) => {
-      const { paginate, page, limit, search, program_id, is_archived, sort_by, order } = parsed;
+      const {
+        paginate,
+        page,
+        limit,
+        search,
+        program_id,
+        course_type,
+        is_archived,
+        sort_by,
+        order,
+      } = parsed;
 
       const filters: SQL[] = [
         is_archived ? isNotNull(Courses.deleted_at) : isNull(Courses.deleted_at),
       ];
 
       const roles = actorUser?.roles ?? [];
-      const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+      const isPrivileged = roles.includes("VPAA") || roles.includes("CLERK");
 
       if (!isPrivileged && actorUser) {
         const deanships = actorUser.offices?.deanships || [];
@@ -118,6 +162,10 @@ export class CourseService implements ICourseService {
         } else if (deanships.length > 0) {
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Programs.college_id, deanCollegeIds));
+        } else {
+          return okAsync(
+            createPaginatedData({ data: [], currentPage: 1, pageSize: limit, totalItems: 0 }),
+          );
         }
       }
 
@@ -127,6 +175,7 @@ export class CourseService implements ICourseService {
       }
 
       if (program_id !== undefined) filters.push(eq(Courses.program_id, program_id));
+      if (course_type !== undefined) filters.push(eq(Courses.course_type, course_type));
 
       const whereCondition = and(...filters);
 
@@ -147,6 +196,7 @@ export class CourseService implements ICourseService {
             program_id: Courses.program_id,
             name: Courses.name,
             initialism: Courses.initialism,
+            course_type: Courses.course_type,
             created_at: Courses.created_at,
             updated_at: Courses.updated_at,
             deleted_at: Courses.deleted_at,
@@ -196,6 +246,8 @@ export class CourseService implements ICourseService {
   ): ResultAsync<ICourseSelect, AppError> {
     return ValidateSchema(CourseInsert, courseInfo).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
+        await this.assertCourseScope(parsed.program_id, actorUser, tx, "write");
+
         const existingProgram = await this.programService.getProgramById(parsed.program_id, tx);
         if (existingProgram.isErr()) throw existingProgram.error;
 
@@ -230,14 +282,17 @@ export class CourseService implements ICourseService {
         const hasCourseInfo = Boolean(parsed && Object.keys(parsed).length > 0);
         if (!hasCourseInfo) throw new AppError(400, "No update parameters were provided.");
 
-        if (parsed.program_id) {
-          const existingProgram = await this.programService.getProgramById(parsed.program_id, tx);
-          if (existingProgram.isErr()) throw existingProgram.error;
-        }
-
         const existingCourse = await this.getCourseById(id, tx);
         if (existingCourse.isErr()) throw existingCourse.error;
         const current = existingCourse.value;
+
+        await this.assertCourseScope(current.program_id, actorUser, tx, "write");
+
+        if (parsed.program_id) {
+          await this.assertCourseScope(parsed.program_id, actorUser, tx, "write");
+          const existingProgram = await this.programService.getProgramById(parsed.program_id, tx);
+          if (existingProgram.isErr()) throw existingProgram.error;
+        }
 
         const [updated] = await tx
           .update(Courses)
@@ -273,6 +328,7 @@ export class CourseService implements ICourseService {
       const existingCourse = await this.getCourseById(id, tx);
       if (existingCourse.isErr()) throw existingCourse.error;
 
+      await this.assertCourseScope(existingCourse.value.program_id, actorUser, tx, "write");
       await this.checkCourseDependencies(id, tx);
 
       const [deletedCourse] = await tx
@@ -310,6 +366,8 @@ export class CourseService implements ICourseService {
       const existingCourse = await this.getCourseById(id, tx, true);
       if (existingCourse.isErr()) throw existingCourse.error;
       const current = existingCourse.value;
+
+      await this.assertCourseScope(current.program_id, actorUser, tx, "write");
 
       if (!current.deleted_at) {
         throw new AppError(400, "This course is already active and not archived.");

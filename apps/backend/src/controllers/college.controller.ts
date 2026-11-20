@@ -10,11 +10,13 @@ export class CollegeController {
 
   getCollegeById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((collegeId) => {
-      return this.collegeService.getCollegeById(collegeId).map((data) => ({
-        status: 200,
-        message: "College details retrieved successfully.",
-        data,
-      }));
+      return this.collegeService
+        .getCollegeById(collegeId, undefined, false, req.user)
+        .map((data) => ({
+          status: 200,
+          message: "College details retrieved successfully.",
+          data,
+        }));
     });
   });
 

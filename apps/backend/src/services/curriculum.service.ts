@@ -1,4 +1,4 @@
-import db from "@/configs/db.config.js";
+import db, { type PgTransaction } from "@/configs/db.config.js";
 import { AppError } from "@/libs/error.lib.js";
 import { createPaginatedData } from "@/libs/response.lib.js";
 import { ValidateSchema } from "@/libs/result.lib.js";
@@ -32,7 +32,7 @@ import {
   or,
   type SQL,
 } from "drizzle-orm";
-import { errAsync, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import { CourseService, type ICourseService } from "./course.service.js";
 import { ProgramService, type IProgramService } from "./program.service.js";
 import { logAuditEvent } from "@/libs/audit.lib.js";
@@ -43,6 +43,7 @@ export interface ICurriculumService {
     id: number,
     client?: DbClient,
     includeArchived?: boolean,
+    actorUser?: GetUser,
   ): ResultAsync<GetCurriculum, AppError>;
   getCurriculums(
     rawQuery: unknown,
@@ -82,10 +83,41 @@ export class CurriculumService implements ICurriculumService {
     private courseService: ICourseService = new CourseService(),
   ) {}
 
+  private async assertCurriculumScope(
+    programId: number,
+    actorUser: GetUser | undefined,
+    tx: PgTransaction,
+    mode: "read" | "write",
+  ): Promise<void> {
+    if (!actorUser) return;
+    const roles = actorUser.roles ?? [];
+    if (roles.includes("VPAA") || roles.includes("CLERK")) return;
+
+    const chairships = actorUser.offices?.chairships || [];
+    if (chairships.some((c) => c.id === programId)) return;
+
+    if (mode === "read") {
+      const deanships = actorUser.offices?.deanships || [];
+      if (deanships.length > 0) {
+        const [prog] = await tx
+          .select({ college_id: Programs.college_id })
+          .from(Programs)
+          .where(eq(Programs.id, programId));
+        if (prog && deanships.some((d) => d.id === prog.college_id)) return;
+      }
+    }
+
+    throw new AppError(
+      403,
+      "Access denied: You can only manage curriculum entries within your authorized program scope.",
+    );
+  }
+
   getCurriculumById(
     id: number,
     client: DbClient = db,
     includeArchived = false,
+    actorUser?: GetUser,
   ): ResultAsync<GetCurriculum, AppError> {
     return WithTransaction(client, async (tx) => {
       const [curriculum] = await tx
@@ -121,6 +153,8 @@ export class CurriculumService implements ICurriculumService {
         throw new AppError(404, "Curriculum mapping record not found.");
       }
 
+      await this.assertCurriculumScope(curriculum.program.id, actorUser, tx, "read");
+
       return curriculum;
     });
   }
@@ -154,7 +188,7 @@ export class CurriculumService implements ICurriculumService {
       ];
 
       const roles = actorUser?.roles ?? [];
-      const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+      const isPrivileged = roles.includes("VPAA") || roles.includes("CLERK");
 
       if (!isPrivileged && actorUser) {
         const deanships = actorUser.offices?.deanships || [];
@@ -166,6 +200,10 @@ export class CurriculumService implements ICurriculumService {
         } else if (deanships.length > 0) {
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Programs.college_id, deanCollegeIds));
+        } else {
+          return okAsync(
+            createPaginatedData({ data: [], currentPage: 1, pageSize: limit, totalItems: 0 }),
+          );
         }
       }
 
@@ -267,6 +305,8 @@ export class CurriculumService implements ICurriculumService {
   ): ResultAsync<GetCurriculum, AppError> {
     return ValidateSchema(CurriculumInsert, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
+        await this.assertCurriculumScope(parsed.program_id, actorUser, tx, "write");
+
         const programResult = await this.programService.getProgramById(parsed.program_id, tx);
         if (programResult.isErr()) throw programResult.error;
 
@@ -349,12 +389,15 @@ export class CurriculumService implements ICurriculumService {
         const existing = await this.getCurriculumById(id, tx);
         if (existing.isErr()) throw existing.error;
 
+        await this.assertCurriculumScope(existing.value.program.id, actorUser, tx, "write");
+
         if (parsed.course_id) {
           const courseResult = await this.courseService.getCourseById(parsed.course_id, tx);
           if (courseResult.isErr()) throw courseResult.error;
         }
 
         if (parsed.program_id) {
+          await this.assertCurriculumScope(parsed.program_id, actorUser, tx, "write");
           const programResult = await this.programService.getProgramById(parsed.program_id, tx);
           if (programResult.isErr()) throw programResult.error;
         }
@@ -398,6 +441,8 @@ export class CurriculumService implements ICurriculumService {
     return WithTransaction(client, async (tx) => {
       const existing = await this.getCurriculumById(id, tx);
       if (existing.isErr()) throw existing.error;
+
+      await this.assertCurriculumScope(existing.value.program.id, actorUser, tx, "write");
 
       const [activeOfferings] = await tx
         .select({ total: count(CourseOfferings.id) })
@@ -449,6 +494,8 @@ export class CurriculumService implements ICurriculumService {
       const existing = await this.getCurriculumById(id, tx, true);
       if (existing.isErr()) throw existing.error;
       const current = existing.value;
+
+      await this.assertCurriculumScope(current.program.id, actorUser, tx, "write");
 
       if (!current.deleted_at)
         throw new AppError(400, "This curriculum mapping is already active.");

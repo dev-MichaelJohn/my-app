@@ -10,11 +10,13 @@ export class ProgramController {
 
   getProgramById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((programId) => {
-      return this.programService.getProgramById(programId).map((data) => ({
-        status: 200,
-        message: "Program details retrieved successfully.",
-        data,
-      }));
+      return this.programService
+        .getProgramById(programId, undefined, false, req.user)
+        .map((data) => ({
+          status: 200,
+          message: "Program details retrieved successfully.",
+          data,
+        }));
     });
   });
 

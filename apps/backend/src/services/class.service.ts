@@ -14,7 +14,7 @@ import {
   type IClassUpdate,
   type PaginatedData,
 } from "@my-app/shared";
-import { errAsync, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import { ProgramService, type IProgramService } from "./program.service.js";
 import db, { type PgTransaction } from "@/configs/db.config.js";
 import {
@@ -41,6 +41,7 @@ export interface IClassService {
     id: number,
     client?: DbClient,
     includeArchived?: boolean,
+    actorUser?: GetUser,
   ): ResultAsync<GetClass, AppError>;
   getClasses(
     rawQuery: unknown,
@@ -77,10 +78,41 @@ export interface IClassService {
 export class ClassService implements IClassService {
   constructor(private programService: IProgramService = new ProgramService()) {}
 
+  private async assertClassScope(
+    programId: number,
+    actorUser: GetUser | undefined,
+    tx: PgTransaction,
+    mode: "read" | "write",
+  ): Promise<void> {
+    if (!actorUser) return;
+    const roles = actorUser.roles ?? [];
+    if (roles.includes("VPAA") || roles.includes("CLERK")) return;
+
+    const chairships = actorUser.offices?.chairships || [];
+    if (chairships.some((c) => c.id === programId)) return;
+
+    if (mode === "read") {
+      const deanships = actorUser.offices?.deanships || [];
+      if (deanships.length > 0) {
+        const [prog] = await tx
+          .select({ college_id: Programs.college_id })
+          .from(Programs)
+          .where(eq(Programs.id, programId));
+        if (prog && deanships.some((d) => d.id === prog.college_id)) return;
+      }
+    }
+
+    throw new AppError(
+      403,
+      "Access denied: You can only manage class sections within your authorized program scope.",
+    );
+  }
+
   getClassById(
     id: number,
     client: DbClient = db,
     includeArchived: boolean = false,
+    actorUser?: GetUser,
   ): ResultAsync<GetClass, AppError> {
     return WithTransaction(client, async (tx) => {
       const [classRecord] = await tx
@@ -101,6 +133,8 @@ export class ClassService implements IClassService {
         .innerJoin(Programs, eq(Classes.program_id, Programs.id))
         .where(and(eq(Classes.id, id), includeArchived ? undefined : isNull(Classes.deleted_at)));
       if (!classRecord) throw new AppError(404, "Class record not found.");
+
+      await this.assertClassScope(classRecord.program.id, actorUser, tx, "read");
 
       return classRecord;
     });
@@ -131,7 +165,7 @@ export class ClassService implements IClassService {
       ];
 
       const roles = actorUser?.roles ?? [];
-      const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+      const isPrivileged = roles.includes("VPAA") || roles.includes("CLERK");
 
       if (!isPrivileged && actorUser) {
         const deanships = actorUser.offices?.deanships || [];
@@ -143,6 +177,10 @@ export class ClassService implements IClassService {
         } else if (deanships.length > 0) {
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Programs.college_id, deanCollegeIds));
+        } else {
+          return okAsync(
+            createPaginatedData({ data: [], currentPage: 1, pageSize: limit, totalItems: 0 }),
+          );
         }
       }
 
@@ -229,6 +267,8 @@ export class ClassService implements IClassService {
   ): ResultAsync<GetClass, AppError> {
     return ValidateSchema(ClassInsert, classInfo).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
+        await this.assertClassScope(parsed.program_id, actorUser, tx, "write");
+
         const programResult = await this.programService.getProgramById(parsed.program_id, tx);
         if (programResult.isErr()) throw programResult.error;
 
@@ -271,7 +311,10 @@ export class ClassService implements IClassService {
         const existingClass = await this.getClassById(id, tx);
         if (existingClass.isErr()) throw existingClass.error;
 
+        await this.assertClassScope(existingClass.value.program.id, actorUser, tx, "write");
+
         if (parsed.program_id) {
+          await this.assertClassScope(parsed.program_id, actorUser, tx, "write");
           const programResult = await this.programService.getProgramById(parsed.program_id, tx);
           if (programResult.isErr()) throw programResult.error;
         }
@@ -316,6 +359,7 @@ export class ClassService implements IClassService {
       const existingClass = await this.getClassById(id, tx);
       if (existingClass.isErr()) throw existingClass.error;
 
+      await this.assertClassScope(existingClass.value.program.id, actorUser, tx, "write");
       await this.checkClassDependencies(id, tx);
 
       const [deleted] = await tx
@@ -349,6 +393,8 @@ export class ClassService implements IClassService {
       const existingClass = await this.getClassById(id, tx, true);
       if (existingClass.isErr()) throw existingClass.error;
       const current = existingClass.value;
+
+      await this.assertClassScope(current.program.id, actorUser, tx, "write");
 
       if (!current.deleted_at) {
         throw new AppError(400, "This class is already active and not archived.");

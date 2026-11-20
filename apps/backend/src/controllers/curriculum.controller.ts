@@ -10,11 +10,13 @@ export class CurriculumController {
 
   getCurriculumById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((curriculumId) => {
-      return this.curriculumService.getCurriculumById(curriculumId).map((data) => ({
-        status: 200,
-        message: "Curriculum details retrieved successfully.",
-        data,
-      }));
+      return this.curriculumService
+        .getCurriculumById(curriculumId, undefined, false, req.user)
+        .map((data) => ({
+          status: 200,
+          message: "Curriculum details retrieved successfully.",
+          data,
+        }));
     });
   });
 
@@ -64,10 +66,10 @@ export class CurriculumController {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((curriculumId) => {
       return this.curriculumService
         .restoreCurriculum(curriculumId, undefined, req.user, req)
-        .map(() => ({
+        .map((data) => ({
           status: 200,
           message: "Curriculum restored successfully.",
-          data: null,
+          data,
         }));
     });
   });

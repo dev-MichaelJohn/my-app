@@ -10,7 +10,7 @@ export class CourseController {
 
   getCourseById = runAsync((req) => {
     return ValidateSchema(this.idSchema, req.params.id).asyncAndThen((courseId) => {
-      return this.courseService.getCourseById(courseId).map((data) => ({
+      return this.courseService.getCourseById(courseId, undefined, false, req.user).map((data) => ({
         status: 200,
         message: "Course details retrieved successfully.",
         data,

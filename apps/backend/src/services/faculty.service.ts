@@ -18,7 +18,6 @@ import {
   AccountRoles,
   type GetFaculty,
   type GetUser,
-  type IFacultyInsert,
   type IFacultyUpdate,
   type PaginatedData,
 } from "@my-app/shared";
@@ -32,11 +31,12 @@ import {
   inArray,
   isNotNull,
   isNull,
+  ne,
   or,
   type SQL,
   sql,
 } from "drizzle-orm";
-import { type ResultAsync } from "neverthrow";
+import { okAsync, type ResultAsync } from "neverthrow";
 import { UserService, type IUserService } from "./user.service.js";
 import { logAuditEvent } from "@/libs/audit.lib.js";
 import type { Request } from "express";
@@ -52,6 +52,7 @@ export interface IFacultyService {
     id: number,
     client?: DbClient,
     includeArchived?: boolean,
+    actorUser?: GetUser,
   ): ResultAsync<GetFaculty, AppError>;
   getFacultyByAccountId(
     accountId: number,
@@ -62,12 +63,6 @@ export interface IFacultyService {
     client?: DbClient,
     actorUser?: GetUser,
   ): ResultAsync<PaginatedData<GetFaculty[]>, AppError>;
-  createFaculty(
-    info: IFacultyInsert,
-    client?: DbClient,
-    actorUser?: GetUser,
-    req?: Request,
-  ): ResultAsync<GetFaculty, AppError>;
   updateFaculty(
     id: number,
     info: IFacultyUpdate,
@@ -96,6 +91,7 @@ export class FacultyService implements IFacultyService {
     id: Faculties.id,
     account_id: Faculties.account_id,
     program_id: Faculties.program_id,
+    is_home: Faculties.is_home,
     created_at: Faculties.created_at,
     updated_at: Faculties.updated_at,
     deleted_at: Faculties.deleted_at,
@@ -147,6 +143,7 @@ export class FacultyService implements IFacultyService {
     programId: number,
     actorUser: GetUser | undefined,
     tx: PgTransaction,
+    mode: "read" | "write" = "write",
   ): Promise<void> {
     const [targetProgram] = await tx
       .select()
@@ -157,29 +154,31 @@ export class FacultyService implements IFacultyService {
       throw new AppError(404, "Target academic program not found.");
     }
 
-    const actorRoles = actorUser?.roles ?? [];
-    const isPrivileged = actorRoles.includes("SYS_ADMIN") || actorRoles.includes("ADMIN");
+    if (!actorUser) return;
 
-    if (!isPrivileged && actorUser) {
-      const deanships = actorUser.offices?.deanships || [];
-      const chairships = actorUser.offices?.chairships || [];
+    const actorRoles = actorUser.roles ?? [];
+    if (actorRoles.includes("VPAA") || actorRoles.includes("CLERK")) return;
 
-      const allowedByChair = chairships.some((c) => c.id === targetProgram.id);
-      const allowedByDean = deanships.some((d) => d.id === targetProgram.college_id);
+    const deanships = actorUser.offices?.deanships || [];
+    const chairships = actorUser.offices?.chairships || [];
 
-      if (!allowedByChair && !allowedByDean) {
-        throw new AppError(
-          403,
-          "Access denied: You can only manage faculty within your authorized college or program scope.",
-        );
-      }
+    if (chairships.some((c) => c.id === targetProgram.id)) return;
+
+    if (mode === "read" && deanships.some((d) => d.id === targetProgram.college_id)) {
+      return;
     }
+
+    throw new AppError(
+      403,
+      "Access denied: You can only manage faculty within your authorized program scope.",
+    );
   }
 
   getFacultyById(
     id: number,
     client: DbClient = db,
     includeArchived = false,
+    actorUser?: GetUser,
   ): ResultAsync<GetFaculty, AppError> {
     return WithTransaction(client, async (tx) => {
       const [record] = await tx
@@ -194,6 +193,9 @@ export class FacultyService implements IFacultyService {
         .groupBy(Faculties.id, Accounts.id, PersonalDetails.id, Programs.id);
 
       if (!record) throw new AppError(404, "Faculty appointment record not found.");
+
+      await this.assertSupervisoryProgramScope(record.program_id, actorUser, tx, "read");
+
       return record;
     });
   }
@@ -210,7 +212,9 @@ export class FacultyService implements IFacultyService {
         .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
         .innerJoin(Programs, eq(Faculties.program_id, Programs.id))
         .where(and(eq(Faculties.account_id, accountId), isNull(Faculties.deleted_at)))
-        .groupBy(Faculties.id, Accounts.id, PersonalDetails.id, Programs.id);
+        .orderBy(desc(Faculties.is_home))
+        .groupBy(Faculties.id, Accounts.id, PersonalDetails.id, Programs.id)
+        .limit(1);
 
       return record ?? null;
     });
@@ -232,9 +236,8 @@ export class FacultyService implements IFacultyService {
       ];
 
       const roles = actorUser?.roles ?? [];
-      const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+      const isPrivileged = roles.includes("VPAA") || roles.includes("CLERK");
 
-      // ── Only apply Dean/Chair scope if NOT explicitly requesting unscoped (all) faculty ──
       if (!isPrivileged && actorUser && !unscoped) {
         const deanships = actorUser.offices?.deanships || [];
         const chairships = actorUser.offices?.chairships || [];
@@ -245,6 +248,10 @@ export class FacultyService implements IFacultyService {
         } else if (deanships.length > 0) {
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Programs.college_id, deanCollegeIds));
+        } else {
+          return okAsync(
+            createPaginatedData({ data: [], currentPage: 1, pageSize: limit, totalItems: 0 }),
+          );
         }
       }
 
@@ -321,7 +328,7 @@ export class FacultyService implements IFacultyService {
   ): ResultAsync<GetFaculty, AppError> {
     return ValidateSchema(CreateFacultyPayloadSchema, info).asyncAndThen((parsed) => {
       return WithTransaction(client, async (tx) => {
-        await this.assertSupervisoryProgramScope(parsed.program_id, actorUser, tx);
+        await this.assertSupervisoryProgramScope(parsed.program_id, actorUser, tx, "write");
 
         let accountId: number;
 
@@ -353,23 +360,35 @@ export class FacultyService implements IFacultyService {
           if (grantRes.isErr()) throw grantRes.error;
         }
 
-        const [activeAppointment] = await tx
-          .select({
-            id: Faculties.id,
-            programId: Faculties.program_id,
-            programName: Programs.name,
-            programCode: Programs.initialism,
-          })
+        const [activeSameProgram] = await tx
+          .select({ id: Faculties.id })
           .from(Faculties)
-          .innerJoin(Programs, eq(Faculties.program_id, Programs.id))
-          .where(and(eq(Faculties.account_id, accountId), isNull(Faculties.deleted_at)));
+          .where(
+            and(
+              eq(Faculties.account_id, accountId),
+              eq(Faculties.program_id, parsed.program_id),
+              isNull(Faculties.deleted_at),
+            ),
+          );
 
-        if (activeAppointment) {
+        if (activeSameProgram) {
           throw new AppError(
             409,
-            `This instructor is already appointed under ${activeAppointment.programCode} (${activeAppointment.programName}). To change departments, please update their existing appointment.`,
+            "This instructor is already appointed to this academic department.",
           );
         }
+
+        const [anyHome] = await tx
+          .select({ id: Faculties.id })
+          .from(Faculties)
+          .where(
+            and(
+              eq(Faculties.account_id, accountId),
+              eq(Faculties.is_home, true),
+              isNull(Faculties.deleted_at),
+            ),
+          );
+        const shouldBeHome = !anyHome;
 
         const [existingDeleted] = await tx
           .select()
@@ -387,14 +406,18 @@ export class FacultyService implements IFacultyService {
         if (existingDeleted) {
           const [restored] = await tx
             .update(Faculties)
-            .set({ deleted_at: null, updated_at: new Date() })
+            .set({ deleted_at: null, is_home: shouldBeHome, updated_at: new Date() })
             .where(eq(Faculties.id, existingDeleted.id))
             .returning({ id: Faculties.id });
           facultyId = restored!.id;
         } else {
           const [created] = await tx
             .insert(Faculties)
-            .values({ account_id: accountId, program_id: parsed.program_id })
+            .values({
+              account_id: accountId,
+              program_id: parsed.program_id,
+              is_home: shouldBeHome,
+            })
             .returning({ id: Faculties.id });
           facultyId = created!.id;
         }
@@ -431,7 +454,7 @@ export class FacultyService implements IFacultyService {
         if (existing.isErr()) throw existing.error;
 
         const actorRoles = actorUser?.roles ?? [];
-        const isPrivilegedAdmin = actorRoles.includes("SYS_ADMIN") || actorRoles.includes("ADMIN");
+        const isPrivilegedAdmin = actorRoles.includes("VPAA") || actorRoles.includes("CLERK");
 
         if (!isPrivilegedAdmin && actorUser && existing.value.account_id === actorUser.account.id) {
           throw new AppError(
@@ -440,14 +463,25 @@ export class FacultyService implements IFacultyService {
           );
         }
 
-        await this.assertSupervisoryProgramScope(existing.value.program_id, actorUser, tx);
+        await this.assertSupervisoryProgramScope(existing.value.program_id, actorUser, tx, "write");
 
-        if (parsed.program_id) {
-          const [prog] = await tx
-            .select()
-            .from(Programs)
-            .where(and(eq(Programs.id, parsed.program_id), isNull(Programs.deleted_at)));
-          if (!prog) throw new AppError(404, "Target academic program not found.");
+        if (parsed.program_id && parsed.program_id !== existing.value.program_id) {
+          await this.assertSupervisoryProgramScope(parsed.program_id, actorUser, tx, "write");
+
+          const [conflict] = await tx
+            .select({ id: Faculties.id })
+            .from(Faculties)
+            .where(
+              and(
+                ne(Faculties.id, id),
+                eq(Faculties.account_id, existing.value.account_id),
+                eq(Faculties.program_id, parsed.program_id),
+                isNull(Faculties.deleted_at),
+              ),
+            );
+          if (conflict) {
+            throw new AppError(409, "Instructor already has an appointment in the target program.");
+          }
         }
 
         const [updated] = await tx
@@ -489,13 +523,13 @@ export class FacultyService implements IFacultyService {
       if (existing.isErr()) throw existing.error;
 
       const actorRoles = actorUser?.roles ?? [];
-      const isPrivilegedAdmin = actorRoles.includes("SYS_ADMIN") || actorRoles.includes("ADMIN");
+      const isPrivilegedAdmin = actorRoles.includes("VPAA") || actorRoles.includes("CLERK");
 
       if (!isPrivilegedAdmin && actorUser && existing.value.account_id === actorUser.account.id) {
         throw new AppError(403, "You cannot remove your own departmental faculty appointment.");
       }
 
-      await this.assertSupervisoryProgramScope(existing.value.program_id, actorUser, tx);
+      await this.assertSupervisoryProgramScope(existing.value.program_id, actorUser, tx, "write");
 
       const [activeOfferings] = await tx
         .select({ total: count(CourseOfferings.id) })
@@ -539,7 +573,7 @@ export class FacultyService implements IFacultyService {
       const existing = await this.getFacultyById(id, tx, true);
       if (existing.isErr()) throw existing.error;
 
-      await this.assertSupervisoryProgramScope(existing.value.program_id, actorUser, tx);
+      await this.assertSupervisoryProgramScope(existing.value.program_id, actorUser, tx, "write");
       const current = existing.value;
 
       if (!current.deleted_at) throw new AppError(400, "Faculty appointment is already active.");
@@ -547,12 +581,19 @@ export class FacultyService implements IFacultyService {
       const [conflict] = await tx
         .select()
         .from(Faculties)
-        .where(and(eq(Faculties.account_id, current.account_id), isNull(Faculties.deleted_at)));
+        .where(
+          and(
+            ne(Faculties.id, id),
+            eq(Faculties.account_id, current.account_id),
+            eq(Faculties.program_id, current.program_id),
+            isNull(Faculties.deleted_at),
+          ),
+        );
 
       if (conflict) {
         throw new AppError(
           409,
-          "Cannot restore appointment: This instructor has already been appointed to another department.",
+          "Cannot restore appointment: This instructor already has an active appointment in this department.",
         );
       }
 

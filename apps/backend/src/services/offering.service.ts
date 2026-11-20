@@ -9,11 +9,11 @@ import {
   Faculties,
   OfferingInsert,
   OfferingQuerySchema,
+  OfferingStudents,
   OfferingUpdate,
   PersonalDetails,
   Programs,
   Semesters,
-  StudentClasses,
   type GenerateOfferingsSummary,
   type GetOffering,
   type GetUser,
@@ -21,11 +21,12 @@ import {
   type IOfferingUpdate,
   type PaginatedData,
 } from "@my-app/shared";
-import { errAsync, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import { ClassService, type IClassService } from "./class.service.js";
 import { CurriculumService, type ICurriculumService } from "./curriculum.service.js";
 import { UserService, type IUserService } from "./user.service.js";
 import {
+  aliasedTable,
   and,
   asc,
   count,
@@ -48,11 +49,14 @@ import { SemesterService, type ISemesterService } from "./semester.service.js";
 import { logAuditEvent } from "@/libs/audit.lib.js";
 import type { Request } from "express";
 
+const FacultyHomePrograms = aliasedTable(Programs, "faculty_home_programs");
+
 export interface IOfferingService {
   getOfferingById(
     id: number,
     client?: DbClient,
     includeArchived?: boolean,
+    actorUser?: GetUser,
   ): ResultAsync<GetOffering, AppError>;
   getOfferings(
     rawQuery: unknown,
@@ -150,9 +154,9 @@ export class OfferingService implements IOfferingService {
       ELSE JSON_BUILD_OBJECT(
         'faculty_id', ${Faculties.id},
         'home_program', JSON_BUILD_OBJECT(
-          'id', ${Programs.id},
-          'name', ${Programs.name},
-          'initialism', ${Programs.initialism}
+          'id', ${FacultyHomePrograms.id},
+          'name', ${FacultyHomePrograms.name},
+          'initialism', ${FacultyHomePrograms.initialism}
         ),
         'account', JSON_BUILD_OBJECT(
           'id', ${Accounts.id},
@@ -173,10 +177,46 @@ export class OfferingService implements IOfferingService {
     `,
   };
 
+  private async assertOfferingScope(
+    programId: number,
+    facultyAccountId: number | null | undefined,
+    actorUser: GetUser | undefined,
+    tx: PgTransaction,
+    mode: "read" | "write",
+  ): Promise<void> {
+    if (!actorUser) return;
+    const roles = actorUser.roles ?? [];
+    if (roles.includes("VPAA") || roles.includes("CLERK")) return;
+
+    const chairships = actorUser.offices?.chairships || [];
+    if (chairships.some((c) => c.id === programId)) return;
+
+    if (mode === "read") {
+      const deanships = actorUser.offices?.deanships || [];
+      if (deanships.length > 0) {
+        const [prog] = await tx
+          .select({ college_id: Programs.college_id })
+          .from(Programs)
+          .where(eq(Programs.id, programId));
+        if (prog && deanships.some((d) => d.id === prog.college_id)) return;
+      }
+
+      if (roles.includes("FACULTY") && facultyAccountId === actorUser.account.id) {
+        return;
+      }
+    }
+
+    throw new AppError(
+      403,
+      "Access denied: You can only manage course offerings within your authorized program scope.",
+    );
+  }
+
   getOfferingById(
     id: number,
     client: DbClient = db,
     includeArchived: boolean = false,
+    actorUser?: GetUser,
   ): ResultAsync<GetOffering, AppError> {
     return WithTransaction(client, async (tx) => {
       const [offering] = await tx
@@ -194,6 +234,7 @@ export class OfferingService implements IOfferingService {
           Faculties,
           and(eq(CourseOfferings.faculty_id, Faculties.id), isNull(Faculties.deleted_at)),
         )
+        .leftJoin(FacultyHomePrograms, eq(Faculties.program_id, FacultyHomePrograms.id))
         .leftJoin(Accounts, and(eq(Faculties.account_id, Accounts.id), isNull(Accounts.deleted_at)))
         .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
         .where(
@@ -210,10 +251,19 @@ export class OfferingService implements IOfferingService {
           Programs.id,
           Semesters.id,
           Faculties.id,
+          FacultyHomePrograms.id,
           Accounts.id,
           PersonalDetails.id,
         );
       if (!offering) throw new AppError(404, "Course offering record not found.");
+
+      await this.assertOfferingScope(
+        offering.class.program.id,
+        offering.faculty?.account.id,
+        actorUser,
+        tx,
+        "read",
+      );
 
       return offering;
     });
@@ -249,7 +299,7 @@ export class OfferingService implements IOfferingService {
       ];
 
       const roles = actorUser?.roles ?? [];
-      const isPrivileged = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+      const isPrivileged = roles.includes("VPAA") || roles.includes("CLERK");
 
       if (!isPrivileged && actorUser) {
         const deanships = actorUser.offices?.deanships || [];
@@ -261,6 +311,12 @@ export class OfferingService implements IOfferingService {
         } else if (deanships.length > 0) {
           const deanCollegeIds = deanships.map((d) => d.id);
           filters.push(inArray(Programs.college_id, deanCollegeIds));
+        } else if (roles.includes("FACULTY")) {
+          filters.push(eq(Faculties.account_id, actorUser.account.id));
+        } else {
+          return okAsync(
+            createPaginatedData({ data: [], currentPage: 1, pageSize: limit, totalItems: 0 }),
+          );
         }
       }
 
@@ -314,6 +370,7 @@ export class OfferingService implements IOfferingService {
             Faculties,
             and(eq(CourseOfferings.faculty_id, Faculties.id), isNull(Faculties.deleted_at)),
           )
+          .leftJoin(FacultyHomePrograms, eq(Faculties.program_id, FacultyHomePrograms.id))
           .leftJoin(
             Accounts,
             and(eq(Faculties.account_id, Accounts.id), isNull(Accounts.deleted_at)),
@@ -328,6 +385,7 @@ export class OfferingService implements IOfferingService {
             Programs.id,
             Semesters.id,
             Faculties.id,
+            FacultyHomePrograms.id,
             Accounts.id,
             PersonalDetails.id,
           )
@@ -359,8 +417,12 @@ export class OfferingService implements IOfferingService {
           .innerJoin(Programs, eq(Classes.program_id, Programs.id))
           .innerJoin(Semesters, eq(CourseOfferings.semester_id, Semesters.id))
           .leftJoin(
+            Faculties,
+            and(eq(CourseOfferings.faculty_id, Faculties.id), isNull(Faculties.deleted_at)),
+          )
+          .leftJoin(
             Accounts,
-            and(eq(CourseOfferings.faculty_id, Accounts.id), isNull(Accounts.deleted_at)),
+            and(eq(Faculties.account_id, Accounts.id), isNull(Accounts.deleted_at)),
           )
           .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
           .where(whereCondition);
@@ -397,7 +459,14 @@ export class OfferingService implements IOfferingService {
         const classResult = await this.classService.getClassById(parsed.class_id, tx);
         if (classResult.isErr()) throw classResult.error;
 
-        // 🚀 Resolve to canonical Faculties.id (accepts either faculties.id or accounts.id)
+        await this.assertOfferingScope(
+          classResult.value.program.id,
+          undefined,
+          actorUser,
+          tx,
+          "write",
+        );
+
         let resolvedFacultyId: number | null = null;
         if (parsed.faculty_id) {
           resolvedFacultyId = await this.validateFaculty(
@@ -431,7 +500,7 @@ export class OfferingService implements IOfferingService {
           const [restored] = await tx
             .update(CourseOfferings)
             .set({
-              faculty_id: resolvedFacultyId, // Uses resolved Faculties.id
+              faculty_id: resolvedFacultyId,
               deleted_at: null,
               updated_at: new Date(),
             })
@@ -445,7 +514,7 @@ export class OfferingService implements IOfferingService {
             .insert(CourseOfferings)
             .values({
               ...parsed,
-              faculty_id: resolvedFacultyId, // Uses resolved Faculties.id
+              faculty_id: resolvedFacultyId,
             })
             .returning({ id: CourseOfferings.id });
 
@@ -487,6 +556,14 @@ export class OfferingService implements IOfferingService {
         const existing = await this.getOfferingById(id, tx);
         if (existing.isErr()) throw existing.error;
 
+        await this.assertOfferingScope(
+          existing.value.class.program.id,
+          existing.value.faculty?.account.id,
+          actorUser,
+          tx,
+          "write",
+        );
+
         if (parsed.semester_id)
           await this.semesterService.validateSemesterOpen(parsed.semester_id, tx);
 
@@ -503,9 +580,9 @@ export class OfferingService implements IOfferingService {
           const classResult = await this.classService.getClassById(parsed.class_id, tx);
           if (classResult.isErr()) throw classResult.error;
           classProgramId = classResult.value.program.id;
+          await this.assertOfferingScope(classProgramId, undefined, actorUser, tx, "write");
         }
 
-        // 🚀 Resolve to canonical Faculties.id
         let resolvedFacultyId: number | null | undefined = undefined;
         if (parsed.faculty_id !== undefined) {
           resolvedFacultyId = parsed.faculty_id
@@ -556,6 +633,14 @@ export class OfferingService implements IOfferingService {
       const existing = await this.getOfferingById(id, tx);
       if (existing.isErr()) throw existing.error;
 
+      await this.assertOfferingScope(
+        existing.value.class.program.id,
+        existing.value.faculty?.account.id,
+        actorUser,
+        tx,
+        "write",
+      );
+
       await this.checkOfferingDependencies(id, tx);
 
       const [deleted] = await tx
@@ -591,6 +676,14 @@ export class OfferingService implements IOfferingService {
       const existing = await this.getOfferingById(id, tx, true);
       if (existing.isErr()) throw existing.error;
       const current = existing.value;
+
+      await this.assertOfferingScope(
+        current.class.program.id,
+        current.faculty?.account.id,
+        actorUser,
+        tx,
+        "write",
+      );
 
       if (!current.deleted_at) throw new AppError(400, "This course offering is already active.");
 
@@ -667,6 +760,14 @@ export class OfferingService implements IOfferingService {
         throw new AppError(404, "Semester record was not found or is inactive.");
       }
 
+      const roles = actorUser?.roles ?? [];
+      const isPrivileged = roles.includes("VPAA") || roles.includes("CLERK");
+      const chairProgramIds = actorUser?.offices?.chairships?.map((c) => c.id) ?? [];
+
+      if (actorUser && !isPrivileged && chairProgramIds.length === 0) {
+        throw new AppError(403, "Access denied: You do not have permission to generate offerings.");
+      }
+
       const activeClasses = await tx
         .select({
           classId: Classes.id,
@@ -676,7 +777,12 @@ export class OfferingService implements IOfferingService {
         })
         .from(Classes)
         .innerJoin(Programs, and(eq(Classes.program_id, Programs.id), isNull(Programs.deleted_at)))
-        .where(isNull(Classes.deleted_at));
+        .where(
+          and(
+            isNull(Classes.deleted_at),
+            !isPrivileged && actorUser ? inArray(Classes.program_id, chairProgramIds) : undefined,
+          ),
+        );
 
       if (activeClasses.length === 0) {
         return {
@@ -778,17 +884,11 @@ export class OfferingService implements IOfferingService {
     });
   }
 
-  /**
-   * Resiliently validates the assigned faculty member.
-   * Resolves whether the client passed a Faculties.id OR an Accounts.id.
-   * Auto-appoints to fallbackProgramId if the account exists with FACULTY/SUPERVISOR role.
-   */
   private async validateFaculty(
     facultyId: number,
     tx: PgTransaction,
     fallbackProgramId?: number,
   ): Promise<number> {
-    // 1. First, search strictly by appointment primary key (Faculties.id)
     const [facultyById] = await tx
       .select({ id: Faculties.id, accountId: Faculties.account_id })
       .from(Faculties)
@@ -796,19 +896,19 @@ export class OfferingService implements IOfferingService {
 
     let targetAppointment = facultyById;
 
-    // 2. If no appointment with this primary key exists, verify if an account matches
     if (!targetAppointment) {
       const [facultyByAccount] = await tx
         .select({ id: Faculties.id, accountId: Faculties.account_id })
         .from(Faculties)
-        .where(and(eq(Faculties.account_id, facultyId), isNull(Faculties.deleted_at)));
+        .where(and(eq(Faculties.account_id, facultyId), isNull(Faculties.deleted_at)))
+        .orderBy(desc(Faculties.is_home))
+        .limit(1);
 
       if (facultyByAccount) {
         targetAppointment = facultyByAccount;
       }
     }
 
-    // 3. Fallback: Auto-appoint if user is registered with FACULTY/SUPERVISOR role
     if (!targetAppointment && fallbackProgramId) {
       const [account] = await tx
         .select({ id: Accounts.id })
@@ -816,15 +916,36 @@ export class OfferingService implements IOfferingService {
         .where(and(eq(Accounts.id, facultyId), isNull(Accounts.deleted_at)));
 
       if (account) {
-        const isFaculty = await this.userService.hasRole(account.id, "FACULTY", tx);
-        const isSupervisor = await this.userService.hasRole(account.id, "SUPERVISOR", tx);
+        const [isFaculty, isDean, isChair, isVpaa] = await Promise.all([
+          this.userService.hasRole(account.id, "FACULTY", tx),
+          this.userService.hasRole(account.id, "COLLEGE_DEAN", tx),
+          this.userService.hasRole(account.id, "DEPARTMENT_CHAIR", tx),
+          this.userService.hasRole(account.id, "VPAA", tx),
+        ]);
 
-        if ((isFaculty.isOk() && isFaculty.value) || (isSupervisor.isOk() && isSupervisor.value)) {
+        if (
+          (isFaculty.isOk() && isFaculty.value) ||
+          (isDean.isOk() && isDean.value) ||
+          (isChair.isOk() && isChair.value) ||
+          (isVpaa.isOk() && isVpaa.value)
+        ) {
+          const [anyHome] = await tx
+            .select({ id: Faculties.id })
+            .from(Faculties)
+            .where(
+              and(
+                eq(Faculties.account_id, account.id),
+                eq(Faculties.is_home, true),
+                isNull(Faculties.deleted_at),
+              ),
+            );
+
           const [autoAppointed] = await tx
             .insert(Faculties)
             .values({
               account_id: account.id,
               program_id: fallbackProgramId,
+              is_home: !anyHome,
             })
             .returning();
 
@@ -842,27 +963,34 @@ export class OfferingService implements IOfferingService {
       );
     }
 
-    // 4. Verify that the associated account possesses teaching roles
-    const isFaculty = await this.userService.hasRole(targetAppointment.accountId, "FACULTY", tx);
-    const isSupervisor = await this.userService.hasRole(
-      targetAppointment.accountId,
-      "SUPERVISOR",
-      tx,
-    );
+    const [isFaculty, isDean, isChair, isVpaa] = await Promise.all([
+      this.userService.hasRole(targetAppointment.accountId, "FACULTY", tx),
+      this.userService.hasRole(targetAppointment.accountId, "COLLEGE_DEAN", tx),
+      this.userService.hasRole(targetAppointment.accountId, "DEPARTMENT_CHAIR", tx),
+      this.userService.hasRole(targetAppointment.accountId, "VPAA", tx),
+    ]);
 
-    if ((isFaculty.isOk() && isFaculty.value) || (isSupervisor.isOk() && isSupervisor.value)) {
-      return targetAppointment.id; // Returns canonical Faculties.id
+    if (
+      (isFaculty.isOk() && isFaculty.value) ||
+      (isDean.isOk() && isDean.value) ||
+      (isChair.isOk() && isChair.value) ||
+      (isVpaa.isOk() && isVpaa.value)
+    ) {
+      return targetAppointment.id;
     }
 
-    throw new AppError(400, "The assigned user must have a FACULTY or SUPERVISOR role.");
+    throw new AppError(400, "The assigned user must hold a FACULTY or teaching leadership role.");
   }
 
   private async checkOfferingDependencies(offeringId: number, tx: PgTransaction): Promise<void> {
     const [activeStudents] = await tx
-      .select({ total: count(StudentClasses.id) })
-      .from(StudentClasses)
+      .select({ total: count(OfferingStudents.id) })
+      .from(OfferingStudents)
       .where(
-        and(eq(StudentClasses.course_offering_id, offeringId), isNull(StudentClasses.deleted_at)),
+        and(
+          eq(OfferingStudents.course_offering_id, offeringId),
+          isNull(OfferingStudents.deleted_at),
+        ),
       );
 
     const studentCount = activeStudents?.total ?? 0;
