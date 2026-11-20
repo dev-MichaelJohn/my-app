@@ -42,7 +42,7 @@ export default function StudentEvaluationPage() {
   if (selectedSubject) {
     return (
       <StudentEvaluationFormViewComponent
-        studentClassId={selectedSubject.student_class_id}
+        studentClassId={selectedSubject.offering_student_id}
         onBack={() => setSelectedSubject(null)}
       />
     );
@@ -77,7 +77,7 @@ export default function StudentEvaluationPage() {
 
             return (
               <Card
-                key={sub.student_class_id}
+                key={sub.offering_student_id}
                 className="border-border bg-card text-card-foreground shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
               >
                 <CardHeader className="flex flex-row items-start justify-between pb-2">
@@ -224,7 +224,7 @@ function StudentEvaluationFormContent({
       try {
         await submitMutation.mutateAsync({
           schedule_id: viewData.schedule_id,
-          student_class_id: studentClassId,
+          offering_student_id: studentClassId,
           ratings: ratingItems,
           comment: targetComment.trim() || undefined,
           is_draft: true,
@@ -296,7 +296,7 @@ function StudentEvaluationFormContent({
     try {
       await submitMutation.mutateAsync({
         schedule_id: viewData.schedule_id,
-        student_class_id: studentClassId,
+        offering_student_id: studentClassId,
         ratings: ratingItems,
         comment: comment.trim() || undefined,
         is_draft: false,

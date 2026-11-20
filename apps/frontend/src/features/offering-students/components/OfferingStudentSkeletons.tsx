@@ -1,7 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
-export function StudentClassTableSkeleton({ rows = 6 }: { rows?: number }) {
+export function OfferingStudentTableSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <div className="w-full border border-border rounded-xl bg-card overflow-hidden">
       <div className="p-4 border-b border-border bg-muted/40 flex gap-4">
@@ -32,7 +32,7 @@ export function StudentClassTableSkeleton({ rows = 6 }: { rows?: number }) {
   );
 }
 
-export function StudentClassGridSkeleton({ count = 6 }: { count?: number }) {
+export function OfferingStudentGridSkeleton({ count = 6 }: { count?: number }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {Array.from({ length: count }).map((_, i) => (

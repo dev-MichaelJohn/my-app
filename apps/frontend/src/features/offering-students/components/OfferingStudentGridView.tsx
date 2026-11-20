@@ -8,24 +8,24 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MoreVertical, Trash2, RotateCcw, Lock, ShieldAlert } from "lucide-react";
-import { PERMISSIONS, type GetStudentClass } from "@my-app/shared";
+import { PERMISSIONS, type GetOfferingStudent } from "@my-app/shared";
 import { Can } from "@/components/Can";
 
-interface StudentClassGridViewProps {
-  students: GetStudentClass[];
+interface OfferingStudentGridViewProps {
+  students: GetOfferingStudent[];
   isArchivedView: boolean;
   isConcluded: boolean;
-  onDelete: (item: GetStudentClass) => void;
-  onRestore: (item: GetStudentClass) => void;
+  onDelete: (item: GetOfferingStudent) => void;
+  onRestore: (item: GetOfferingStudent) => void;
 }
 
-export function StudentClassGridView({
+export function OfferingStudentGridView({
   students,
   isArchivedView,
   isConcluded,
   onDelete,
   onRestore,
-}: StudentClassGridViewProps) {
+}: OfferingStudentGridViewProps) {
   if (students.length === 0) {
     return (
       <div className="text-center py-12 border border-dashed border-border rounded-xl bg-card">
@@ -64,7 +64,10 @@ export function StudentClassGridView({
               </div>
 
               <Can
-                anyPermission={[PERMISSIONS.STUDENT_CLASS_CREATE, PERMISSIONS.STUDENT_CLASS_UPDATE]}
+                anyPermission={[
+                  PERMISSIONS.OFFERING_STUDENT_CREATE,
+                  PERMISSIONS.OFFERING_STUDENT_UPDATE,
+                ]}
               >
                 {isConcluded ? (
                   <span className="text-xs text-muted-foreground p-1" title="Term Concluded">

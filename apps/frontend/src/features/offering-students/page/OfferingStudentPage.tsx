@@ -18,27 +18,27 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
-  useStudentClasses,
-  useDeleteStudentClass,
-  useRestoreStudentClass,
-} from "../hooks/useStudentClasses";
+  useOfferingStudents,
+  useDeleteOfferingStudent,
+  useRestoreOfferingStudent,
+} from "../hooks/useOfferingStudents";
 import { useOffering } from "@/features/offerings/hooks/useOfferings";
 import { useActiveSemester } from "@/features/semesters/hooks/useSemesters";
-import { StudentClassTableView } from "../components/StudentClassTableView";
-import { StudentClassGridView } from "../components/StudentClassGridView";
+import { OfferingStudentTableView } from "../components/OfferingStudentTableView";
+import { OfferingStudentGridView } from "../components/OfferingStudentGridView";
 import {
-  StudentClassTableSkeleton,
-  StudentClassGridSkeleton,
-} from "../components/StudentClassSkeletons";
-import { StudentClassFormDialog } from "../components/StudentClassFormDialog";
+  OfferingStudentTableSkeleton,
+  OfferingStudentGridSkeleton,
+} from "../components/OfferingStudentSkeletons";
+import { OfferingStudentFormDialog } from "../components/OfferingStudentFormDialog";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { isSemesterOpen } from "@/lib/format.lib";
-import type { GetStudentClass, StudentClassQuery } from "@my-app/shared";
+import type { GetOfferingStudent, OfferingStudentQuery } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
 import { Can } from "@/components/Can";
 import { PERMISSIONS } from "@my-app/shared";
 
-export default function StudentClassPage() {
+export default function OfferingStudentPage() {
   const [searchParams] = useSearchParams();
   const offeringIdParam = searchParams.get("course_offering_id");
 
@@ -83,7 +83,7 @@ export default function StudentClassPage() {
     return () => clearTimeout(handler);
   }, [searchInput]);
 
-  const query: StudentClassQuery = useMemo(
+  const query: OfferingStudentQuery = useMemo(
     () => ({
       paginate,
       page,
@@ -97,17 +97,17 @@ export default function StudentClassPage() {
     [paginate, page, limit, debouncedSearch, offeringId, isArchived],
   );
 
-  const { data: response, isLoading, isPlaceholderData } = useStudentClasses(query);
+  const { data: response, isLoading, isPlaceholderData } = useOfferingStudents(query);
 
-  const deleteMutation = useDeleteStudentClass();
-  const restoreMutation = useRestoreStudentClass();
+  const deleteMutation = useDeleteOfferingStudent();
+  const restoreMutation = useRestoreOfferingStudent();
 
   const students = response?.data ?? [];
   const pagination = response?.pagination;
 
   const [formOpen, setFormOpen] = useState(false);
-  const [archiveTarget, setArchiveTarget] = useState<GetStudentClass | null>(null);
-  const [restoreTarget, setRestoreTarget] = useState<GetStudentClass | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<GetOfferingStudent | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<GetOfferingStudent | null>(null);
 
   const handleArchiveConfirm = async () => {
     if (!archiveTarget) return;
@@ -156,7 +156,7 @@ export default function StudentClassPage() {
           </p>
         </div>
 
-        <Can permission={PERMISSIONS.STUDENT_CLASS_CREATE}>
+        <Can permission={PERMISSIONS.OFFERING_STUDENT_CREATE}>
           {offering && (
             <Button
               onClick={() => setFormOpen(true)}
@@ -274,12 +274,12 @@ export default function StudentClassPage() {
       >
         {isLoading || isLoadingOffering ? (
           viewMode === "table" ? (
-            <StudentClassTableSkeleton rows={6} />
+            <OfferingStudentTableSkeleton rows={6} />
           ) : (
-            <StudentClassGridSkeleton count={6} />
+            <OfferingStudentGridSkeleton count={6} />
           )
         ) : viewMode === "table" ? (
-          <StudentClassTableView
+          <OfferingStudentTableView
             students={students}
             isArchivedView={isArchived}
             isConcluded={isConcluded}
@@ -287,7 +287,7 @@ export default function StudentClassPage() {
             onRestore={(item) => setRestoreTarget(item)}
           />
         ) : (
-          <StudentClassGridView
+          <OfferingStudentGridView
             students={students}
             isArchivedView={isArchived}
             isConcluded={isConcluded}
@@ -369,7 +369,7 @@ export default function StudentClassPage() {
       </div>
 
       {formOpen && offering && (
-        <StudentClassFormDialog open={formOpen} onOpenChange={setFormOpen} offering={offering} />
+        <OfferingStudentFormDialog open={formOpen} onOpenChange={setFormOpen} offering={offering} />
       )}
 
       <ConfirmActionDialog

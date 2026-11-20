@@ -15,24 +15,24 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { MoreHorizontal, Trash2, RotateCcw, ShieldAlert, Lock } from "lucide-react";
-import { PERMISSIONS, type GetStudentClass } from "@my-app/shared";
+import { PERMISSIONS, type GetOfferingStudent } from "@my-app/shared";
 import { Can } from "@/components/Can";
 
-interface StudentClassTableViewProps {
-  students: GetStudentClass[];
+interface OfferingStudentTableViewProps {
+  students: GetOfferingStudent[];
   isArchivedView: boolean;
   isConcluded: boolean;
-  onDelete: (item: GetStudentClass) => void;
-  onRestore: (item: GetStudentClass) => void;
+  onDelete: (item: GetOfferingStudent) => void;
+  onRestore: (item: GetOfferingStudent) => void;
 }
 
-export function StudentClassTableView({
+export function OfferingStudentTableView({
   students,
   isArchivedView,
   isConcluded,
   onDelete,
   onRestore,
-}: StudentClassTableViewProps) {
+}: OfferingStudentTableViewProps) {
   if (students.length === 0) {
     return (
       <div className="text-center py-12 border border-dashed border-border rounded-xl bg-card">
@@ -55,7 +55,10 @@ export function StudentClassTableView({
             <TableHead className="font-bold">Course Subject</TableHead>
             <TableHead className="font-bold">Class Section</TableHead>
             <Can
-              anyPermission={[PERMISSIONS.STUDENT_CLASS_CREATE, PERMISSIONS.STUDENT_CLASS_UPDATE]}
+              anyPermission={[
+                PERMISSIONS.OFFERING_STUDENT_CREATE,
+                PERMISSIONS.OFFERING_STUDENT_UPDATE,
+              ]}
             >
               <TableHead className="w-[80px] text-right font-bold">Actions</TableHead>
             </Can>
@@ -104,8 +107,8 @@ export function StudentClassTableView({
                 </TableCell>
                 <Can
                   anyPermission={[
-                    PERMISSIONS.STUDENT_CLASS_CREATE,
-                    PERMISSIONS.STUDENT_CLASS_UPDATE,
+                    PERMISSIONS.OFFERING_STUDENT_CREATE,
+                    PERMISSIONS.OFFERING_STUDENT_UPDATE,
                   ]}
                 >
                   <TableCell className="text-right">
