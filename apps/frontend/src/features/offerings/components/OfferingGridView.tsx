@@ -95,7 +95,7 @@ export function OfferingGridView({
                       <>
                         <DropdownMenuItem
                           onClick={() =>
-                            navigate(`/admin/student-classes?course_offering_id=${item.id}`)
+                            navigate(`/admin/offering-students?course_offering_id=${item.id}`)
                           }
                           className="gap-2 cursor-pointer font-medium text-primary focus:bg-primary/10"
                         >
@@ -178,7 +178,9 @@ export function OfferingGridView({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => navigate(`/admin/student-classes?course_offering_id=${item.id}`)}
+                    onClick={() =>
+                      navigate(`/admin/offering-students?course_offering_id=${item.id}`)
+                    }
                     className="w-full text-xs gap-2 h-8 border-border bg-card hover:bg-muted text-foreground"
                   >
                     <Users className="w-3.5 h-3.5 text-primary" />

@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,8 +46,13 @@ import type { ClassStudentQuery, GetClassStudent } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
 import { Can } from "@/components/Can";
 import { PERMISSIONS } from "@my-app/shared";
+import { useQueryClient } from "@tanstack/react-query";
+import { CsvImportDialog } from "@/components/ui/csv-import-dialog";
 
 export default function ClassStudentsPage() {
+  const queryClient = useQueryClient();
+  const [importOpen, setImportOpen] = useState(false);
+
   const [searchParams, setSearchParams] = useSearchParams();
   const semesterIdParam = searchParams.get("semester_id");
   const classIdParam = searchParams.get("class_id");
@@ -217,21 +223,35 @@ export default function ClassStudentsPage() {
         </div>
 
         <Can permission={PERMISSIONS.CLASS_STUDENT_CREATE}>
-          <Button
-            onClick={() => {
-              setEnrollmentToEdit(null);
-              setFormOpen(true);
-            }}
-            disabled={isCurrentSemesterConcluded}
-            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm disabled:opacity-50"
-          >
-            {isCurrentSemesterConcluded ? (
-              <Lock className="w-4 h-4" />
-            ) : (
-              <Plus className="w-4 h-4" />
-            )}
-            <span>{isCurrentSemesterConcluded ? "Term Concluded" : "Enroll Student"}</span>
-          </Button>
+          <div className="flex gap-2 items-center">
+            <Can permission={PERMISSIONS.BULK_IMPORT_EXECUTE}>
+              <Button
+                variant="outline"
+                onClick={() => setImportOpen(true)}
+                disabled={isCurrentSemesterConcluded}
+                className="gap-2 h-9 text-xs border-border shadow-2xs"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Import CSV</span>
+              </Button>
+            </Can>
+
+            <Button
+              onClick={() => {
+                setEnrollmentToEdit(null);
+                setFormOpen(true);
+              }}
+              disabled={isCurrentSemesterConcluded}
+              className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm disabled:opacity-50"
+            >
+              {isCurrentSemesterConcluded ? (
+                <Lock className="w-4 h-4" />
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+              <span>{isCurrentSemesterConcluded ? "Term Concluded" : "Enroll Student"}</span>
+            </Button>
+          </div>
         </Can>
       </div>
 
@@ -591,6 +611,17 @@ export default function ClassStudentsPage() {
         variant="primary"
         isLoading={restoreMutation.isPending}
         onConfirm={handleRestoreConfirm}
+      />
+
+      <CsvImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entity="class-students"
+        entityTitle="Enrolled Students"
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["class-students"] });
+          queryClient.invalidateQueries({ queryKey: ["users"] });
+        }}
       />
     </div>
   );

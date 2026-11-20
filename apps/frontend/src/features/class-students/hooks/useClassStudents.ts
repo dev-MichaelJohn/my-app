@@ -39,7 +39,7 @@ export const useCreateClassStudent = () => {
       toQuery(classStudentAPI.createClassStudent(newStudent)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CLASS_STUDENT_KEYS.all });
-      queryClient.invalidateQueries({ queryKey: ["student-classes"] });
+      queryClient.invalidateQueries({ queryKey: ["offering-students"] });
     },
   });
 };
@@ -53,7 +53,7 @@ export const useUpdateClassStudent = () => {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: CLASS_STUDENT_KEYS.all });
       queryClient.invalidateQueries({ queryKey: CLASS_STUDENT_KEYS.detail(id) });
-      queryClient.invalidateQueries({ queryKey: ["student-classes"] });
+      queryClient.invalidateQueries({ queryKey: ["offering-students"] });
     },
   });
 };
@@ -65,7 +65,7 @@ export const useDeleteClassStudent = () => {
     mutationFn: (id: number) => toQuery(classStudentAPI.deleteClassStudent(id)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CLASS_STUDENT_KEYS.all });
-      queryClient.invalidateQueries({ queryKey: ["student-classes"] });
+      queryClient.invalidateQueries({ queryKey: ["offering-students"] });
     },
   });
 };
@@ -77,7 +77,7 @@ export const useRestoreClassStudent = () => {
     mutationFn: (id: number) => toQuery(classStudentAPI.restoreClassStudent(id)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CLASS_STUDENT_KEYS.all });
-      queryClient.invalidateQueries({ queryKey: ["student-classes"] });
+      queryClient.invalidateQueries({ queryKey: ["offering-students"] });
     },
   });
 };

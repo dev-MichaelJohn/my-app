@@ -53,8 +53,7 @@ export function UserTableView({
   onDelete,
   onRestore,
 }: Props) {
-  const { user: currentUser, hasRole } = usePermissions();
-  const isSysAdmin = hasRole("SYS_ADMIN");
+  const { user: currentUser, isVpaa, isClerk } = usePermissions();
 
   if (users.length === 0) {
     return (
@@ -83,8 +82,11 @@ export function UserTableView({
         <TableBody>
           {users.map((item) => {
             const isSelf = currentUser?.account.id === item.account.id;
-            const isTargetAdmin = item.roles.includes("ADMIN") || item.roles.includes("SYS_ADMIN");
-            const canManageTarget = isSysAdmin || !isTargetAdmin || isSelf;
+            const isTargetVpaa = item.roles.includes("VPAA");
+            const isTargetClerk = item.roles.includes("CLERK");
+
+            // VPAA cannot modify other/own VPAA role-wise here; Clerk is read-only on VPAA & Clerk
+            const canManageTarget = !isTargetVpaa && (isVpaa || (isClerk && !isTargetClerk));
 
             const fullName = `${item.details.last_name}, ${item.details.first_name}${
               item.details.suffix ? ` ${item.details.suffix}` : ""
@@ -186,15 +188,13 @@ export function UserTableView({
                                 <Edit className="w-4 h-4 text-muted-foreground" />
                                 <span>Edit Account</span>
                               </DropdownMenuItem>
-                              {isSysAdmin && (
-                                <DropdownMenuItem
-                                  onClick={() => onManageRoles(item)}
-                                  className="gap-2 cursor-pointer"
-                                >
-                                  <Shield className="w-4 h-4 text-primary" />
-                                  <span>Manage Roles</span>
-                                </DropdownMenuItem>
-                              )}
+                              <DropdownMenuItem
+                                onClick={() => onManageRoles(item)}
+                                className="gap-2 cursor-pointer"
+                              >
+                                <Shield className="w-4 h-4 text-primary" />
+                                <span>Manage Roles</span>
+                              </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => onResetPassword(item)}
                                 className="gap-2 cursor-pointer"
@@ -215,7 +215,9 @@ export function UserTableView({
                               disabled
                               className="text-xs text-muted-foreground italic"
                             >
-                              Managed by Sys Admin
+                              {isTargetVpaa
+                                ? "Protected VPAA Account"
+                                : "Managed by VPAA (Read-Only)"}
                             </DropdownMenuItem>
                           )}
 
@@ -232,13 +234,17 @@ export function UserTableView({
                             </>
                           )}
                         </>
-                      ) : (
+                      ) : canManageTarget ? (
                         <DropdownMenuItem
                           onClick={() => onRestore(item)}
                           className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
                         >
                           <RotateCcw className="w-4 h-4" />
                           <span>Restore Account</span>
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem disabled className="text-xs text-muted-foreground italic">
+                          Managed by VPAA (Read-Only)
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuContent>

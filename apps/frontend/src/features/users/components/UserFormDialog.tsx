@@ -59,8 +59,7 @@ export function UserFormDialog({ open, onOpenChange, userToEdit }: Props) {
 
 function FormInner({ userToEdit, onClose }: { userToEdit?: GetUser | null; onClose: () => void }) {
   const isEditing = Boolean(userToEdit);
-  const { hasRole } = usePermissions();
-  const isSysAdmin = hasRole("SYS_ADMIN");
+  const { isVpaa } = usePermissions();
 
   const createMutation = useCreateUser();
   const updateMutation = useUpdateUser();
@@ -70,7 +69,6 @@ function FormInner({ userToEdit, onClose }: { userToEdit?: GetUser | null; onClo
   const [pendingValues, setPendingValues] = useState<CreateUser | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
 
-  // Check active offices held
   const deanships = userToEdit?.offices?.deanships || [];
   const chairships = userToEdit?.offices?.chairships || [];
   const isHoldingOffice = deanships.length > 0 || chairships.length > 0;
@@ -80,15 +78,16 @@ function FormInner({ userToEdit, onClose }: { userToEdit?: GetUser | null; onClo
     ...chairships.map((c) => `Chair of ${c.initialism}`),
   ].join(" & ");
 
-  const availableRoles = isSysAdmin
-    ? SystemRoles.enumValues
-    : SystemRoles.enumValues.filter((r) => r !== "ADMIN" && r !== "SYS_ADMIN");
+  // VPAA cannot create new VPAA accounts; only VPAA can create CLERK accounts
+  const availableRoles = isVpaa
+    ? SystemRoles.enumValues.filter((r) => r !== "VPAA")
+    : SystemRoles.enumValues.filter((r) => r !== "VPAA" && r !== "CLERK");
 
   const getInitialRole = (): SystemRole => {
     const roles = userToEdit?.roles ?? [];
-    if (isHoldingOffice || roles.includes("SUPERVISOR")) return "SUPERVISOR";
-    if (roles.includes("SYS_ADMIN")) return "SYS_ADMIN";
-    if (roles.includes("ADMIN")) return "ADMIN";
+    if (deanships.length > 0 || roles.includes("COLLEGE_DEAN")) return "COLLEGE_DEAN";
+    if (chairships.length > 0 || roles.includes("DEPARTMENT_CHAIR")) return "DEPARTMENT_CHAIR";
+    if (roles.includes("CLERK")) return "CLERK";
     if (roles.includes("FACULTY")) return "FACULTY";
     return (roles[0] as SystemRole) || "STUDENT";
   };
@@ -189,7 +188,7 @@ function FormInner({ userToEdit, onClose }: { userToEdit?: GetUser | null; onClo
         <DialogDescription className="text-sm text-muted-foreground">
           {isEditing
             ? "Update user profile details, email address, or primary role."
-            : "Register a new student, faculty member, or supervisor. Credentials will be emailed automatically."}
+            : "Register a new student, faculty member, academic head, or clerk. Credentials will be emailed automatically."}
         </DialogDescription>
       </DialogHeader>
 
@@ -212,12 +211,12 @@ function FormInner({ userToEdit, onClose }: { userToEdit?: GetUser | null; onClo
             <Lock className="w-4 h-4 text-primary shrink-0" />
             <span>
               This user currently holds office as <strong>{officeNames}</strong>. Primary role is
-              locked to <strong>SUPERVISOR</strong>.
+              locked to{" "}
+              <strong>{deanships.length > 0 ? "COLLEGE_DEAN" : "DEPARTMENT_CHAIR"}</strong>.
             </span>
           </div>
         )}
 
-        {/* Institutional ID & Role */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <form.Field name="details.institutional_id">
             {(field) => {
@@ -269,7 +268,6 @@ function FormInner({ userToEdit, onClose }: { userToEdit?: GetUser | null; onClo
           </form.Field>
         </div>
 
-        {/* Name Fields */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <form.Field name="details.first_name">
             {(field) => {
@@ -354,7 +352,6 @@ function FormInner({ userToEdit, onClose }: { userToEdit?: GetUser | null; onClo
           </form.Field>
         </div>
 
-        {/* Account Email & Password */}
         <form.Field name="account.email">
           {(field) => {
             const hasError =

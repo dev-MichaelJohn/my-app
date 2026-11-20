@@ -45,8 +45,7 @@ export function UserGridView({
   onDelete,
   onRestore,
 }: Props) {
-  const { user: currentUser, hasRole } = usePermissions();
-  const isSysAdmin = hasRole("SYS_ADMIN");
+  const { user: currentUser, isVpaa, isClerk } = usePermissions();
 
   if (users.length === 0) {
     return (
@@ -64,8 +63,9 @@ export function UserGridView({
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {users.map((item) => {
         const isSelf = currentUser?.account.id === item.account.id;
-        const isTargetAdmin = item.roles.includes("ADMIN") || item.roles.includes("SYS_ADMIN");
-        const canManageTarget = isSysAdmin || !isTargetAdmin || isSelf;
+        const isTargetVpaa = item.roles.includes("VPAA");
+        const isTargetClerk = item.roles.includes("CLERK");
+        const canManageTarget = !isTargetVpaa && (isVpaa || (isClerk && !isTargetClerk));
 
         const fullName = `${item.details.last_name}, ${item.details.first_name}${
           item.details.suffix ? ` ${item.details.suffix}` : ""
@@ -121,15 +121,13 @@ export function UserGridView({
                             <Edit className="w-4 h-4 text-muted-foreground" />
                             <span>Edit Account</span>
                           </DropdownMenuItem>
-                          {isSysAdmin && (
-                            <DropdownMenuItem
-                              onClick={() => onManageRoles(item)}
-                              className="gap-2 cursor-pointer"
-                            >
-                              <Shield className="w-4 h-4 text-primary" />
-                              <span>Manage Roles</span>
-                            </DropdownMenuItem>
-                          )}
+                          <DropdownMenuItem
+                            onClick={() => onManageRoles(item)}
+                            className="gap-2 cursor-pointer"
+                          >
+                            <Shield className="w-4 h-4 text-primary" />
+                            <span>Manage Roles</span>
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => onResetPassword(item)}
                             className="gap-2 cursor-pointer"
@@ -147,7 +145,7 @@ export function UserGridView({
                         </>
                       ) : (
                         <DropdownMenuItem disabled className="text-xs text-muted-foreground italic">
-                          Managed by Sys Admin
+                          {isTargetVpaa ? "Protected VPAA Account" : "Managed by VPAA (Read-Only)"}
                         </DropdownMenuItem>
                       )}
 
@@ -164,13 +162,17 @@ export function UserGridView({
                         </>
                       )}
                     </>
-                  ) : (
+                  ) : canManageTarget ? (
                     <DropdownMenuItem
                       onClick={() => onRestore(item)}
                       className="gap-2 text-primary cursor-pointer"
                     >
                       <RotateCcw className="w-4 h-4" />
                       <span>Restore Account</span>
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem disabled className="text-xs text-muted-foreground italic">
+                      Managed by VPAA (Read-Only)
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>

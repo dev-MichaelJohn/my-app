@@ -54,7 +54,7 @@ export function CourseTableView({
             <TableHead className="w-[130px] font-bold">Course Code</TableHead>
             <TableHead className="font-bold">Course Title</TableHead>
             <TableHead className="font-bold">Academic Program</TableHead>
-            <Can anyPermission={[PERMISSIONS.CLASS_CREATE, PERMISSIONS.CLASS_UPDATE]}>
+            <Can anyPermission={[PERMISSIONS.COURSE_CREATE, PERMISSIONS.COURSE_UPDATE]}>
               <TableHead className="w-[80px] text-right font-bold">Actions</TableHead>
             </Can>
           </TableRow>
@@ -66,6 +66,11 @@ export function CourseTableView({
             return (
               <TableRow key={course.id} className="border-border hover:bg-muted/30 transition">
                 <TableCell>
+                  {course.course_type === "GENERAL_EDUCATION" && (
+                    <Badge variant="secondary" className="ml-2 text-[10px] font-semibold">
+                      GE
+                    </Badge>
+                  )}
                   <Badge
                     variant="outline"
                     className="font-mono font-bold bg-primary/10 text-primary border-primary/20"
@@ -84,7 +89,7 @@ export function CourseTableView({
                   )}
                 </TableCell>
 
-                <Can anyPermission={[PERMISSIONS.CLASS_CREATE, PERMISSIONS.CLASS_UPDATE]}>
+                <Can anyPermission={[PERMISSIONS.COURSE_CREATE, PERMISSIONS.COURSE_UPDATE]}>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger>

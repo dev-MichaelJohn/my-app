@@ -30,6 +30,7 @@ import {
 import { useCreateCourse, useUpdateCourse } from "../hooks/useCourses";
 import type { ApiError } from "@/lib/api.lib";
 import { getErrorMessage } from "@/lib/error.lib";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface CourseFormDialogProps {
   open: boolean;
@@ -71,6 +72,9 @@ function CourseFormInner({
   programs: GetProgram[];
   onClose: () => void;
 }) {
+  const { user } = usePermissions();
+  const chairProgramId = user?.offices?.chairships?.[0]?.id;
+
   const isEditing = Boolean(courseToEdit);
   const createMutation = useCreateCourse();
   const updateMutation = useUpdateCourse();
@@ -84,7 +88,8 @@ function CourseFormInner({
     defaultValues: {
       name: courseToEdit?.name || "",
       initialism: courseToEdit?.initialism || "",
-      program_id: courseToEdit?.program_id || programs[0]?.program.id || 0,
+      program_id: courseToEdit?.program_id || chairProgramId || programs[0]?.program.id || 0,
+      course_type: courseToEdit?.course_type || "PROFESSIONAL",
     } as ICourseInsert,
     validators: {
       onChange: CourseInsert,
@@ -251,6 +256,32 @@ function CourseFormInner({
                   {field.state.meta.errors.map(getErrorMessage).join(", ")}
                 </p>
               ) : null}
+            </div>
+          )}
+        </form.Field>
+
+        <form.Field name="course_type">
+          {(field) => (
+            <div className="space-y-1.5">
+              <Label className="text-foreground">Course Classification (CMO 19 Sec 9.3)</Label>
+              <Select
+                value={field.state.value || "PROFESSIONAL"}
+                onValueChange={(val) =>
+                  field.handleChange(val as "PROFESSIONAL" | "GENERAL_EDUCATION")
+                }
+              >
+                <SelectTrigger className="w-full h-10 px-3 bg-background border-input text-sm">
+                  <SelectValue placeholder="Select classification..." />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border text-sm">
+                  <SelectItem value="PROFESSIONAL">
+                    Professional Course (Evaluated by Served Program Chair)
+                  </SelectItem>
+                  <SelectItem value="GENERAL_EDUCATION">
+                    General Education / Service Course (Evaluated by Service College)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           )}
         </form.Field>

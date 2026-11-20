@@ -35,8 +35,14 @@ import type { FacultyQuery, GetFaculty } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
 import { Can } from "@/components/Can";
 import { PERMISSIONS } from "@my-app/shared";
+import { Upload } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { CsvImportDialog } from "@/components/ui/csv-import-dialog";
 
 export default function FacultyPage() {
+  const queryClient = useQueryClient();
+  const [importOpen, setImportOpen] = useState(false);
+
   const [searchParams, setSearchParams] = useSearchParams();
   const programIdParam = searchParams.get("program_id");
   const collegeIdParam = searchParams.get("college_id");
@@ -170,18 +176,30 @@ export default function FacultyPage() {
           </p>
         </div>
 
-        <Can permission={PERMISSIONS.FACULTY_CREATE}>
-          <Button
-            onClick={() => {
-              setFacultyToEdit(null);
-              setFormOpen(true);
-            }}
-            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Appoint Faculty</span>
-          </Button>
-        </Can>
+        <div className="flex gap-2 items-center">
+          <Can permission={PERMISSIONS.BULK_IMPORT_EXECUTE}>
+            <Button
+              variant="outline"
+              onClick={() => setImportOpen(true)}
+              className="gap-2 h-9 text-xs border-border shadow-2xs"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Import CSV</span>
+            </Button>
+          </Can>
+          <Can permission={PERMISSIONS.FACULTY_CREATE}>
+            <Button
+              onClick={() => {
+                setFacultyToEdit(null);
+                setFormOpen(true);
+              }}
+              className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Appoint Faculty</span>
+            </Button>
+          </Can>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 p-1">
@@ -489,6 +507,17 @@ export default function FacultyPage() {
         variant="primary"
         isLoading={restoreMutation.isPending}
         onConfirm={handleRestoreConfirm}
+      />
+
+      <CsvImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entity="faculties"
+        entityTitle="Department Faculty"
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["faculties"] });
+          queryClient.invalidateQueries({ queryKey: ["users"] });
+        }}
       />
     </div>
   );

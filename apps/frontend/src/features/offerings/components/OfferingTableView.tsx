@@ -144,7 +144,7 @@ export function OfferingTableView({
                           <>
                             <DropdownMenuItem
                               onClick={() =>
-                                navigate(`/admin/student-classes?course_offering_id=${item.id}`)
+                                navigate(`/admin/offering-students?course_offering_id=${item.id}`)
                               }
                               className="gap-2 cursor-pointer font-medium text-primary focus:bg-primary/10"
                             >

@@ -31,6 +31,7 @@ import {
 import { useCreateClass, useUpdateClass } from "../hooks/useClasses";
 import type { ApiError } from "@/lib/api.lib";
 import { getErrorMessage } from "@/lib/error.lib";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface ClassFormDialogProps {
   open: boolean;
@@ -72,6 +73,10 @@ function ClassFormInner({
   programs: GetProgram[];
   onClose: () => void;
 }) {
+  const { user, isVpaa, isClerk, isChair } = usePermissions();
+  const isLockedToChairProgram = isChair && !isVpaa && !isClerk;
+  const chairProgramId = user?.offices?.chairships?.[0]?.id;
+
   const isEditing = Boolean(classToEdit);
   const createMutation = useCreateClass();
   const updateMutation = useUpdateClass();
@@ -83,7 +88,7 @@ function ClassFormInner({
 
   const form = useForm({
     defaultValues: {
-      program_id: classToEdit?.program.id || programs[0]?.program.id || 0,
+      program_id: classToEdit?.program.id || programs[0]?.program.id || chairProgramId || 0,
       year_level: classToEdit?.year_level || "I",
       section: classToEdit?.section || "A",
     } as IClassInsert,
@@ -174,6 +179,7 @@ function ClassFormInner({
                 <Label className="text-foreground">Degree Program</Label>
                 <Select
                   value={field.state.value ? String(field.state.value) : ""}
+                  disabled={isLockedToChairProgram}
                   onValueChange={(val) => field.handleChange(Number(val))}
                 >
                   <SelectTrigger className="w-full h-10 px-3 bg-background border-input text-sm text-foreground">

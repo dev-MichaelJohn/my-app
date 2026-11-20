@@ -182,39 +182,47 @@ export function ProgramTableView({
                               <School className="w-4 h-4 text-primary" />
                               <span>View Classes</span>
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => onEdit(item)}
-                              className="gap-2 cursor-pointer"
-                            >
-                              <Edit className="w-4 h-4 text-muted-foreground" />
-                              <span>Edit</span>
-                            </DropdownMenuItem>
-                            {item.chair && (
+                            <Can permission={PERMISSIONS.PROGRAM_UPDATE}>
                               <DropdownMenuItem
-                                onClick={() => onUnassignChair(item)}
-                                className="gap-2 text-warning focus:bg-warning/10 cursor-pointer font-medium"
+                                onClick={() => onEdit(item)}
+                                className="gap-2 cursor-pointer"
                               >
-                                <UserX className="w-4 h-4" />
-                                <span>Unassign Chair</span>
+                                <Edit className="w-4 h-4 text-muted-foreground" />
+                                <span>Edit</span>
                               </DropdownMenuItem>
+                            </Can>
+                            {item.chair && (
+                              <Can permission={PERMISSIONS.PROGRAM_UPDATE}>
+                                <DropdownMenuItem
+                                  onClick={() => onUnassignChair(item)}
+                                  className="gap-2 text-warning focus:bg-warning/10 cursor-pointer font-medium"
+                                >
+                                  <UserX className="w-4 h-4" />
+                                  <span>Unassign Chair</span>
+                                </DropdownMenuItem>
+                              </Can>
                             )}
                             <DropdownMenuSeparator className="bg-border" />
-                            <DropdownMenuItem
-                              onClick={() => onDelete(item)}
-                              className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              <span>Archive</span>
-                            </DropdownMenuItem>
+                            <Can permission={PERMISSIONS.PROGRAM_DELETE}>
+                              <DropdownMenuItem
+                                onClick={() => onDelete(item)}
+                                className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                <span>Archive</span>
+                              </DropdownMenuItem>
+                            </Can>
                           </>
                         ) : (
-                          <DropdownMenuItem
-                            onClick={() => onRestore(item)}
-                            className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
-                          >
-                            <RotateCcw className="w-4 h-4" />
-                            <span>Restore</span>
-                          </DropdownMenuItem>
+                          <Can permission={PERMISSIONS.PROGRAM_UPDATE}>
+                            <DropdownMenuItem
+                              onClick={() => onRestore(item)}
+                              className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                              <span>Restore</span>
+                            </DropdownMenuItem>
+                          </Can>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>

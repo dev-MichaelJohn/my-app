@@ -25,15 +25,14 @@ interface Props {
 }
 
 const ROLE_DESCRIPTIONS: Record<SystemRole, string> = {
-  VPAA: "Vice President for Academic Affairs — full institutional governance, schedules, instruments, consolidation & audit rollback.",
+  VPAA: "Vice President for Academic Affairs: top-level schedules, instruments, consolidation, and audit control.",
   CLERK:
-    "Administrative Clerk — manages academic records, non-VPAA/non-Clerk accounts, and instrument builder questions.",
+    "Administrative staff managing institutional data, accounts below Clerk, and questionnaire items.",
   COLLEGE_DEAN:
-    "College Dean — manages programs & department chairs within their college and evaluates chairs (SEF).",
+    "College Dean managing programs, appointing Department Chairs, and evaluating Chairs (SEF).",
   DEPARTMENT_CHAIR:
-    "Department Chair — manages faculty, courses, curriculums, classes, offerings & rosters in their program and evaluates faculty (SEF).",
-  FACULTY:
-    "Instructors teaching courses and receiving student and supervisory performance evaluations.",
+    "Department Chair managing program curriculum, faculty, students, and evaluating Faculty (SEF).",
+  FACULTY: "Instructors teaching courses and receiving student and supervisory evaluations.",
   STUDENT: "Enrolled student submitting teacher evaluations (SET).",
 };
 
@@ -47,30 +46,17 @@ export function ManageRolesDialog({ open, onOpenChange, user }: Props) {
   const chairships = user.offices?.chairships || [];
   const isHoldingDeanOffice = deanships.length > 0;
   const isHoldingChairOffice = chairships.length > 0;
-  const isHoldingOffice = isHoldingDeanOffice || isHoldingChairOffice;
 
   const officeLabels: string[] = [];
-  if (isHoldingDeanOffice) {
+  if (isHoldingDeanOffice)
     officeLabels.push(`Dean of ${deanships.map((d) => d.initialism).join(", ")}`);
-  }
-  if (isHoldingChairOffice) {
+  if (isHoldingChairOffice)
     officeLabels.push(`Chair of ${chairships.map((c) => c.initialism).join(", ")}`);
-  }
 
   const toggleRole = (role: SystemRole) => {
-    if (role === "VPAA") {
-      toast.warning("The VPAA role cannot be granted or modified.");
-      return;
-    }
-
-    if (role === "CLERK" && !isVpaa) {
-      toast.warning("Only VPAA can grant or revoke the CLERK role.");
-      return;
-    }
-
     if (role === "COLLEGE_DEAN" && isHoldingDeanOffice && selectedRoles.includes("COLLEGE_DEAN")) {
       toast.warning(
-        `Cannot revoke COLLEGE_DEAN role: User is currently an active ${officeLabels.join(" and ")}.`,
+        `Cannot revoke COLLEGE_DEAN role: User is currently ${officeLabels.join(" and ")}.`,
       );
       return;
     }
@@ -81,34 +67,14 @@ export function ManageRolesDialog({ open, onOpenChange, user }: Props) {
       selectedRoles.includes("DEPARTMENT_CHAIR")
     ) {
       toast.warning(
-        `Cannot revoke DEPARTMENT_CHAIR role: User is currently an active ${officeLabels.join(" and ")}.`,
+        `Cannot revoke DEPARTMENT_CHAIR role: User is currently ${officeLabels.join(" and ")}.`,
       );
       return;
     }
 
-    if (
-      role === "COLLEGE_DEAN" &&
-      !selectedRoles.includes("COLLEGE_DEAN") &&
-      selectedRoles.includes("DEPARTMENT_CHAIR")
-    ) {
-      toast.warning("A user cannot hold both COLLEGE_DEAN and DEPARTMENT_CHAIR roles.");
-      return;
-    }
-
-    if (
-      role === "DEPARTMENT_CHAIR" &&
-      !selectedRoles.includes("DEPARTMENT_CHAIR") &&
-      selectedRoles.includes("COLLEGE_DEAN")
-    ) {
-      toast.warning("A user cannot hold both COLLEGE_DEAN and DEPARTMENT_CHAIR roles.");
-      return;
-    }
-
     if (role === "STUDENT") {
-      if (isHoldingOffice) {
-        toast.warning(
-          `Cannot assign STUDENT role while user holds office as ${officeLabels.join(" and ")}.`,
-        );
+      if (isHoldingDeanOffice || isHoldingChairOffice) {
+        toast.warning("Cannot assign STUDENT role to an active academic office holder.");
         return;
       }
       setSelectedRoles(["STUDENT"]);
@@ -120,6 +86,23 @@ export function ManageRolesDialog({ open, onOpenChange, user }: Props) {
       if (withoutStudent.includes(role)) {
         return withoutStudent.filter((r) => r !== role);
       }
+
+      if (role === "COLLEGE_DEAN") {
+        if (isHoldingChairOffice) {
+          toast.warning("Cannot assign COLLEGE_DEAN to an active Department Chair.");
+          return prev;
+        }
+        return [...withoutStudent.filter((r) => r !== "DEPARTMENT_CHAIR"), role];
+      }
+
+      if (role === "DEPARTMENT_CHAIR") {
+        if (isHoldingDeanOffice) {
+          toast.warning("Cannot assign DEPARTMENT_CHAIR to an active College Dean.");
+          return prev;
+        }
+        return [...withoutStudent.filter((r) => r !== "COLLEGE_DEAN"), role];
+      }
+
       return [...withoutStudent, role];
     });
   };
@@ -142,11 +125,10 @@ export function ManageRolesDialog({ open, onOpenChange, user }: Props) {
     }
   };
 
-  const availableRoles = SystemRoles.enumValues.filter(
-    (r) => r !== "VPAA" && (isVpaa || r !== "CLERK"),
-  );
-
-  const lockedRoleName = isHoldingDeanOffice ? "COLLEGE_DEAN" : "DEPARTMENT_CHAIR";
+  // VPAA role cannot be granted/revoked here; Clerk can only manage roles strictly below Clerk
+  const availableRoles = isVpaa
+    ? SystemRoles.enumValues.filter((r) => r !== "VPAA")
+    : SystemRoles.enumValues.filter((r) => r !== "VPAA" && r !== "CLERK");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -165,13 +147,13 @@ export function ManageRolesDialog({ open, onOpenChange, user }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        {isHoldingOffice && (
+        {(isHoldingDeanOffice || isHoldingChairOffice) && (
           <div className="p-3 bg-primary/10 border border-primary/20 rounded-xl flex items-start gap-2.5 text-xs text-foreground">
             <Lock className="w-4 h-4 text-primary shrink-0 mt-0.5" />
             <span>
               <strong>Active Academic Office:</strong> This account is currently appointed as{" "}
-              <strong>{officeLabels.join(" and ")}</strong>. The <code>{lockedRoleName}</code> role
-              is locked and cannot be removed until the office is reassigned or vacated.
+              <strong>{officeLabels.join(" and ")}</strong>. Their office role is locked until the
+              office is reassigned or vacated.
             </span>
           </div>
         )}

@@ -43,6 +43,7 @@ import type { ApiError } from "@/lib/api.lib";
 import { getErrorMessage } from "@/lib/error.lib";
 import { Check, ChevronsUpDown, Info, UserCheck, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface Props {
   open: boolean;
@@ -89,6 +90,10 @@ function FormInner({
   defaultProgramId?: number;
   onClose: () => void;
 }) {
+  const { user, isVpaa, isClerk, isChair } = usePermissions();
+  const isLockedToChairProgram = isChair && !isVpaa && !isClerk;
+  const chairProgramId = user?.offices?.chairships?.[0]?.id;
+
   const isEditing = Boolean(facultyToEdit);
   const createMutation = useCreateFaculty();
   const updateMutation = useUpdateFaculty();
@@ -109,7 +114,12 @@ function FormInner({
   const form = useForm({
     defaultValues: {
       account_id: facultyToEdit?.account_id || 0,
-      program_id: facultyToEdit?.program_id || defaultProgramId || programs[0]?.program.id || 0,
+      program_id:
+        facultyToEdit?.program_id ||
+        defaultProgramId ||
+        chairProgramId ||
+        programs[0]?.program.id ||
+        0,
       new_user: {
         account: {
           email: "",
@@ -487,6 +497,7 @@ function FormInner({
                 <Label className="text-foreground">Appointed Home Program / Department</Label>
                 <Select
                   value={field.state.value ? String(field.state.value) : ""}
+                  disabled={isLockedToChairProgram}
                   onValueChange={(val) => val && field.handleChange(Number(val))}
                 >
                   <SelectTrigger className="w-full h-10 px-3 bg-background border-input text-sm text-foreground">

@@ -54,6 +54,11 @@ export function CourseGridView({
                 <div className="p-2 rounded-lg bg-primary/10 text-primary">
                   <BookOpen className="w-5 h-5" />
                 </div>
+                {course.course_type === "GENERAL_EDUCATION" && (
+                  <Badge variant="secondary" className="ml-2 text-[10px] font-semibold">
+                    GE
+                  </Badge>
+                )}
                 <Badge
                   variant="outline"
                   className="font-mono font-bold text-primary border-primary/20"

@@ -31,6 +31,7 @@ import {
 } from "@my-app/shared";
 import { useCreateCurriculum, useUpdateCurriculum } from "../hooks/useCurriculums";
 import type { ApiError } from "@/lib/api.lib";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface CurriculumFormDialogProps {
   open: boolean;
@@ -77,6 +78,10 @@ function CurriculumFormInner({
   courses: ICourseSelect[];
   onClose: () => void;
 }) {
+  const { user, isVpaa, isClerk, isChair } = usePermissions();
+  const isLockedToChairProgram = isChair && !isVpaa && !isClerk;
+  const chairProgramId = user?.offices?.chairships?.[0]?.id;
+
   const isEditing = Boolean(curriculumToEdit);
   const createMutation = useCreateCurriculum();
   const updateMutation = useUpdateCurriculum();
@@ -88,7 +93,7 @@ function CurriculumFormInner({
 
   const form = useForm({
     defaultValues: {
-      program_id: curriculumToEdit?.program.id || programs[0]?.program.id || 0,
+      program_id: curriculumToEdit?.program.id || programs[0]?.program.id || chairProgramId || 0,
       course_id: curriculumToEdit?.course.id || courses[0]?.id || 0,
       year_level: curriculumToEdit?.year_level || "I",
       semester_term: curriculumToEdit?.semester_term || "1st",
@@ -180,6 +185,7 @@ function CurriculumFormInner({
                 <Label className="text-foreground">Degree Program</Label>
                 <Select
                   value={field.state.value ? String(field.state.value) : ""}
+                  disabled={isLockedToChairProgram}
                   onValueChange={(val) => field.handleChange(Number(val))}
                 >
                   <SelectTrigger className="w-full h-10 px-3 bg-background border-input text-sm text-foreground">

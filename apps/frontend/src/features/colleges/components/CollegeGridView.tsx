@@ -70,6 +70,11 @@ export function CollegeGridView({
               >
                 {item.college.initialism}
               </Badge>
+              {item.college.is_service_college && (
+                <Badge variant="secondary" className="ml-2 text-[10px] font-semibold">
+                  Service College
+                </Badge>
+              )}
             </div>
 
             <Can anyPermission={[PERMISSIONS.COLLEGE_CREATE, PERMISSIONS.COLLEGE_UPDATE]}>
@@ -82,46 +87,56 @@ export function CollegeGridView({
                 <DropdownMenuContent align="end" className="w-44 border-border bg-popover">
                   {!isArchivedView ? (
                     <>
-                      <DropdownMenuItem
-                        onClick={() => navigate(`/admin/programs?college_id=${item.college.id}`)}
-                        className="gap-2 cursor-pointer"
-                      >
-                        <GraduationCap className="w-4 h-4 text-primary" />
-                        <span>View Programs</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => onEdit(item)}
-                        className="gap-2 cursor-pointer"
-                      >
-                        <Edit className="w-4 h-4" />
-                        <span>Edit</span>
-                      </DropdownMenuItem>
-                      {item.dean && (
+                      <Can permission={PERMISSIONS.COLLEGE_READ}>
                         <DropdownMenuItem
-                          onClick={() => onUnassignDean(item)}
-                          className="gap-2 text-warning focus:bg-warning/10 cursor-pointer font-medium"
+                          onClick={() => navigate(`/admin/programs?college_id=${item.college.id}`)}
+                          className="gap-2 cursor-pointer"
                         >
-                          <UserX className="w-4 h-4" />
-                          <span>Unassign Dean</span>
+                          <GraduationCap className="w-4 h-4 text-primary" />
+                          <span>View Programs</span>
                         </DropdownMenuItem>
+                      </Can>
+                      <Can permission={PERMISSIONS.COLLEGE_UPDATE}>
+                        <DropdownMenuItem
+                          onClick={() => onEdit(item)}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <Edit className="w-4 h-4" />
+                          <span>Edit</span>
+                        </DropdownMenuItem>
+                      </Can>
+                      {item.dean && (
+                        <Can permission={PERMISSIONS.COLLEGE_UPDATE}>
+                          <DropdownMenuItem
+                            onClick={() => onUnassignDean(item)}
+                            className="gap-2 text-warning focus:bg-warning/10 cursor-pointer font-medium"
+                          >
+                            <UserX className="w-4 h-4" />
+                            <span>Unassign Dean</span>
+                          </DropdownMenuItem>
+                        </Can>
                       )}
                       <DropdownMenuSeparator className="bg-border" />
-                      <DropdownMenuItem
-                        onClick={() => onDelete(item)}
-                        className="gap-2 text-destructive cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        <span>Archive</span>
-                      </DropdownMenuItem>
+                      <Can permission={PERMISSIONS.COLLEGE_DELETE}>
+                        <DropdownMenuItem
+                          onClick={() => onDelete(item)}
+                          className="gap-2 text-destructive cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Archive</span>
+                        </DropdownMenuItem>
+                      </Can>
                     </>
                   ) : (
-                    <DropdownMenuItem
-                      onClick={() => onRestore(item)}
-                      className="gap-2 text-primary cursor-pointer"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                      <span>Restore</span>
-                    </DropdownMenuItem>
+                    <Can permission={PERMISSIONS.COLLEGE_UPDATE}>
+                      <DropdownMenuItem
+                        onClick={() => onRestore(item)}
+                        className="gap-2 text-primary cursor-pointer"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        <span>Restore</span>
+                      </DropdownMenuItem>
+                    </Can>
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>

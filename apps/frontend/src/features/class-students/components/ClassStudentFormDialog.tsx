@@ -24,22 +24,25 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { toast } from "sonner";
 import {
-  ClassStudentInsert,
+  CreateClassStudentPayloadSchema,
+  type CreateClassStudentPayload,
   type GetClass,
   type GetClassStudent,
-  type IClassStudentInsert,
   type ISemesterSelect,
 } from "@my-app/shared";
 import { useCreateClassStudent, useUpdateClassStudent } from "../hooks/useClassStudents";
 import { useUsers } from "@/features/users/hooks/useUsers";
 import type { ApiError } from "@/lib/api.lib";
-import { Check, ChevronsUpDown, Info } from "lucide-react";
+import { getErrorMessage } from "@/lib/error.lib";
+import { Check, ChevronsUpDown, Info, UserCheck, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ClassStudentFormDialogProps {
@@ -65,7 +68,7 @@ export function ClassStudentFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px] border-border bg-card text-card-foreground overflow-hidden">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto border-border bg-card text-card-foreground">
         {open && (
           <ClassStudentFormInner
             key={formKey}
@@ -101,15 +104,16 @@ function ClassStudentFormInner({
   const createMutation = useCreateClassStudent();
   const updateMutation = useUpdateClassStudent();
 
-  const { data: usersResponse, isLoading: isLoadingStudents } = useUsers({
-    role: "STUDENT",
-    paginate: false,
-  });
+  const { data: usersResponse, isLoading: isLoadingStudents } = useUsers(
+    { role: "STUDENT", paginate: false },
+    !isEditing,
+  );
   const studentsList = usersResponse?.data ?? [];
 
+  const [mode, setMode] = useState<"existing" | "new">("existing");
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
-  const [pendingValues, setPendingValues] = useState<IClassStudentInsert | null>(null);
+  const [pendingValues, setPendingValues] = useState<CreateClassStudentPayload | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [studentComboboxOpen, setStudentComboboxOpen] = useState(false);
 
@@ -118,16 +122,61 @@ function ClassStudentFormInner({
       semester_id: enrollmentToEdit?.semester.id || defaultSemesterId || semesters[0]?.id || 0,
       class_id: enrollmentToEdit?.class.id || defaultClassId || classes[0]?.id || 0,
       student_account_id: enrollmentToEdit?.student?.account.id || 0,
-    } as IClassStudentInsert,
-    validators: {
-      onChange: ClassStudentInsert,
+      new_user: {
+        account: { email: "" },
+        details: {
+          institutional_id: "",
+          first_name: "",
+          last_name: "",
+          middle_name: "",
+          suffix: "",
+        },
+      },
     },
     onSubmit: ({ value }) => {
-      setPendingValues({
-        semester_id: Number(value.semester_id),
-        class_id: Number(value.class_id),
-        student_account_id: Number(value.student_account_id),
-      });
+      setGeneralError(null);
+
+      if (isEditing) {
+        setPendingValues({
+          semester_id: Number(value.semester_id),
+          class_id: Number(value.class_id),
+          student_account_id: enrollmentToEdit!.student.account.id,
+        });
+        setConfirmSaveOpen(true);
+        return;
+      }
+
+      const payload: CreateClassStudentPayload =
+        mode === "new"
+          ? {
+              semester_id: Number(value.semester_id),
+              class_id: Number(value.class_id),
+              new_user: {
+                account: { email: value.new_user.account.email.trim() },
+                details: {
+                  institutional_id: value.new_user.details.institutional_id.trim(),
+                  first_name: value.new_user.details.first_name.trim(),
+                  last_name: value.new_user.details.last_name.trim(),
+                  middle_name: value.new_user.details.middle_name?.trim() || null,
+                  suffix: value.new_user.details.suffix?.trim() || null,
+                },
+              },
+            }
+          : {
+              semester_id: Number(value.semester_id),
+              class_id: Number(value.class_id),
+              student_account_id: Number(value.student_account_id),
+            };
+
+      const validation = CreateClassStudentPayloadSchema.safeParse(payload);
+      if (!validation.success) {
+        setGeneralError(
+          validation.error.issues[0]?.message || "Please complete all required fields.",
+        );
+        return;
+      }
+
+      setPendingValues(validation.data);
       setConfirmSaveOpen(true);
     },
   });
@@ -137,15 +186,22 @@ function ClassStudentFormInner({
     setGeneralError(null);
 
     try {
-      if (isEditing && enrollmentToEdit) {
+      if (isEditing && enrollmentToEdit && "student_account_id" in pendingValues) {
         await updateMutation.mutateAsync({
           id: enrollmentToEdit.id,
-          info: pendingValues,
+          info: {
+            semester_id: pendingValues.semester_id,
+            class_id: pendingValues.class_id,
+          },
         });
         toast.success("Student enrollment updated successfully.");
       } else {
         await createMutation.mutateAsync(pendingValues);
-        toast.success("Student enrolled in class roster successfully.");
+        toast.success(
+          "new_user" in pendingValues
+            ? "New student account created and enrolled in class roster."
+            : "Student enrolled in class roster successfully.",
+        );
       }
 
       setConfirmSaveOpen(false);
@@ -169,7 +225,7 @@ function ClassStudentFormInner({
         <DialogDescription className="text-sm text-muted-foreground">
           {isEditing
             ? "Reassign this student to a different class section or semester term."
-            : "Add a student to this class section roster for the semester."}
+            : "Add an existing student or create a new student account directly into this class section."}
         </DialogDescription>
       </DialogHeader>
 
@@ -190,8 +246,8 @@ function ClassStudentFormInner({
         <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg flex items-start gap-2.5 text-xs text-foreground">
           <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
           <span>
-            Enrolling a student automatically assigns them to all scheduled course offerings for
-            this class section.
+            Enrolling a student in a class roster automatically assigns them to all scheduled course
+            offerings for that class section.
           </span>
         </div>
 
@@ -273,98 +329,247 @@ function ClassStudentFormInner({
           }}
         </form.Field>
 
-        <form.Field name="student_account_id">
-          {(field) => {
-            const selectedStudent = studentsList.find(
-              (u) => u.account.id === Number(field.state.value),
-            );
+        {!isEditing && (
+          <Tabs
+            value={mode}
+            onValueChange={(val) => {
+              setMode(val as "existing" | "new");
+              setGeneralError(null);
+            }}
+          >
+            <TabsList className="grid grid-cols-2 w-full bg-muted border border-border">
+              <TabsTrigger value="existing" className="text-xs gap-1.5">
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>Existing Student</span>
+              </TabsTrigger>
+              <TabsTrigger value="new" className="text-xs gap-1.5">
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>New Student Account</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
 
-            return (
-              <div className="w-full space-y-1.5 pt-1">
-                <Label className="text-foreground">Enrolled Student</Label>
+        {(isEditing || mode === "existing") && (
+          <form.Field name="student_account_id">
+            {(field) => {
+              const selectedStudent = studentsList.find(
+                (u) => u.account.id === Number(field.state.value),
+              );
 
-                <Popover open={studentComboboxOpen} onOpenChange={setStudentComboboxOpen}>
-                  <PopoverTrigger>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={studentComboboxOpen}
-                      disabled={isLoadingStudents || isEditing}
-                      className="w-full h-10 px-3 flex items-center justify-between bg-background border-input text-foreground font-normal text-sm"
-                    >
-                      {selectedStudent ? (
-                        <span className="truncate font-medium text-foreground">
-                          {selectedStudent.details.last_name}, {selectedStudent.details.first_name}{" "}
-                          ({selectedStudent.details.institutional_id})
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          Search student by name or ID...
-                        </span>
-                      )}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
+              return (
+                <div className="w-full space-y-1.5 pt-1">
+                  <Label className="text-foreground">Enrolled Student</Label>
 
-                  <PopoverContent
-                    align="start"
-                    className="w-(--radix-popover-trigger-width) p-0 border-border bg-popover text-popover-foreground shadow-lg"
-                  >
-                    <Command
-                      filter={(value, search) =>
-                        value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
-                      }
-                      className="w-full"
-                    >
-                      <CommandInput
-                        placeholder="Search student by name or ID..."
-                        className="h-9 text-xs"
-                      />
-                      <CommandList className="max-h-56 w-full">
-                        <CommandEmpty className="p-3 text-xs text-center text-muted-foreground">
-                          No matching student accounts found.
-                        </CommandEmpty>
-                        <CommandGroup heading="Student Accounts" className="p-1">
-                          {studentsList.map((u) => {
-                            const searchableText = `${u.details.last_name}, ${u.details.first_name} ${u.details.institutional_id} ${u.account.email}`;
-                            const isSelected = u.account.id === Number(field.state.value);
+                  {isEditing ? (
+                    <div className="p-3 bg-muted/40 border border-border rounded-lg text-xs font-semibold text-foreground">
+                      {enrollmentToEdit?.student.details.last_name},{" "}
+                      {enrollmentToEdit?.student.details.first_name} (
+                      {enrollmentToEdit?.student.details.institutional_id})
+                    </div>
+                  ) : (
+                    <Popover open={studentComboboxOpen} onOpenChange={setStudentComboboxOpen}>
+                      <PopoverTrigger>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={studentComboboxOpen}
+                          disabled={isLoadingStudents}
+                          className="w-full h-10 px-3 flex items-center justify-between bg-background border-input text-foreground font-normal text-sm"
+                        >
+                          {selectedStudent ? (
+                            <span className="truncate font-medium text-foreground">
+                              {selectedStudent.details.last_name},{" "}
+                              {selectedStudent.details.first_name} (
+                              {selectedStudent.details.institutional_id})
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">
+                              Search student by name or ID...
+                            </span>
+                          )}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
 
-                            return (
-                              <CommandItem
-                                key={u.account.id}
-                                value={searchableText}
-                                onSelect={() => {
-                                  field.handleChange(u.account.id);
-                                  setStudentComboboxOpen(false);
-                                }}
-                                className="cursor-pointer text-xs flex items-center justify-between px-2.5 py-2 rounded-md"
-                              >
-                                <div className="flex flex-col truncate pr-2">
-                                  <span className="font-semibold text-foreground truncate">
-                                    {u.details.last_name}, {u.details.first_name}
-                                  </span>
-                                  <span className="text-[11px] text-muted-foreground truncate">
-                                    ID: {u.details.institutional_id} • {u.account.email}
-                                  </span>
-                                </div>
-                                <Check
-                                  className={cn(
-                                    "h-4 w-4 text-primary shrink-0",
-                                    isSelected ? "opacity-100" : "opacity-0",
-                                  )}
-                                />
-                              </CommandItem>
-                            );
-                          })}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            );
-          }}
-        </form.Field>
+                      <PopoverContent
+                        align="start"
+                        className="w-(--radix-popover-trigger-width) p-0 border-border bg-popover text-popover-foreground shadow-lg"
+                      >
+                        <Command
+                          filter={(value, search) =>
+                            value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
+                          }
+                          className="w-full"
+                        >
+                          <CommandInput
+                            placeholder="Search student by name or ID..."
+                            className="h-9 text-xs"
+                          />
+                          <CommandList className="max-h-56 w-full">
+                            <CommandEmpty className="p-3 text-xs text-center text-muted-foreground">
+                              No matching student accounts found. Switch to &quot;New Student
+                              Account&quot; to register one.
+                            </CommandEmpty>
+                            <CommandGroup heading="Student Accounts" className="p-1">
+                              {studentsList.map((u) => {
+                                const searchableText = `${u.details.last_name}, ${u.details.first_name} ${u.details.institutional_id} ${u.account.email}`;
+                                const isSelected = u.account.id === Number(field.state.value);
+
+                                return (
+                                  <CommandItem
+                                    key={u.account.id}
+                                    value={searchableText}
+                                    onSelect={() => {
+                                      field.handleChange(u.account.id);
+                                      setStudentComboboxOpen(false);
+                                    }}
+                                    className="cursor-pointer text-xs flex items-center justify-between px-2.5 py-2 rounded-md"
+                                  >
+                                    <div className="flex flex-col truncate pr-2">
+                                      <span className="font-semibold text-foreground truncate">
+                                        {u.details.last_name}, {u.details.first_name}
+                                      </span>
+                                      <span className="text-[11px] text-muted-foreground truncate">
+                                        ID: {u.details.institutional_id} • {u.account.email}
+                                      </span>
+                                    </div>
+                                    <Check
+                                      className={cn(
+                                        "h-4 w-4 text-primary shrink-0",
+                                        isSelected ? "opacity-100" : "opacity-0",
+                                      )}
+                                    />
+                                  </CommandItem>
+                                );
+                              })}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+              );
+            }}
+          </form.Field>
+        )}
+
+        {!isEditing && mode === "new" && (
+          <div className="space-y-3 p-3.5 bg-muted/40 rounded-xl border border-border">
+            <p className="text-xs font-semibold text-foreground">
+              New Student Account Details (Temporary password will be emailed)
+            </p>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <form.Field name="new_user.details.first_name">
+                {(field) => (
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">First Name *</Label>
+                    <Input
+                      value={field.state.value || ""}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      placeholder="Juan"
+                      className="h-8 text-xs bg-background"
+                    />
+                    {field.state.meta.isTouched && field.state.meta.errors.length > 0 && (
+                      <p className="text-destructive text-[10px]">
+                        {field.state.meta.errors.map(getErrorMessage).join(", ")}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="new_user.details.last_name">
+                {(field) => (
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Last Name *</Label>
+                    <Input
+                      value={field.state.value || ""}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      placeholder="Dela Cruz"
+                      className="h-8 text-xs bg-background"
+                    />
+                    {field.state.meta.isTouched && field.state.meta.errors.length > 0 && (
+                      <p className="text-destructive text-[10px]">
+                        {field.state.meta.errors.map(getErrorMessage).join(", ")}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form.Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <form.Field name="new_user.details.middle_name">
+                {(field) => (
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">
+                      Middle Name (Optional)
+                    </Label>
+                    <Input
+                      value={field.state.value || ""}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      placeholder="Santos"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="new_user.details.suffix">
+                {(field) => (
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Suffix (Optional)</Label>
+                    <Input
+                      value={field.state.value || ""}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      placeholder="Jr., III"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                )}
+              </form.Field>
+            </div>
+
+            <form.Field name="new_user.details.institutional_id">
+              {(field) => (
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Institutional ID *</Label>
+                  <Input
+                    value={field.state.value || ""}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="e.g. 26-1042-001"
+                    className="h-8 text-xs bg-background font-mono"
+                  />
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field name="new_user.account.email">
+              {(field) => (
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Institutional Email *</Label>
+                  <Input
+                    type="email"
+                    value={field.state.value || ""}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="student@pit.edu.ph"
+                    className="h-8 text-xs bg-background"
+                  />
+                </div>
+              )}
+            </form.Field>
+          </div>
+        )}
 
         <DialogFooter className="pt-4 border-t border-border">
           <Button
@@ -391,6 +596,8 @@ function ClassStudentFormInner({
               </div>
             ) : isEditing ? (
               "Save Changes"
+            ) : mode === "new" ? (
+              "Create & Enroll Student"
             ) : (
               "Enroll Student"
             )}
@@ -402,7 +609,20 @@ function ClassStudentFormInner({
         open={confirmSaveOpen}
         onOpenChange={setConfirmSaveOpen}
         title={isEditing ? "Update Class Enrollment?" : "Confirm Student Enrollment?"}
-        description="Are you sure you want to enroll this student in the selected class section? They will automatically be enrolled in all scheduled course offerings."
+        description={
+          pendingValues && "new_user" in pendingValues ? (
+            <span>
+              This will create a new <strong>STUDENT</strong> account for{" "}
+              <strong>
+                {pendingValues.new_user.details.first_name}{" "}
+                {pendingValues.new_user.details.last_name}
+              </strong>{" "}
+              and enroll them into all scheduled course offerings of this class.
+            </span>
+          ) : (
+            "Are you sure you want to enroll this student in the selected class section? They will automatically be enrolled in all scheduled course offerings."
+          )
+        }
         confirmLabel={isEditing ? "Yes, Save Changes" : "Yes, Enroll Student"}
         variant="primary"
         isLoading={isPending}

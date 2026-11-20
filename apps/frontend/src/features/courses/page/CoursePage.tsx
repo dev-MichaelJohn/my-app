@@ -141,18 +141,20 @@ export default function CoursePage() {
           </p>
         </div>
 
-        <Can permission={PERMISSIONS.CLASS_CREATE}>
+        <Can permission={PERMISSIONS.COURSE_CREATE}>
           <div className="flex gap-2 items-center">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setImportOpen(true);
-              }}
-              className="gap-2 h-9 text-xs border-border shadow-2xs"
-            >
-              <Upload className="w-4 h-4" />
-              <span>Import CSV</span>
-            </Button>
+            <Can permission={PERMISSIONS.BULK_IMPORT_EXECUTE}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setImportOpen(true);
+                }}
+                className="gap-2 h-9 text-xs border-border shadow-2xs"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Import CSV</span>
+              </Button>
+            </Can>
             <Button
               onClick={() => {
                 setCourseToEdit(null);

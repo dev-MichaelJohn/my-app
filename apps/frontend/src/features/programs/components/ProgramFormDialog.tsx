@@ -43,6 +43,7 @@ import type { ApiError } from "@/lib/api.lib";
 import { Check, ChevronsUpDown, UserCheck, UserPlus, UserX } from "lucide-react";
 import { getErrorMessage } from "@/lib/error.lib";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface ProgramFormDialogProps {
   open: boolean;
@@ -84,6 +85,10 @@ function ProgramFormInner({
   colleges: GetCollege[];
   onClose: () => void;
 }) {
+  const { user, isVpaa, isClerk, isDean } = usePermissions();
+  const isLockedToDeanCollege = isDean && !isVpaa && !isClerk;
+  const deanCollegeId = user?.offices?.deanships?.[0]?.id;
+
   const isEditing = Boolean(programToEdit);
   const createMutation = useCreateProgram();
   const updateMutation = useUpdateProgram();
@@ -110,7 +115,8 @@ function ProgramFormInner({
       program: {
         name: programToEdit?.program.name || "",
         initialism: programToEdit?.program.initialism || "",
-        college_id: programToEdit?.program.college_id || colleges[0]?.college.id || 0,
+        college_id:
+          programToEdit?.program.college_id || deanCollegeId || colleges[0]?.college.id || 0,
       },
       chair: programToEdit?.chair
         ? {
@@ -213,9 +219,9 @@ function ProgramFormInner({
                 <Label className="text-foreground">Parent College</Label>
                 <Select
                   value={field.state.value ? String(field.state.value) : ""}
+                  disabled={isLockedToDeanCollege}
                   onValueChange={(val) => field.handleChange(Number(val))}
                 >
-                  {/* 🚀 w-full + h-10 ensures standard full-width alignment */}
                   <SelectTrigger className="w-full h-10 px-3 bg-background border-input text-sm text-foreground">
                     <SelectValue placeholder="Select a college...">
                       {selectedCollege ? (
@@ -592,7 +598,8 @@ function ProgramFormInner({
             {pendingValues?.chair?.type === "new" && (
               <span className="block mt-2 text-xs text-chart-2">
                 A new faculty account will be created and appointed as{" "}
-                <strong>SUPERVISOR (Program Chair)</strong>.
+                <strong>DEPARTMENT CHAIR</strong> and added to this department&apos;s faculty
+                roster.
               </span>
             )}
           </span>
