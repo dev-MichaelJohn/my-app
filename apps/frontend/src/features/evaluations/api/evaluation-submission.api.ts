@@ -22,9 +22,9 @@ export class EvaluationSubmissionAPI {
     return http.get<EvaluableStudentSubject[]>("/evaluation-submissions/student/subjects");
   }
 
-  getStudentFormView(studentClassId: number): ResultAsync<StudentEvaluationFormView, ApiError> {
+  getStudentFormView(offeringStudentId: number): ResultAsync<StudentEvaluationFormView, ApiError> {
     return http.get<StudentEvaluationFormView>(
-      `/evaluation-submissions/student/form/${studentClassId}`,
+      `/evaluation-submissions/student/form/${offeringStudentId}`,
     );
   }
 

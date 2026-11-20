@@ -19,7 +19,12 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { useNavigate } from "react-router";
-import type { IStudentEvalFormSelect, ISupervisorEvalFormSelect } from "@my-app/shared";
+import {
+  PERMISSIONS,
+  type IStudentEvalFormSelect,
+  type ISupervisorEvalFormSelect,
+} from "@my-app/shared";
+import { Can } from "@/components/Can";
 
 interface Props {
   forms: (IStudentEvalFormSelect | ISupervisorEvalFormSelect)[];
@@ -80,36 +85,45 @@ export function EvaluationInstrumentGridView({
               <DropdownMenuContent align="end" className="w-44 border-border bg-popover">
                 {!isArchivedView ? (
                   <>
-                    <DropdownMenuItem
-                      onClick={() =>
-                        navigate(`/admin/evaluation-forms/${formType}/${form.id}/builder`)
-                      }
-                      className="gap-2 cursor-pointer font-medium text-primary"
-                    >
-                      <Wrench className="w-4 h-4" />
-                      <span>Open Builder</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onEdit(form)} className="gap-2 cursor-pointer">
-                      <Edit className="w-4 h-4" />
-                      <span>Edit Details</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator className="bg-border" />
-                    <DropdownMenuItem
-                      onClick={() => onDelete(form)}
-                      className="gap-2 text-destructive cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      <span>Archive</span>
-                    </DropdownMenuItem>
+                    <Can permission={PERMISSIONS.EVALUATION_BUILDER_MANAGE}>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          navigate(`/admin/evaluation-forms/${formType}/${form.id}/builder`)
+                        }
+                        className="gap-2 cursor-pointer font-medium text-primary focus:bg-primary/10"
+                      >
+                        <Wrench className="w-4 h-4 text-primary" />
+                        <span>Open Form Builder</span>
+                      </DropdownMenuItem>
+                    </Can>
+                    <Can permission={PERMISSIONS.EVALUATION_FORM_MANAGE}>
+                      <DropdownMenuItem
+                        onClick={() => onEdit(form)}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <Edit className="w-4 h-4 text-muted-foreground" />
+                        <span>Edit Details</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-border" />
+                      <DropdownMenuItem
+                        onClick={() => onDelete(form)}
+                        className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Archive</span>
+                      </DropdownMenuItem>
+                    </Can>
                   </>
                 ) : (
-                  <DropdownMenuItem
-                    onClick={() => onRestore(form)}
-                    className="gap-2 text-primary cursor-pointer"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Restore</span>
-                  </DropdownMenuItem>
+                  <Can permission={PERMISSIONS.EVALUATION_FORM_MANAGE}>
+                    <DropdownMenuItem
+                      onClick={() => onRestore(form)}
+                      className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Restore</span>
+                    </DropdownMenuItem>
+                  </Can>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>

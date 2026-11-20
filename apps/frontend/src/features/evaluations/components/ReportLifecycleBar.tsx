@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, SendHorizontal, RefreshCw, ArrowLeft, Layers, Download } from "lucide-react";
+import { CheckCircle, RefreshCw, ArrowLeft, Layers, Download } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -94,16 +94,18 @@ export function ReportLifecycleBar({
               </Button>
             )}
 
-            {report.status === "FINALIZED" && (
+            <Can permission={PERMISSIONS.EVALUATION_REPORT_GENERATE}>
               <Button
                 size="sm"
-                onClick={() => setTargetStatus("PUBLISHED")}
-                className="h-8 text-xs gap-1 bg-success text-white hover:bg-success/90"
+                variant="ghost"
+                onClick={onRecalculate}
+                disabled={isRecalculating}
+                className="h-8 text-xs gap-1 hover:bg-background"
               >
-                <SendHorizontal className="w-3.5 h-3.5" />
-                <span>Publish</span>
+                <RefreshCw className={`w-3.5 h-3.5 ${isRecalculating ? "animate-spin" : ""}`} />
+                <span>Recalculate</span>
               </Button>
-            )}
+            </Can>
 
             {report.status === "PUBLISHED" && (
               <Button

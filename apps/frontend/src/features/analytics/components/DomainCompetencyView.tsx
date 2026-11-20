@@ -72,22 +72,6 @@ export function DomainCompetencyView({ competencies }: Props) {
                       Supervisor SEF:{" "}
                       <strong className="text-foreground">{domain.sefScore.toFixed(2)}</strong>
                     </span>
-                    {domain.perceptionGap !== null && (
-                      <span
-                        className={
-                          domain.perceptionGap > 0
-                            ? "text-info"
-                            : domain.perceptionGap < 0
-                              ? "text-warning"
-                              : "text-muted-foreground"
-                        }
-                      >
-                        Gap:{" "}
-                        {domain.perceptionGap > 0
-                          ? `+${domain.perceptionGap.toFixed(2)}`
-                          : domain.perceptionGap.toFixed(2)}
-                      </span>
-                    )}
                   </div>
                 )}
               </div>

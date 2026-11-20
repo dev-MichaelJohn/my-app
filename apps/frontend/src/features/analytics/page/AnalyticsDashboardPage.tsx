@@ -19,12 +19,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { Users, Building2, GraduationCap, Lock, ArrowUpDown, BookOpen } from "lucide-react";
+import { Users, Building2, GraduationCap, Lock, BookOpen } from "lucide-react";
 import type { AnalyticsScope } from "@my-app/shared";
 
 export default function AnalyticsDashboardPage() {
-  const { user, isSysAdmin, isAdmin, isDean, isChair, isFaculty } = usePermissions();
-  const isPrivilegedAdmin = isSysAdmin || isAdmin;
+  const { user, isVpaa, isClerk, isDean, isChair, isFaculty } = usePermissions();
+  const isPrivilegedAdmin = isVpaa || isClerk;
 
   // Metadata queries
   const { data: activeSemester } = useActiveSemester();
@@ -107,7 +107,7 @@ export default function AnalyticsDashboardPage() {
           Analytics & Quality Benchmark Suite
         </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Multi-semester historical performance, SET-SEF perceptual alignment, and departmental
+          Multi-semester historical performance, category competencies, and departmental
           comparisons.
         </p>
       </div>
@@ -375,28 +375,6 @@ export default function AnalyticsDashboardPage() {
                       : `${report.kpis.sefChangePercentage}%`}
                   </span>
                 )}
-              </div>
-            </Card>
-
-            <Card className="p-4 border-border bg-card shadow-xs space-y-1">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground block">
-                Perception Gap (SEF − SET)
-              </span>
-              <div className="flex items-center gap-1.5 text-2xl font-extrabold font-mono">
-                <ArrowUpDown className="w-5 h-5 text-muted-foreground" />
-                <span
-                  className={
-                    report.kpis.perceptionGap !== null && report.kpis.perceptionGap > 0
-                      ? "text-info"
-                      : report.kpis.perceptionGap !== null && report.kpis.perceptionGap < 0
-                        ? "text-warning"
-                        : "text-foreground"
-                  }
-                >
-                  {report.kpis.perceptionGap !== null
-                    ? `${report.kpis.perceptionGap > 0 ? "+" : ""}${report.kpis.perceptionGap.toFixed(2)}`
-                    : "—"}
-                </span>
               </div>
             </Card>
 

@@ -58,8 +58,8 @@ export default function SupervisorEvaluationPage() {
           Supervisor Evaluation of Faculty (SEF)
         </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Conduct comprehensive semester performance appraisals for faculty under your supervision
-          (Annex B).
+          Conduct semester performance appraisals for Department Chairs (Deans) or teaching faculty
+          (Department Chairs) under CHED CMO 19 s. 2025 (Annex B).
         </p>
       </div>
 
@@ -134,6 +134,7 @@ export default function SupervisorEvaluationPage() {
                             className="text-[10px] font-mono px-1.5 py-0"
                           >
                             {cls.course_code} ({cls.year_level}-{cls.section})
+                            {cls.course_type === "GENERAL_EDUCATION" ? " • GE" : ""}
                           </Badge>
                         ))}
                       </div>

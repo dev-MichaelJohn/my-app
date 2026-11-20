@@ -42,7 +42,7 @@ export default function StudentEvaluationPage() {
   if (selectedSubject) {
     return (
       <StudentEvaluationFormViewComponent
-        studentClassId={selectedSubject.offering_student_id}
+        offeringStudentId={selectedSubject.offering_student_id}
         onBack={() => setSelectedSubject(null)}
       />
     );
@@ -151,13 +151,13 @@ export default function StudentEvaluationPage() {
 }
 
 function StudentEvaluationFormViewComponent({
-  studentClassId,
+  offeringStudentId,
   onBack,
 }: {
-  studentClassId: number;
+  offeringStudentId: number;
   onBack: () => void;
 }) {
-  const { data: viewData, isLoading } = useStudentFormView(studentClassId);
+  const { data: viewData, isLoading } = useStudentFormView(offeringStudentId);
 
   if (isLoading || !viewData) {
     return (
@@ -169,7 +169,7 @@ function StudentEvaluationFormViewComponent({
 
   return (
     <StudentEvaluationFormContent
-      studentClassId={studentClassId}
+      offeringStudentId={offeringStudentId}
       viewData={viewData}
       onBack={onBack}
     />
@@ -177,11 +177,11 @@ function StudentEvaluationFormViewComponent({
 }
 
 function StudentEvaluationFormContent({
-  studentClassId,
+  offeringStudentId,
   viewData,
   onBack,
 }: {
-  studentClassId: number;
+  offeringStudentId: number;
   viewData: NonNullable<ReturnType<typeof useStudentFormView>["data"]>;
   onBack: () => void;
 }) {
@@ -224,7 +224,7 @@ function StudentEvaluationFormContent({
       try {
         await submitMutation.mutateAsync({
           schedule_id: viewData.schedule_id,
-          offering_student_id: studentClassId,
+          offering_student_id: offeringStudentId,
           ratings: ratingItems,
           comment: targetComment.trim() || undefined,
           is_draft: true,
@@ -234,7 +234,7 @@ function StudentEvaluationFormContent({
         setSaveStatus("error");
       }
     },
-    [is_submitted, viewData.schedule_id, studentClassId, submitMutation],
+    [is_submitted, viewData.schedule_id, offeringStudentId, submitMutation],
   );
 
   const scheduleAutoSave = useCallback(
@@ -296,7 +296,7 @@ function StudentEvaluationFormContent({
     try {
       await submitMutation.mutateAsync({
         schedule_id: viewData.schedule_id,
-        offering_student_id: studentClassId,
+        offering_student_id: offeringStudentId,
         ratings: ratingItems,
         comment: comment.trim() || undefined,
         is_draft: false,

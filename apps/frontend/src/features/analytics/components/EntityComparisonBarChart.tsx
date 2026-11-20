@@ -34,7 +34,6 @@ export function EntityComparisonBarChart({ data, title, subtitle }: Props) {
     fullName: d.entityName,
     setRating: d.setRating,
     sefRating: d.sefRating ?? 0,
-    gap: d.perceptionGap ?? 0,
   }));
 
   return (

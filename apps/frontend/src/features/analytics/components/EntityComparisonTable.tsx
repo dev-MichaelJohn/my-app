@@ -37,8 +37,7 @@ export function EntityComparisonTable({ breakdown, scope }: Props) {
         </div>
         <CardDescription className="text-xs">
           Consolidated program performance: Combines all faculty teaching in each degree program.
-          SET represents aggregate student ratings, SEF represents supervisor evaluations, and
-          Perception Gap measures variance (Δ = SEF − SET).
+          SET represents aggregate student ratings and SEF represents supervisor evaluations.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0 overflow-x-auto">
@@ -52,107 +51,80 @@ export function EntityComparisonTable({ breakdown, scope }: Props) {
               <TableHead className="text-center font-bold">Faculty</TableHead>
               <TableHead className="text-center font-bold">SET Rating</TableHead>
               <TableHead className="text-center font-bold">SEF Rating</TableHead>
-              <TableHead className="text-center font-bold">Perception Gap (SEF − SET)</TableHead>
               <TableHead className="font-bold text-center">
                 Grade Distribution (O / VS / S / F / P)
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {breakdown.map((row) => {
-              const gap = row.perceptionGap;
-              const isOverestimating = gap !== null && gap > 0.3;
-              const isUnderestimating = gap !== null && gap < -0.3;
-
-              return (
-                <TableRow
-                  key={row.entityId}
-                  className="text-xs border-border hover:bg-muted/30 transition"
-                >
-                  <TableCell className="text-center font-mono font-bold">
-                    {row.rank === 1 ? (
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-warning/20 text-warning">
-                        <Trophy className="w-3.5 h-3.5" />
-                      </span>
-                    ) : (
-                      `#${row.rank}`
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-bold font-mono text-primary mr-1.5">
-                      {row.entityCode}
+            {breakdown.map((row) => (
+              <TableRow
+                key={row.entityId}
+                className="text-xs border-border hover:bg-muted/30 transition"
+              >
+                <TableCell className="text-center font-mono font-bold">
+                  {row.rank === 1 ? (
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-warning/20 text-warning">
+                      <Trophy className="w-3.5 h-3.5" />
                     </span>
-                    <span className="font-medium text-foreground">{row.entityName}</span>
-                  </TableCell>
-                  <TableCell className="text-center font-mono text-muted-foreground">
-                    {row.totalFaculty}
-                  </TableCell>
-                  <TableCell className="text-center font-mono font-bold text-primary text-sm">
-                    {row.setRating.toFixed(2)}
-                  </TableCell>
-                  <TableCell className="text-center font-mono font-bold text-success text-sm">
-                    {row.sefRating !== null ? row.sefRating.toFixed(2) : "—"}
-                  </TableCell>
-                  <TableCell className="text-center font-mono font-semibold">
-                    {gap !== null ? (
-                      <Badge
-                        variant="outline"
-                        className={`text-[11px] font-mono px-2 py-0.5 ${
-                          isOverestimating
-                            ? "bg-info/10 text-info border-info/30"
-                            : isUnderestimating
-                              ? "bg-warning/10 text-warning border-warning/30"
-                              : "bg-muted text-muted-foreground border-border"
-                        }`}
-                      >
-                        {gap > 0 ? `+${gap.toFixed(2)}` : gap.toFixed(2)}
-                      </Badge>
-                    ) : (
-                      "—"
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex items-center justify-center gap-1 font-mono text-[10px]">
-                      <Badge
-                        variant="outline"
-                        title="Outstanding (4.50-5.00)"
-                        className="bg-success/15 text-success border-success/30 px-1.5 py-0 font-bold"
-                      >
-                        {row.ratingDistribution.outstanding}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        title="Very Satisfactory (3.50-4.49)"
-                        className="bg-info/15 text-info border-info/30 px-1.5 py-0 font-bold"
-                      >
-                        {row.ratingDistribution.verySatisfactory}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        title="Satisfactory (2.50-3.49)"
-                        className="bg-muted text-muted-foreground px-1.5 py-0"
-                      >
-                        {row.ratingDistribution.satisfactory}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        title="Fair (1.50-2.49)"
-                        className="bg-warning/15 text-warning border-warning/30 px-1.5 py-0"
-                      >
-                        {row.ratingDistribution.fair}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        title="Poor (< 1.50)"
-                        className="bg-destructive/15 text-destructive border-destructive/30 px-1.5 py-0"
-                      >
-                        {row.ratingDistribution.poor}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+                  ) : (
+                    `#${row.rank}`
+                  )}
+                </TableCell>
+                <TableCell>
+                  <span className="font-bold font-mono text-primary mr-1.5">{row.entityCode}</span>
+                  <span className="font-medium text-foreground">{row.entityName}</span>
+                </TableCell>
+                <TableCell className="text-center font-mono text-muted-foreground">
+                  {row.totalFaculty}
+                </TableCell>
+                <TableCell className="text-center font-mono font-bold text-primary text-sm">
+                  {row.setRating.toFixed(2)}
+                </TableCell>
+                <TableCell className="text-center font-mono font-bold text-success text-sm">
+                  {row.sefRating !== null ? row.sefRating.toFixed(2) : "—"}
+                </TableCell>
+                <TableCell className="text-center">
+                  <div className="flex items-center justify-center gap-1 font-mono text-[10px]">
+                    <Badge
+                      variant="outline"
+                      title="Outstanding (4.50-5.00)"
+                      className="bg-success/15 text-success border-success/30 px-1.5 py-0 font-bold"
+                    >
+                      {row.ratingDistribution.outstanding}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      title="Very Satisfactory (3.50-4.49)"
+                      className="bg-info/15 text-info border-info/30 px-1.5 py-0 font-bold"
+                    >
+                      {row.ratingDistribution.verySatisfactory}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      title="Satisfactory (2.50-3.49)"
+                      className="bg-muted text-muted-foreground px-1.5 py-0"
+                    >
+                      {row.ratingDistribution.satisfactory}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      title="Fair (1.50-2.49)"
+                      className="bg-warning/15 text-warning border-warning/30 px-1.5 py-0"
+                    >
+                      {row.ratingDistribution.fair}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      title="Poor (< 1.50)"
+                      className="bg-destructive/15 text-destructive border-destructive/30 px-1.5 py-0"
+                    >
+                      {row.ratingDistribution.poor}
+                    </Badge>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </CardContent>

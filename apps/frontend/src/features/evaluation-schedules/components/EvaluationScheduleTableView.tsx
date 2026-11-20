@@ -17,8 +17,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { MoreHorizontal, Edit, Trash2, RotateCcw, ShieldAlert, Square } from "lucide-react";
 import { format } from "date-fns";
-import type { GetStudentSchedule, GetSupervisorSchedule } from "@my-app/shared";
+import { PERMISSIONS, type GetStudentSchedule, type GetSupervisorSchedule } from "@my-app/shared";
 import { getScheduleWindowStatus } from "@/lib/format.lib";
+import { Can } from "@/components/Can";
 
 interface Props {
   schedules: (GetStudentSchedule | GetSupervisorSchedule)[];
@@ -95,58 +96,64 @@ export function EvaluationScheduleTableView({
                     {status.label}
                   </span>
                 </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="w-44 border-border bg-popover text-popover-foreground"
-                    >
-                      {!isArchivedView ? (
-                        <>
-                          <DropdownMenuItem
-                            onClick={() => onEdit(item)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <Edit className="w-4 h-4 text-muted-foreground" />
-                            <span>Edit Timeline</span>
-                          </DropdownMenuItem>
-
-                          {status.label === "Open for Submissions" && (
-                            <DropdownMenuItem
-                              onClick={() => onForceStop(item)}
-                              className="gap-2 text-chart-2 focus:bg-chart-2/10 cursor-pointer font-medium"
-                            >
-                              <Square className="w-4 h-4" />
-                              <span>Force Stop Period</span>
-                            </DropdownMenuItem>
-                          )}
-
-                          <DropdownMenuSeparator className="bg-border" />
-                          <DropdownMenuItem
-                            onClick={() => onDelete(item)}
-                            className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            <span>Archive</span>
-                          </DropdownMenuItem>
-                        </>
-                      ) : (
-                        <DropdownMenuItem
-                          onClick={() => onRestore(item)}
-                          className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
+                <Can permission={PERMISSIONS.EVALUATION_PERIOD_MANAGE}>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground"
                         >
-                          <RotateCcw className="w-4 h-4" />
-                          <span>Restore</span>
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="w-44 border-border bg-popover text-popover-foreground"
+                      >
+                        {!isArchivedView ? (
+                          <>
+                            <DropdownMenuItem
+                              onClick={() => onEdit(item)}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <Edit className="w-4 h-4 text-muted-foreground" />
+                              <span>Edit Timeline</span>
+                            </DropdownMenuItem>
+
+                            {status.label === "Open for Submissions" && (
+                              <DropdownMenuItem
+                                onClick={() => onForceStop(item)}
+                                className="gap-2 text-chart-2 focus:bg-chart-2/10 cursor-pointer font-medium"
+                              >
+                                <Square className="w-4 h-4" />
+                                <span>Force Stop Period</span>
+                              </DropdownMenuItem>
+                            )}
+
+                            <DropdownMenuSeparator className="bg-border" />
+                            <DropdownMenuItem
+                              onClick={() => onDelete(item)}
+                              className="gap-2 text-destructive focus:bg-destructive/10 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span>Archive</span>
+                            </DropdownMenuItem>
+                          </>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => onRestore(item)}
+                            className="gap-2 text-primary focus:bg-primary/10 cursor-pointer"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            <span>Restore</span>
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </Can>
               </TableRow>
             );
           })}

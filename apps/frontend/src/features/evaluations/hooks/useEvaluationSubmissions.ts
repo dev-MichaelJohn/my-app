@@ -35,11 +35,11 @@ export const useStudentSubjects = () => {
   });
 };
 
-export const useStudentFormView = (studentClassId: number, enabled = true) => {
+export const useStudentFormView = (offeringStudentId: number, enabled = true) => {
   return useQuery({
-    queryKey: SUBMISSION_KEYS.studentFormView(studentClassId),
-    queryFn: () => toQuery(submissionApi.getStudentFormView(studentClassId)),
-    enabled: Boolean(studentClassId) && enabled,
+    queryKey: SUBMISSION_KEYS.studentFormView(offeringStudentId),
+    queryFn: () => toQuery(submissionApi.getStudentFormView(offeringStudentId)),
+    enabled: Boolean(offeringStudentId) && enabled,
     staleTime: 60 * 1000,
   });
 };
@@ -52,7 +52,7 @@ export const useSubmitStudentEvaluation = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: SUBMISSION_KEYS.studentSubjects() });
       queryClient.invalidateQueries({
-        queryKey: SUBMISSION_KEYS.studentFormView(variables.student_class_id),
+        queryKey: SUBMISSION_KEYS.studentFormView(variables.offering_student_id),
       });
     },
   });

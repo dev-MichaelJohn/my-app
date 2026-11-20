@@ -40,18 +40,17 @@ import { Badge } from "@/components/ui/badge";
 import { AnnexCDocument } from "../components/AnnexCDocument";
 
 export default function AnnexCReportPage() {
-  const { user, hasAnyPermission, isSysAdmin, isAdmin, isSupervisor, isFaculty, isDean, isChair } =
-    usePermissions();
-  const isPrivileged = isSysAdmin || isAdmin || isSupervisor;
-  const isPrivilegedAdmin = isSysAdmin || isAdmin;
-  const isPlainFaculty = isFaculty && !isSupervisor && !isAdmin && !isSysAdmin;
+  const { user, hasPermission, isVpaa, isClerk, isFaculty, isDean, isChair } = usePermissions();
 
-  // 🚀 Mode toggle for Supervisors who also teach
+  const isPrivilegedAdmin = isVpaa || isClerk;
+  const isSupervisorRole = isDean || isChair;
+  const canEditSupervisorFedaf = isVpaa || isDean || isChair;
+  const isPlainFaculty = isFaculty && !isDean && !isChair && !isVpaa && !isClerk;
+
   const [supervisorPortalTab, setSupervisorPortalTab] = useState<"SUPERVISORY" | "SELF">(
     "SUPERVISORY",
   );
 
-  // Metadata queries
   const { data: activeSemester } = useActiveSemester();
   const { data: semestersResponse } = useSemesters({ paginate: false });
   const semestersList = useMemo(() => semestersResponse?.data ?? [], [semestersResponse?.data]);
@@ -62,7 +61,6 @@ export default function AnnexCReportPage() {
   const { data: programsResponse } = usePrograms({ paginate: false });
   const allProgramsList = useMemo(() => programsResponse?.data ?? [], [programsResponse?.data]);
 
-  // Filter States
   const [selectedSemesterId, setSelectedSemesterId] = useState<number | undefined>(undefined);
   const currentSemesterId = selectedSemesterId ?? activeSemester?.id;
 
@@ -92,20 +90,15 @@ export default function AnnexCReportPage() {
     return () => clearTimeout(handler);
   }, [searchInput]);
 
-  // Scoped programs anchored to chosen college
   const availablePrograms = useMemo(() => {
     if (!selectedCollegeId) return allProgramsList;
     return allProgramsList.filter((p) => p.program.college_id === selectedCollegeId);
   }, [selectedCollegeId, allProgramsList]);
 
-  // Selected Report State (Drilldown)
   const [selectedReportId, setSelectedReportId] = useState<number | null>(null);
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
-
-  // Batch Consolidation Dialog State
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
 
-  // ── Query for Admin / Supervisor Reports List ──
   const listQuery: FacultyReportQuery = useMemo(
     () => ({
       paginate,
@@ -137,68 +130,9 @@ export default function AnnexCReportPage() {
     refetch: refetchList,
   } = useFacultyReportsList(listQuery);
 
-  // 🚀 Memoize to prevent re-creating array on every render
-  const rawReportsList = useMemo(
-    () => reportsListResponse?.data ?? [],
-    [reportsListResponse?.data],
-  );
+  const reportsList = useMemo(() => reportsListResponse?.data ?? [], [reportsListResponse?.data]);
   const pagination = reportsListResponse?.pagination;
 
-  // ── 🎯 Supervisory Scope Isolation per CHED CMO 19 s. 2025 Sec 9.2 ──
-  const deanCollegeIds = useMemo(() => user?.offices?.deanships?.map((d) => d.id) ?? [], [user]);
-
-  const chairProgramIds = useMemo(() => user?.offices?.chairships?.map((c) => c.id) ?? [], [user]);
-
-  // All Program Chairs appointed under the Dean's college(s)
-  const programChairsUnderDeanIds = useMemo(() => {
-    if (deanCollegeIds.length === 0) return [];
-    return allProgramsList
-      .filter((p) => deanCollegeIds.includes(p.program.college_id) && p.chair !== null)
-      .map((p) => p.chair!.account.id);
-  }, [allProgramsList, deanCollegeIds]);
-
-  // Strict list filtering:
-  // 1. College Dean: ONLY Program Chairs under their college (excludes regular faculty, excludes self)
-  // 2. Program Chair: ONLY regular teaching faculty in their program (excludes self, excludes other chairs)
-  // 3. Admin / SysAdmin: Institutional oversight (sees all)
-  const scopedReportsList = useMemo(() => {
-    if (isPrivilegedAdmin) {
-      return rawReportsList;
-    }
-
-    if (isDean) {
-      return rawReportsList.filter(
-        (r) =>
-          programChairsUnderDeanIds.includes(r.faculty_id) && r.faculty_id !== user?.account.id,
-      );
-    }
-
-    if (isChair) {
-      const allChairIds = allProgramsList
-        .filter((p) => p.chair !== null)
-        .map((p) => p.chair!.account.id);
-
-      return rawReportsList.filter(
-        (r) =>
-          r.faculty_id !== user?.account.id &&
-          !allChairIds.includes(r.faculty_id) &&
-          (r.program_id ? chairProgramIds.includes(r.program_id) : true), // 👈 Uses chairProgramIds
-      );
-    }
-
-    return rawReportsList;
-  }, [
-    rawReportsList,
-    isPrivilegedAdmin,
-    isDean,
-    isChair,
-    programChairsUnderDeanIds,
-    allProgramsList,
-    chairProgramIds, // 👈 Included in dependency array
-    user?.account.id,
-  ]);
-
-  // Single Report Detailed View Query
   const effectiveDetailFacultyId =
     selectedFacultyId ??
     (isPlainFaculty || supervisorPortalTab === "SELF" ? user?.account.id : undefined);
@@ -213,7 +147,6 @@ export default function AnnexCReportPage() {
     Boolean(effectiveDetailFacultyId),
   );
 
-  // Mutations
   const recalculateMutation = useRecalculateAnnexCReport();
   const updateStatusMutation = useUpdateReportStatus();
 
@@ -257,9 +190,6 @@ export default function AnnexCReportPage() {
     }
   };
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // BRANCH A: PLAIN FACULTY MEMBER (Dedicated Instructor Portal)
-  // ══════════════════════════════════════════════════════════════════════════
   if (isPlainFaculty) {
     return (
       <div className="space-y-6 pb-24">
@@ -275,19 +205,12 @@ export default function AnnexCReportPage() {
     );
   }
 
-  const canConsolidate = hasAnyPermission([
-    PERMISSIONS.EVALUATION_REPORT_BATCH_GENERATE,
-    PERMISSIONS.EVALUATION_REPORT_GENERATE,
-  ]);
+  const canConsolidate = hasPermission(PERMISSIONS.EVALUATION_REPORT_BATCH_GENERATE);
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // BRANCH B: ADMINS & SUPERVISORS (Scoped Browser & Drilldown)
-  // ══════════════════════════════════════════════════════════════════════════
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-24">
       {!selectedReportId ? (
         <div className="space-y-6">
-          {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
@@ -299,7 +222,7 @@ export default function AnnexCReportPage() {
                     variant="outline"
                     className="border-primary/40 text-primary text-xs font-semibold"
                   >
-                    Supervising: Program Chairs
+                    Supervising: Department Chairs
                   </Badge>
                 )}
                 {isChair && !isPrivilegedAdmin && (
@@ -307,26 +230,25 @@ export default function AnnexCReportPage() {
                     variant="outline"
                     className="border-primary/40 text-primary text-xs font-semibold"
                   >
-                    Supervising: Department Faculty
+                    Supervising: Department & Program Faculty
+                  </Badge>
+                )}
+                {isClerk && !isVpaa && (
+                  <Badge variant="outline" className="text-muted-foreground text-xs font-semibold">
+                    Read-Only Access
                   </Badge>
                 )}
               </div>
               <p className="text-sm text-muted-foreground mt-0.5">
                 {isDean && !isPrivilegedAdmin
-                  ? "Evaluating performance and FEDAF plans of Program Chairs under your college."
+                  ? "Reviewing evaluation reports and FEDAF plans for Department Chairs under your college."
                   : isChair && !isPrivilegedAdmin
-                    ? "Evaluating performance and FEDAF plans of faculty teaching under your academic program."
+                    ? "Reviewing evaluation reports and FEDAF plans for faculty teaching under your program."
                     : "Browse consolidated teaching performance reports, category charts, and FEDAF plans."}
               </p>
             </div>
 
-            <Can
-              anyPermission={[
-                PERMISSIONS.EVALUATION_REPORT_BATCH_GENERATE,
-                PERMISSIONS.EVALUATION_REPORT_GENERATE,
-              ]}
-              anyRole={["SYS_ADMIN", "ADMIN"]}
-            >
+            <Can permission={PERMISSIONS.EVALUATION_REPORT_BATCH_GENERATE}>
               <div className="flex items-center gap-2">
                 <Button
                   onClick={() => setBatchDialogOpen(true)}
@@ -339,8 +261,7 @@ export default function AnnexCReportPage() {
             </Can>
           </div>
 
-          {/* 🚀 Mode Switcher: For Deans/Chairs who also teach */}
-          {isSupervisor && !isPrivilegedAdmin && (
+          {isSupervisorRole && !isPrivilegedAdmin && (
             <div className="flex border-b border-border">
               <button
                 type="button"
@@ -357,10 +278,10 @@ export default function AnnexCReportPage() {
               >
                 <Users className="w-3.5 h-3.5" />
                 <span>
-                  {isDean ? "Supervised Program Chairs" : "Supervised Department Faculty"}
+                  {isDean ? "Supervised Department Chairs" : "Supervised Teaching Faculty"}
                 </span>
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                  {scopedReportsList.length}
+                  {reportsList.length}
                 </Badge>
               </button>
 
@@ -383,7 +304,6 @@ export default function AnnexCReportPage() {
             </div>
           )}
 
-          {/* 🚀 Render Self Portal if on SELF tab */}
           {supervisorPortalTab === "SELF" ? (
             <FacultySelfReportView
               report={activeReport}
@@ -439,33 +359,32 @@ export default function AnnexCReportPage() {
                 </div>
               ) : viewMode === "table" ? (
                 <ReportTableView
-                  reports={scopedReportsList}
+                  reports={reportsList}
                   onSelectReport={handleOpenDetail}
                   onGenerateClick={() => setBatchDialogOpen(true)}
                   canGenerate={canConsolidate}
                 />
               ) : (
                 <ReportGridView
-                  reports={scopedReportsList}
+                  reports={reportsList}
                   onSelectReport={handleOpenDetail}
                   onGenerateClick={() => setBatchDialogOpen(true)}
                   canGenerate={canConsolidate}
                 />
               )}
 
-              {/* Pagination */}
               {paginate && pagination && (
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-4 text-xs text-muted-foreground">
                   <span>
                     Showing{" "}
                     <strong className="text-foreground">
-                      {scopedReportsList.length > 0 ? (pagination.currentPage - 1) * limit + 1 : 0}
+                      {reportsList.length > 0 ? (pagination.currentPage - 1) * limit + 1 : 0}
                     </strong>{" "}
                     to{" "}
                     <strong className="text-foreground">
-                      {Math.min(pagination.currentPage * limit, scopedReportsList.length)}
+                      {Math.min(pagination.currentPage * limit, pagination.totalItems)}
                     </strong>{" "}
-                    of <strong className="text-foreground">{scopedReportsList.length}</strong>{" "}
+                    of <strong className="text-foreground">{pagination.totalItems}</strong>{" "}
                     report(s)
                   </span>
 
@@ -521,7 +440,6 @@ export default function AnnexCReportPage() {
           )}
         </div>
       ) : (
-        /* Report Detail View */
         <div className="space-y-6">
           {activeReport && (
             <ReportLifecycleBar
@@ -581,24 +499,18 @@ export default function AnnexCReportPage() {
                 </div>
               </div>
 
-              {/* 🚀 Render Annex C Document for Supervisors */}
               <AnnexCDocument report={activeReport} />
-
-              {/* Visual Analytics */}
               <ReportAnalyticsCharts report={activeReport} />
-
-              {/* Interactive FEDAF Action Center */}
               <FedafActionSection
                 report={activeReport}
                 currentUser={user}
-                isPrivileged={Boolean(isPrivileged)}
+                isPrivileged={canEditSupervisorFedaf}
               />
             </div>
           )}
         </div>
       )}
 
-      {/* 🚀 Dedicated Batch Consolidation Dialog (with nested Friction modal) */}
       <BatchConsolidateDialog
         open={batchDialogOpen}
         onOpenChange={setBatchDialogOpen}

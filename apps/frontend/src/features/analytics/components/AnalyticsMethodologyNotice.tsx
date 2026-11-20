@@ -71,20 +71,7 @@ export function AnalyticsMethodologyNotice() {
             <div className="space-y-2">
               <div>
                 <span className="font-bold text-foreground block">
-                  3. Perception Gap Index (Δ SEF − SET):
-                </span>
-                <p className="text-muted-foreground text-[11px] leading-relaxed">
-                  Calculated as <code>SEF Rating − SET Rating</code>. A{" "}
-                  <strong>positive gap (+)</strong> indicates the supervisor rated the faculty
-                  higher than the students did, while a <strong>negative gap (−)</strong> indicates
-                  students experienced classroom friction or difficulties not captured during
-                  supervisory observations.
-                </p>
-              </div>
-
-              <div>
-                <span className="font-bold text-foreground block">
-                  4. Qualitative Grade Scale Distribution:
+                  3. Qualitative Grade Scale Distribution:
                 </span>
                 <div className="flex flex-wrap gap-1.5 pt-1 font-mono text-[10px]">
                   <span className="px-2 py-0.5 rounded bg-success/15 text-success font-bold">

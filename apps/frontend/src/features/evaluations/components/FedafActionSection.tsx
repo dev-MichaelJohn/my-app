@@ -70,12 +70,13 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
   };
 
   // Determine supervisor designation label
-  const supervisorRoleLabel = currentUser?.offices?.chairships?.length
-    ? "Program Chair"
-    : currentUser?.offices?.deanships?.length
-      ? "College Dean"
-      : "Supervisor";
-
+  const supervisorRoleLabel = currentUser?.roles?.includes("VPAA")
+    ? "VPAA"
+    : currentUser?.offices?.chairships?.length
+      ? "Department Chair"
+      : currentUser?.offices?.deanships?.length
+        ? "College Dean"
+        : "Supervisor";
   return (
     <Card className="border-border bg-card shadow-xs">
       <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-border">
@@ -288,10 +289,7 @@ export function FedafActionSection({ report, currentUser, isPrivileged }: Props)
               )
             ) : (
               /* When viewing as Supervisor/Admin, show status badge — NEVER a signature button */
-              <Badge
-                variant="outline"
-                className="text-warning border-warning/30 text-[10px] gap-1"
-              >
+              <Badge variant="outline" className="text-warning border-warning/30 text-[10px] gap-1">
                 <Clock className="w-3 h-3 opacity-60" /> Awaiting Faculty Acknowledgment
               </Badge>
             )}

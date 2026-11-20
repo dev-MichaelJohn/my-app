@@ -2,7 +2,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, FileSpreadsheet, Users, School, Sparkles } from "lucide-react";
-import type { AnnexCFacultyReport } from "@my-app/shared";
+import { PERMISSIONS, type AnnexCFacultyReport } from "@my-app/shared";
 import { Can } from "@/components/Can";
 
 interface Props {
@@ -28,7 +28,7 @@ export function ReportGridView({
           faculty teaching in this semester.
         </p>
         {canGenerate && onGenerateClick && (
-          <Can anyRole={["SYS_ADMIN", "ADMIN"]}>
+          <Can permission={PERMISSIONS.EVALUATION_REPORT_BATCH_GENERATE}>
             <div className="pt-2">
               <Button
                 onClick={onGenerateClick}

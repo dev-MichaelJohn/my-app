@@ -54,6 +54,8 @@ import type {
   GetSupervisorSchedule,
 } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
+import { Can } from "@/components/Can";
+import { PERMISSIONS } from "@my-app/shared";
 
 export default function EvaluationSchedulesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -61,10 +63,8 @@ export default function EvaluationSchedulesPage() {
 
   const { data: activeSemester } = useActiveSemester();
 
-  // 1. Target Type: 'student' (SET) | 'supervisor' (SEF)
   const [type, setType] = useState<"student" | "supervisor">("student");
 
-  // 2. View Mode
   const [viewMode, setViewMode] = useState<"table" | "grid">(() => {
     return (localStorage.getItem("schedules_view_mode") as "table" | "grid") || "table";
   });
@@ -73,7 +73,6 @@ export default function EvaluationSchedulesPage() {
     localStorage.setItem("schedules_view_mode", viewMode);
   }, [viewMode]);
 
-  // 3. Dropdown Metadata
   const { data: semestersResponse } = useSemesters({ paginate: false });
   const { data: studentFormsResponse } = useStudentForms({ paginate: false });
   const { data: supervisorFormsResponse } = useSupervisorForms({ paginate: false });
@@ -90,7 +89,6 @@ export default function EvaluationSchedulesPage() {
     return activeSemester?.id;
   }, [semesterIdParam, activeSemester?.id]);
 
-  // 4. Query State
   const [paginate, setPaginate] = useState(true);
   const [page, setPage] = useState(1);
   const [limit, _setLimit] = useState(10);
@@ -131,7 +129,6 @@ export default function EvaluationSchedulesPage() {
   const schedules = activeResponse?.data ?? [];
   const pagination = activeResponse?.pagination;
 
-  // Mutations
   const deleteStudent = useDeleteStudentSchedule();
   const restoreStudent = useRestoreStudentSchedule();
   const forceStopStudent = useForceStopStudentSchedule();
@@ -140,7 +137,6 @@ export default function EvaluationSchedulesPage() {
   const restoreSupervisor = useRestoreSupervisorSchedule();
   const forceStopSupervisor = useForceStopSupervisorSchedule();
 
-  // Dialogs
   const [formOpen, setFormOpen] = useState(false);
   const [scheduleToEdit, setScheduleToEdit] = useState<
     GetStudentSchedule | GetSupervisorSchedule | null
@@ -216,20 +212,20 @@ export default function EvaluationSchedulesPage() {
             Configure calendar submission windows for student and supervisor evaluations.
           </p>
         </div>
-
-        <Button
-          onClick={() => {
-            setScheduleToEdit(null);
-            setFormOpen(true);
-          }}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Schedule Period</span>
-        </Button>
+        <Can permission={PERMISSIONS.EVALUATION_PERIOD_MANAGE}>
+          <Button
+            onClick={() => {
+              setScheduleToEdit(null);
+              setFormOpen(true);
+            }}
+            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Schedule Period</span>
+          </Button>
+        </Can>
       </div>
 
-      {/* ── SET vs SEF Tabs ── */}
       <div className="flex border-b border-border">
         <button
           onClick={() => {

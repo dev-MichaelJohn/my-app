@@ -152,23 +152,6 @@ export function ReportAnalyticsDocument({ report }: Props) {
                     <TableCell className="text-center font-mono font-bold text-success">
                       {cat.sefAverage !== null ? cat.sefAverage.toFixed(2) : "—"}
                     </TableCell>
-                    <TableCell className="text-center font-mono font-semibold">
-                      {cat.gap !== null ? (
-                        <span
-                          className={`px-2 py-0.5 rounded text-[11px] ${
-                            cat.gap > 0
-                              ? "bg-info/10 text-info"
-                              : cat.gap < 0
-                                ? "bg-warning/10 text-warning"
-                                : "text-muted-foreground"
-                          }`}
-                        >
-                          {cat.gap > 0 ? `+${cat.gap.toFixed(2)}` : cat.gap.toFixed(2)}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
                   </TableRow>
                 ))
               )}

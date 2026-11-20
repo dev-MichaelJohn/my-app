@@ -33,12 +33,14 @@ import {
 } from "../components/EvaluationInstrumentSkeletons";
 import { EvaluationInstrumentFormDialog } from "../components/EvaluationInstrumentFormDialog";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import type {
-  EvaluationFormQuery,
-  IStudentEvalFormSelect,
-  ISupervisorEvalFormSelect,
+import {
+  PERMISSIONS,
+  type EvaluationFormQuery,
+  type IStudentEvalFormSelect,
+  type ISupervisorEvalFormSelect,
 } from "@my-app/shared";
 import type { ApiError } from "@/lib/api.lib";
+import { Can } from "@/components/Can";
 
 export default function EvaluationInstrumentsPage() {
   // 1. Instrument Type: 'student' (SET) | 'supervisor' (SEF)
@@ -145,17 +147,18 @@ export default function EvaluationInstrumentsPage() {
             Design, version, and manage SET and SEF evaluation questionnaires.
           </p>
         </div>
-
-        <Button
-          onClick={() => {
-            setFormToEdit(null);
-            setFormOpen(true);
-          }}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Questionnaire</span>
-        </Button>
+        <Can permission={PERMISSIONS.EVALUATION_FORM_MANAGE}>
+          <Button
+            onClick={() => {
+              setFormToEdit(null);
+              setFormOpen(true);
+            }}
+            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Questionnaire</span>
+          </Button>
+        </Can>
       </div>
 
       {/* ── 🚀 Instrument Type Selector Tabs (Student SET vs Supervisor SEF) ── */}

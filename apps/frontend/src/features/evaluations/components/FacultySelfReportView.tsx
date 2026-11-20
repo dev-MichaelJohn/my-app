@@ -25,7 +25,6 @@ import {
   Smile,
   Frown,
   Meh,
-  ArrowUpDown,
   Users,
   UserCheck,
 } from "lucide-react";
@@ -105,11 +104,6 @@ export function FacultySelfReportView({
       </Badge>
     );
   };
-
-  const perceptionGap =
-    report && report.overall_sef_rating !== null
-      ? Number((report.overall_sef_rating - report.overall_set_rating).toFixed(2))
-      : null;
 
   return (
     <div className="space-y-6 w-full max-w-5xl mx-auto">
@@ -224,28 +218,6 @@ export function FacultySelfReportView({
                       report.max_rating ?? 5,
                     )
                   : "Awaiting supervisory appraisal"}
-              </span>
-            </Card>
-
-            <Card className="p-4 border-border bg-card shadow-xs space-y-1">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5">
-                <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" /> Perception Gap
-              </span>
-              <span
-                className={`text-2xl font-extrabold font-mono block ${
-                  perceptionGap !== null && perceptionGap > 0
-                    ? "text-info"
-                    : perceptionGap !== null && perceptionGap < 0
-                      ? "text-warning"
-                      : "text-foreground"
-                }`}
-              >
-                {perceptionGap !== null
-                  ? `${perceptionGap > 0 ? "+" : ""}${perceptionGap.toFixed(2)}`
-                  : "—"}
-              </span>
-              <span className="text-[11px] text-muted-foreground block">
-                SEF minus SET variance
               </span>
             </Card>
 
