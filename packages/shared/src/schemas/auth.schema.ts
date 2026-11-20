@@ -84,9 +84,10 @@ export const OTPCodes = pgTable(
 );
 
 export const SystemRoles = pgEnum("system_role", [
-  "SYS_ADMIN",
-  "ADMIN",
-  "SUPERVISOR",
+  "VPAA",
+  "CLERK",
+  "COLLEGE_DEAN",
+  "DEPARTMENT_CHAIR",
   "FACULTY",
   "STUDENT",
 ]);
