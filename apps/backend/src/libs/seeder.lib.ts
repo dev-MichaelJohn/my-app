@@ -29,7 +29,7 @@ export const SeederFunction = () => {
             middle_name: null,
             suffix: null,
           },
-          role: "SYS_ADMIN",
+          role: "VPAA",
         })
         .orElse((err) => {
           if (
@@ -37,7 +37,7 @@ export const SeederFunction = () => {
             err.message.includes("already exists") ||
             err.message.includes("already present")
           ) {
-            logger.info("Active Superadmin already exists. Safe to continue.");
+            logger.info("Active VPAA account already exists. Safe to continue.");
             return okAsync(undefined);
           }
 

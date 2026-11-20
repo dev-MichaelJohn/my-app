@@ -14,12 +14,10 @@ export const InitializeSocketServer = (httpServer: HTTPServer) => {
       credentials: true,
     },
     path: "/socket.io",
-    // Ping/pong health checks to prune dead connections
     pingInterval: 25000,
     pingTimeout: 20000,
   });
 
-  // 🛡️ Robust JWT Authentication Middleware for WebSockets
   io.use((socket: Socket, next) => {
     const rawToken =
       socket.handshake.auth?.token ||
@@ -45,29 +43,12 @@ export const InitializeSocketServer = (httpServer: HTTPServer) => {
   io.on("connection", (socket: Socket) => {
     const user: GetUser = socket.data.user;
     const roles = user.roles ?? [];
-    const isSysAdmin = roles.includes("SYS_ADMIN");
-    const isAdmin = roles.includes("ADMIN");
+    const isVpaa = roles.includes("VPAA");
+    const isClerk = roles.includes("CLERK");
 
-    // 1. Join room for Admins
-    if (isSysAdmin || isAdmin) {
+    if (isVpaa || isClerk) {
       socket.join("admin:pulse");
     }
-
-    // 2. Join Dean's College rooms
-    user.offices?.deanships?.forEach((d) => {
-      socket.join(`college:pulse:${d.id}`);
-    });
-
-    // 3. Join Program Chair rooms
-    user.offices?.chairships?.forEach((c) => {
-      socket.join(`program:pulse:${c.id}`);
-    });
-
-    logger.debug(`Socket connected: User #${user.account.id} (${user.account.email})`);
-
-    socket.on("disconnect", (reason) => {
-      logger.debug(`Socket disconnected: User #${user.account.id} (${reason})`);
-    });
   });
 
   logger.info("Socket.io Real-Time Engine initialized successfully.");

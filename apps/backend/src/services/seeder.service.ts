@@ -28,7 +28,6 @@ export class SeederService implements ISeederService {
 
   seedRolesAndPermission(): ResultAsync<void, AppError> {
     return WithTransaction(db, async (tx) => {
-      // 1. Fetch current database states
       const existingRoles = await tx.select().from(Roles).where(isNull(Roles.deleted_at));
 
       const existingPermissions = await tx
@@ -46,7 +45,6 @@ export class SeederService implements ISeederService {
         existingPermissions.map((p) => [p.permission_key, p.id]),
       );
 
-      // 2. Ensure all enum roles exist in Roles table
       for (const role of SystemRoles.enumValues) {
         if (!roleMap.has(role)) {
           const [created] = await tx.insert(Roles).values({ system_role: role }).returning();
@@ -61,7 +59,6 @@ export class SeederService implements ISeederService {
         }
       }
 
-      // 3. Ensure all PERMISSIONS keys exist in Permissions table
       for (const permission of Object.values(PERMISSIONS)) {
         if (!permissionMap.has(permission)) {
           const [created] = await tx
@@ -79,7 +76,6 @@ export class SeederService implements ISeederService {
         }
       }
 
-      // 4. Construct the target valid mappings from current ROLE_PERMISSION_MATRIX
       const validRolePermissionKeys = new Set<string>();
 
       for (const [roleName, permissions] of Object.entries(ROLE_PERMISSION_MATRIX) as [
@@ -112,7 +108,6 @@ export class SeederService implements ISeederService {
         logger.info(`Revoked ${revokedCount} obsolete permission grant(s) from database.`);
       }
 
-      // 6. ✨ Insert missing valid role-permission grants
       const existingRPSet = new Set(
         existingRolePermissions.map((rp) => `${rp.role_id}:${rp.permission_id}`),
       );
@@ -140,7 +135,6 @@ export class SeederService implements ISeederService {
         logger.info(`Granted ${grantedCount} new permission mapping(s) in database.`);
       }
 
-      // 7. 🔄 Invalidate in-memory RBAC cache so middleware immediately recognizes updates
       invalidateRolePermissionsCache();
 
       logger.info("Roles, permissions, and matrix synced successfully!");
@@ -148,15 +142,15 @@ export class SeederService implements ISeederService {
   }
 
   seedSystemAdmin(info: CreateUser): ResultAsync<void, AppError> {
-    return this.isSeedingSysAdminAllowed().andThen((isAllowed) => {
-      if (!isAllowed) return errAsync(new AppError(409, "A System Administrator already exists."));
+    return this.isSeedingVPAAAllowed().andThen((isAllowed) => {
+      if (!isAllowed) return errAsync(new AppError(409, "A VPAA account already exists."));
       return this.userService.createUser(info, db).map(() => undefined);
     });
   }
 
-  private isSeedingSysAdminAllowed() {
+  private isSeedingVPAAAllowed() {
     return this.userService
-      .getUsers({ page: 1, limit: 1, role: "SYS_ADMIN", sort_by: "created_at", order: "asc" })
+      .getUsers({ page: 1, limit: 1, role: "VPAA", sort_by: "created_at", order: "asc" })
       .map((users) => {
         return users.pagination.totalItems === 0;
       });

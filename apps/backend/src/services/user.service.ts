@@ -26,7 +26,8 @@ import {
   ProgramChairs,
   CourseOfferings,
   ClassStudents,
-  StudentClasses,
+  OfferingStudents,
+  Faculties,
   Colleges,
   Programs,
   type ChangePassword,
@@ -49,7 +50,6 @@ import {
 } from "drizzle-orm";
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 import bcrypt from "bcryptjs";
-import crypto from "node:crypto";
 import { EmailService, type IEmailService } from "./email.service.js";
 import {
   UpdateEmailTemplate,
@@ -217,6 +217,33 @@ export class UserService implements IUserService {
       )
     `,
   };
+
+  private assertCanModifyTargetAccount(
+    target: GetUser,
+    actorUser?: GetUser,
+    allowSelf = false,
+  ): void {
+    if (!actorUser) return;
+    const actorRoles = toRolesArray(actorUser.roles);
+    const targetRoles = toRolesArray(target.roles);
+    const isVpaa = actorRoles.includes("VPAA");
+    const isClerk = actorRoles.includes("CLERK");
+    const isSelf = actorUser.account.id === target.account.id;
+
+    if (isSelf && allowSelf) return;
+
+    if (targetRoles.includes("VPAA")) {
+      throw new AppError(403, "VPAA accounts cannot be modified or managed by another account.");
+    }
+
+    if (targetRoles.includes("CLERK") && !isVpaa) {
+      throw new AppError(403, "Only VPAA can modify Clerk accounts.");
+    }
+
+    if (!isVpaa && !isClerk) {
+      throw new AppError(403, "You do not have administrative permission to modify accounts.");
+    }
+  }
 
   getUserById(
     id: number,
@@ -436,17 +463,48 @@ export class UserService implements IUserService {
     req?: Request,
   ): ResultAsync<GetUser, AppError> {
     return ValidateSchema(CreateUserSchema, info).asyncAndThen((parsedInfo) => {
-      const actorRoles = toRolesArray(actorUser?.roles);
-      const isSysAdmin = actorRoles.includes("SYS_ADMIN");
+      if (actorUser) {
+        const actorRoles = toRolesArray(actorUser.roles);
+        const isVpaa = actorRoles.includes("VPAA");
+        const isClerk = actorRoles.includes("CLERK");
+        const isDean = actorRoles.includes("COLLEGE_DEAN");
+        const isChair = actorRoles.includes("DEPARTMENT_CHAIR");
 
-      if (
-        (parsedInfo.role === "ADMIN" || parsedInfo.role === "SYS_ADMIN") &&
-        actorUser &&
-        !isSysAdmin
-      ) {
-        return errAsync(
-          new AppError(403, "Only System Administrators can provision administrative accounts."),
-        );
+        if (parsedInfo.role === "VPAA") {
+          return errAsync(
+            new AppError(403, "Additional VPAA accounts cannot be provisioned via the portal."),
+          );
+        }
+
+        if (parsedInfo.role === "CLERK" && !isVpaa) {
+          return errAsync(new AppError(403, "Only VPAA can provision Clerk accounts."));
+        }
+
+        if (!isVpaa && !isClerk) {
+          if (isDean && parsedInfo.role !== "FACULTY") {
+            return errAsync(
+              new AppError(403, "College Deans can only provision Faculty accounts for Chairs."),
+            );
+          }
+          if (
+            isChair &&
+            !isDean &&
+            parsedInfo.role !== "FACULTY" &&
+            parsedInfo.role !== "STUDENT"
+          ) {
+            return errAsync(
+              new AppError(
+                403,
+                "Department Chairs can only provision Faculty or Student accounts.",
+              ),
+            );
+          }
+          if (!isDean && !isChair) {
+            return errAsync(
+              new AppError(403, "You do not have permission to provision user accounts."),
+            );
+          }
+        }
       }
 
       let plainPassword = info.account.password;
@@ -592,14 +650,9 @@ export class UserService implements IUserService {
         return errAsync(new AppError(400, "No update parameters were provided."));
       }
 
-      const actorRoles = actorUser
-        ? typeof actorUser === "object" && "roles" in actorUser
-          ? toRolesArray(actorUser.roles)
-          : toRolesArray(actorUser)
-        : [];
-      const isSysAdmin = actorRoles.includes("SYS_ADMIN");
-      const isSelf = typeof actorUser === "object" && actorUser?.account?.id === id;
-
+      const actorRoles = toRolesArray(actorUser?.roles);
+      const isVpaa = actorRoles.includes("VPAA");
+      const isSelf = actorUser?.account?.id === id;
       const updatedFieldsList: UpdateEmailOpts["updatedFields"] = [];
 
       return WithTransaction(client, async (tx) => {
@@ -608,50 +661,38 @@ export class UserService implements IUserService {
         const target = existing.value;
         const targetRoles = toRolesArray(target.roles);
 
-        if (targetRoles.includes("SYS_ADMIN") && !isSysAdmin) {
-          throw new AppError(
-            403,
-            "Only System Administrators can modify a System Administrator account.",
-          );
-        }
-        if (targetRoles.includes("ADMIN") && !isSysAdmin && !isSelf) {
-          throw new AppError(403, "Only System Administrators can modify Administrator accounts.");
-        }
-        if (
-          parsed.role &&
-          (parsed.role === "ADMIN" || parsed.role === "SYS_ADMIN") &&
-          !isSysAdmin
-        ) {
-          throw new AppError(403, "Only System Administrators can assign administrative roles.");
+        this.assertCanModifyTargetAccount(target, actorUser, true);
+
+        if (parsed.role) {
+          if (parsed.role === "VPAA" && !targetRoles.includes("VPAA")) {
+            throw new AppError(403, "VPAA role cannot be assigned via account management.");
+          }
+          if (parsed.role === "CLERK" && !targetRoles.includes("CLERK") && !isVpaa) {
+            throw new AppError(403, "Only VPAA can assign the Clerk role.");
+          }
         }
 
         if (hasRoleInfo && parsed.role) {
           const deanships = target.offices?.deanships ?? [];
           const chairships = target.offices?.chairships ?? [];
-          const isHoldingOffice = deanships.length > 0 || chairships.length > 0;
 
-          if (
-            isSelf &&
-            !isSysAdmin &&
-            parsed.role !== targetRoles[0] &&
-            !targetRoles.includes(parsed.role)
-          ) {
+          if (isSelf && !targetRoles.includes(parsed.role)) {
             throw new AppError(403, "You cannot modify or demote your own assigned roles.");
           }
 
-          if (isHoldingOffice && parsed.role !== "SUPERVISOR") {
+          if (deanships.length > 0 && parsed.role !== "COLLEGE_DEAN") {
             const deanStr = deanships.map((d) => d.initialism).join(", ");
-            const chairStr = chairships.map((c) => c.initialism).join(", ");
-            const officeDetails = [
-              deanStr ? `Dean of (${deanStr})` : null,
-              chairStr ? `Chair of (${chairStr})` : null,
-            ]
-              .filter(Boolean)
-              .join(" and ");
-
             throw new AppError(
               409,
-              `Cannot change primary role: User currently holds office as ${officeDetails}. The office must be vacated or reassigned before modifying their supervisory status.`,
+              `Cannot change primary role: User currently holds office as Dean of (${deanStr}). The office must be vacated or reassigned first.`,
+            );
+          }
+
+          if (chairships.length > 0 && parsed.role !== "DEPARTMENT_CHAIR") {
+            const chairStr = chairships.map((c) => c.initialism).join(", ");
+            throw new AppError(
+              409,
+              `Cannot change primary role: User currently holds office as Chair of (${chairStr}). The office must be vacated or reassigned first.`,
             );
           }
         }
@@ -820,16 +861,8 @@ export class UserService implements IUserService {
       const existing = await this.getUserById(id, tx);
       if (existing.isErr()) throw existing.error;
       const target = existing.value;
-      const targetRoles = toRolesArray(target.roles);
-      const isSysAdmin = Boolean(toRolesArray(actorUser?.roles).includes("SYS_ADMIN"));
 
-      if (targetRoles.includes("SYS_ADMIN")) {
-        throw new AppError(403, "System Administrator accounts cannot be archived.");
-      }
-      if (targetRoles.includes("ADMIN") && !isSysAdmin) {
-        throw new AppError(403, "Only System Administrators can archive Administrator accounts.");
-      }
-
+      this.assertCanModifyTargetAccount(target, actorUser, false);
       await this.checkUserDependencies(id, tx);
 
       const deleteTime = new Date();
@@ -875,11 +908,13 @@ export class UserService implements IUserService {
       if (existing.isErr()) throw existing.error;
       const target = existing.value;
       const targetRoles = toRolesArray(target.roles);
+      const isVpaa = Boolean(toRolesArray(actorUser?.roles).includes("VPAA"));
 
-      const isSysAdmin = Boolean(toRolesArray(actorUser?.roles).includes("SYS_ADMIN"));
-
-      if ((targetRoles.includes("ADMIN") || targetRoles.includes("SYS_ADMIN")) && !isSysAdmin) {
-        throw new AppError(403, "Only System Administrators can restore administrative accounts.");
+      if (targetRoles.includes("VPAA")) {
+        throw new AppError(403, "VPAA accounts cannot be modified here.");
+      }
+      if (targetRoles.includes("CLERK") && !isVpaa) {
+        throw new AppError(403, "Only VPAA can restore Clerk accounts.");
       }
 
       if (!target.account.deleted_at) {
@@ -1025,28 +1060,27 @@ export class UserService implements IUserService {
     _req?: Request,
   ): ResultAsync<void, AppError> {
     return WithTransaction(client, async (tx) => {
-      if (role === "SUPERVISOR") {
+      if (role === "COLLEGE_DEAN" || role === "DEPARTMENT_CHAIR") {
         const user = await this.getUserById(accountId, tx);
         if (user.isErr()) throw user.error;
         const current = user.value;
 
         const deanships = current.offices?.deanships ?? [];
         const chairships = current.offices?.chairships ?? [];
-        const isHoldingOffice = deanships.length > 0 || chairships.length > 0;
 
-        if (isHoldingOffice) {
+        if (role === "COLLEGE_DEAN" && deanships.length > 0) {
           const deanStr = deanships.map((d) => d.initialism).join(", ");
-          const chairStr = chairships.map((c) => c.initialism).join(", ");
-          const officeDetails = [
-            deanStr ? `Dean of (${deanStr})` : null,
-            chairStr ? `Chair of (${chairStr})` : null,
-          ]
-            .filter(Boolean)
-            .join(" and ");
-
           throw new AppError(
             409,
-            `Cannot revoke SUPERVISOR role: User is currently an active ${officeDetails}. The office must be vacated or reassigned first.`,
+            `Cannot revoke COLLEGE_DEAN role: User is currently Dean of (${deanStr}). The office must be vacated or reassigned first.`,
+          );
+        }
+
+        if (role === "DEPARTMENT_CHAIR" && chairships.length > 0) {
+          const chairStr = chairships.map((c) => c.initialism).join(", ");
+          throw new AppError(
+            409,
+            `Cannot revoke DEPARTMENT_CHAIR role: User is currently Chair of (${chairStr}). The office must be vacated or reassigned first.`,
           );
         }
       }
@@ -1091,7 +1125,8 @@ export class UserService implements IUserService {
     req?: Request,
   ): ResultAsync<GetUser, AppError> {
     return ValidateSchema(ManageUserRolesSchema, { roles }).asyncAndThen((parsed) => {
-      const isSysAdmin = Boolean(toRolesArray(actorUser?.roles).includes("SYS_ADMIN"));
+      const actorRoles = toRolesArray(actorUser?.roles);
+      const isVpaa = actorRoles.includes("VPAA");
 
       return WithTransaction(client, async (tx) => {
         const user = await this.getUserById(accountId, tx);
@@ -1099,36 +1134,50 @@ export class UserService implements IUserService {
         const target = user.value;
         const targetRoles = toRolesArray(target.roles);
 
-        if ((targetRoles.includes("ADMIN") || targetRoles.includes("SYS_ADMIN")) && !isSysAdmin) {
-          throw new AppError(
-            403,
-            "Only System Administrators can manage roles for administrative accounts.",
-          );
-        }
-        if (actorUser?.account?.id === accountId && !isSysAdmin) {
+        if (actorUser?.account?.id === accountId) {
           throw new AppError(403, "You cannot modify or demote your own system roles.");
         }
-        if ((parsed.roles.includes("ADMIN") || parsed.roles.includes("SYS_ADMIN")) && !isSysAdmin) {
-          throw new AppError(403, "Only System Administrators can grant administrative roles.");
+
+        if (targetRoles.includes("VPAA")) {
+          throw new AppError(403, "VPAA account roles cannot be modified.");
+        }
+
+        if (parsed.roles.includes("VPAA")) {
+          throw new AppError(403, "VPAA role cannot be granted via role management.");
+        }
+
+        if (targetRoles.includes("CLERK") && !isVpaa) {
+          throw new AppError(403, "Only VPAA can manage roles for Clerk accounts.");
+        }
+
+        const clerkChanged = parsed.roles.includes("CLERK") !== targetRoles.includes("CLERK");
+        if (clerkChanged && !isVpaa) {
+          throw new AppError(403, "Only VPAA can grant or revoke the Clerk role.");
+        }
+
+        if (parsed.roles.includes("COLLEGE_DEAN") && parsed.roles.includes("DEPARTMENT_CHAIR")) {
+          throw new AppError(
+            400,
+            "An account cannot simultaneously hold both COLLEGE_DEAN and DEPARTMENT_CHAIR roles.",
+          );
         }
 
         const deanships = target.offices?.deanships ?? [];
         const chairships = target.offices?.chairships ?? [];
-        const isHoldingOffice = deanships.length > 0 || chairships.length > 0;
 
-        if (isHoldingOffice && !parsed.roles.includes("SUPERVISOR")) {
+        if (deanships.length > 0 && !parsed.roles.includes("COLLEGE_DEAN")) {
           const deanStr = deanships.map((d) => d.initialism).join(", ");
-          const chairStr = chairships.map((c) => c.initialism).join(", ");
-          const officeDetails = [
-            deanStr ? `Dean of (${deanStr})` : null,
-            chairStr ? `Chair of (${chairStr})` : null,
-          ]
-            .filter(Boolean)
-            .join(" and ");
-
           throw new AppError(
             409,
-            `Cannot remove SUPERVISOR role: User is currently an active ${officeDetails}. The office must be vacated or reassigned first.`,
+            `Cannot remove COLLEGE_DEAN role: User is currently Dean of (${deanStr}). The office must be vacated or reassigned first.`,
+          );
+        }
+
+        if (chairships.length > 0 && !parsed.roles.includes("DEPARTMENT_CHAIR")) {
+          const chairStr = chairships.map((c) => c.initialism).join(", ");
+          throw new AppError(
+            409,
+            `Cannot remove DEPARTMENT_CHAIR role: User is currently Chair of (${chairStr}). The office must be vacated or reassigned first.`,
           );
         }
 
@@ -1199,24 +1248,8 @@ export class UserService implements IUserService {
       const user = await this.getUserById(accountId, tx);
       if (user.isErr()) throw user.error;
       const targetUser = user.value;
-      const targetRoles = toRolesArray(targetUser.roles);
 
-      const isSysAdmin = Boolean(toRolesArray(actorUser?.roles).includes("SYS_ADMIN"));
-      const isSelf = actorUser?.account?.id === accountId;
-
-      if (targetRoles.includes("SYS_ADMIN") && !isSysAdmin) {
-        throw new AppError(
-          403,
-          "You do not have permission to reset a System Administrator's password.",
-        );
-      }
-
-      if (targetRoles.includes("ADMIN") && !isSysAdmin && !isSelf) {
-        throw new AppError(
-          403,
-          "Administrators cannot reset passwords for other Administrator accounts.",
-        );
-      }
+      this.assertCanModifyTargetAccount(targetUser, actorUser, true);
 
       const temporaryPassword = generateSecureTemporaryPassword(12);
       const hash = await bcrypt.hash(temporaryPassword, 10);
@@ -1284,8 +1317,6 @@ export class UserService implements IUserService {
 
         const isOnboarding = !account.is_verified;
 
-        // Only require current_password if the account is already verified (e.g. Account Settings).
-        // First-time onboarding users (!is_verified) skip current_password and become verified below.
         if (isSelfService && !isOnboarding) {
           if (!parsed.current_password) {
             throw new AppError(400, "Current password is required to change your password.");
@@ -1330,24 +1361,8 @@ export class UserService implements IUserService {
       const user = await this.getUserById(accountId, tx);
       if (user.isErr()) throw user.error;
       const targetUser = user.value;
-      const targetRoles = toRolesArray(targetUser.roles);
 
-      const isSysAdmin = Boolean(toRolesArray(actorUser?.roles).includes("SYS_ADMIN"));
-      const isSelf = actorUser?.account?.id === accountId;
-
-      if (targetRoles.includes("SYS_ADMIN") && !isSysAdmin) {
-        throw new AppError(
-          403,
-          "You do not have permission to resend credentials for a System Administrator.",
-        );
-      }
-
-      if (targetRoles.includes("ADMIN") && !isSysAdmin && !isSelf) {
-        throw new AppError(
-          403,
-          "Administrators cannot resend credentials for other Administrator accounts.",
-        );
-      }
+      this.assertCanModifyTargetAccount(targetUser, actorUser, true);
 
       const temporaryPassword = generateSecureTemporaryPassword(12);
       const hash = await bcrypt.hash(temporaryPassword, 10);
@@ -1377,35 +1392,6 @@ export class UserService implements IUserService {
         },
       });
     });
-  }
-
-  private generatePassword(length = 12): string {
-    const minLength = Math.max(8, length);
-    const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const lowercase = "abcdefghijklmnopqrstuvwxyz";
-    const numbers = "0123456789";
-    const symbols = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
-    const allChars = uppercase + lowercase + numbers + symbols;
-
-    const passwordArray: string[] = [
-      uppercase[crypto.randomInt(0, uppercase.length)]!,
-      lowercase[crypto.randomInt(0, lowercase.length)]!,
-      numbers[crypto.randomInt(0, numbers.length)]!,
-      symbols[crypto.randomInt(0, symbols.length)]!,
-    ];
-
-    for (let i = passwordArray.length; i < minLength; i++) {
-      passwordArray.push(allChars[crypto.randomInt(0, allChars.length)]!);
-    }
-
-    for (let i = passwordArray.length - 1; i > 0; i--) {
-      const j = crypto.randomInt(0, i + 1);
-      const temp = passwordArray[i]!;
-      passwordArray[i] = passwordArray[j]!;
-      passwordArray[j] = temp;
-    }
-
-    return passwordArray.join("");
   }
 
   private formatFullName(
@@ -1440,12 +1426,18 @@ export class UserService implements IUserService {
   }
 
   private async checkUserDependencies(accountId: number, tx: PgTransaction): Promise<void> {
+    const facultyRows = await tx
+      .select({ id: Faculties.id })
+      .from(Faculties)
+      .where(and(eq(Faculties.account_id, accountId), isNull(Faculties.deleted_at)));
+    const facultyIds = facultyRows.map((f) => f.id);
+
     const [
       activeDeanships,
       activeChairs,
       activeOfferings,
       activeClassStudents,
-      activeStudentClasses,
+      activeOfferingStudents,
     ] = await Promise.all([
       tx
         .select({ total: count(CollegeDeans.id) })
@@ -1455,10 +1447,17 @@ export class UserService implements IUserService {
         .select({ total: count(ProgramChairs.id) })
         .from(ProgramChairs)
         .where(and(eq(ProgramChairs.chair_id, accountId), isNull(ProgramChairs.deleted_at))),
-      tx
-        .select({ total: count(CourseOfferings.id) })
-        .from(CourseOfferings)
-        .where(and(eq(CourseOfferings.faculty_id, accountId), isNull(CourseOfferings.deleted_at))),
+      facultyIds.length > 0
+        ? tx
+            .select({ total: count(CourseOfferings.id) })
+            .from(CourseOfferings)
+            .where(
+              and(
+                inArray(CourseOfferings.faculty_id, facultyIds),
+                isNull(CourseOfferings.deleted_at),
+              ),
+            )
+        : Promise.resolve([{ total: 0 }]),
       tx
         .select({ total: count(ClassStudents.id) })
         .from(ClassStudents)
@@ -1466,10 +1465,13 @@ export class UserService implements IUserService {
           and(eq(ClassStudents.student_account_id, accountId), isNull(ClassStudents.deleted_at)),
         ),
       tx
-        .select({ total: count(StudentClasses.id) })
-        .from(StudentClasses)
+        .select({ total: count(OfferingStudents.id) })
+        .from(OfferingStudents)
         .where(
-          and(eq(StudentClasses.student_account_id, accountId), isNull(StudentClasses.deleted_at)),
+          and(
+            eq(OfferingStudents.student_account_id, accountId),
+            isNull(OfferingStudents.deleted_at),
+          ),
         ),
     ]);
 
@@ -1477,21 +1479,21 @@ export class UserService implements IUserService {
     const chairCount = activeChairs[0]?.total ?? 0;
     const offeringCount = activeOfferings[0]?.total ?? 0;
     const classStudentCount = activeClassStudents[0]?.total ?? 0;
-    const studentClassCount = activeStudentClasses[0]?.total ?? 0;
+    const offeringStudentCount = activeOfferingStudents[0]?.total ?? 0;
 
     if (
       deanshipCount > 0 ||
       chairCount > 0 ||
       offeringCount > 0 ||
       classStudentCount > 0 ||
-      studentClassCount > 0
+      offeringStudentCount > 0
     ) {
       const reasons: string[] = [];
       if (deanshipCount > 0) reasons.push(`Dean of ${deanshipCount} college(s)`);
-      if (chairCount > 0) reasons.push(`Program Chair of ${chairCount} program(s)`);
+      if (chairCount > 0) reasons.push(`Department Chair of ${chairCount} program(s)`);
       if (offeringCount > 0)
         reasons.push(`assigned Faculty to ${offeringCount} course offering(s)`);
-      if (classStudentCount > 0 || studentClassCount > 0)
+      if (classStudentCount > 0 || offeringStudentCount > 0)
         reasons.push(`enrolled in academic class(es)`);
 
       throw new AppError(
