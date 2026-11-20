@@ -86,7 +86,6 @@ const router = createBrowserRouter([
             element: <LazyRoute Component={AccountSettingsPage} />,
           },
 
-          // VPAA & CLERK User Account Registry
           {
             element: <RoleGuard allowedRoles={["VPAA", "CLERK"]} />,
             children: [
@@ -94,10 +93,12 @@ const router = createBrowserRouter([
                 path: "/admin/users",
                 element: <LazyRoute Component={UserPage} />,
               },
+              {
+                path: "/admin/evaluation-periods",
+                element: <LazyRoute Component={EvaluationSchedulesPage} />,
+              },
             ],
           },
-
-          // VPAA-only Audit Trail & Rollback
           {
             element: <RoleGuard allowedRoles={["VPAA"]} />,
             children: [
@@ -107,11 +108,8 @@ const router = createBrowserRouter([
               },
             ],
           },
-
-          // Instruments (VPAA manages templates, Clerk reads + builds questions)
-          // Schedules (VPAA manages, Clerk views read-only)
           {
-            element: <RoleGuard allowedRoles={["VPAA", "CLERK"]} />,
+            element: <PermissionGuard permission={PERMISSIONS.EVALUATION_FORM_READ} />,
             children: [
               {
                 path: "/admin/evaluation-forms",
@@ -120,10 +118,6 @@ const router = createBrowserRouter([
               {
                 path: "/admin/evaluation-forms/:type/:id/builder",
                 element: <LazyRoute Component={EvaluationFormBuilderPage} />,
-              },
-              {
-                path: "/admin/evaluation-periods",
-                element: <LazyRoute Component={EvaluationSchedulesPage} />,
               },
             ],
           },
@@ -238,7 +232,6 @@ const router = createBrowserRouter([
               },
             ],
           },
-
           {
             element: <RoleGuard allowedRoles={["COLLEGE_DEAN", "DEPARTMENT_CHAIR"]} />,
             children: [

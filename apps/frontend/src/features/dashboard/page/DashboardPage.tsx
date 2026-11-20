@@ -9,8 +9,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { Building2, GraduationCap } from "lucide-react";
 
 export default function DashboardPage() {
-  const { user, isSysAdmin, isAdmin, isDean, isChair, isFaculty, isStudent } = usePermissions();
-  const isPrivilegedAdmin = isSysAdmin || isAdmin;
+  const { user, isVpaa, isClerk, isDean, isChair, isFaculty, isStudent } = usePermissions();
+  const isPrivilegedAdmin = isVpaa || isClerk;
 
   // Overview Query
   const { data, isLoading } = useDashboardOverview();

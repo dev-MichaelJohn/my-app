@@ -26,9 +26,6 @@ export const usePermissions = () => {
   const hasAnyRole = (targetRoles: RoleName[]): boolean =>
     targetRoles.some((r) => roles.includes(r));
 
-  const deanCollegeIds = user?.offices?.deanships?.map((d) => d.id) ?? [];
-  const chairProgramIds = user?.offices?.chairships?.map((c) => c.id) ?? [];
-
   const isVpaa = hasRole("VPAA");
   const isClerk = hasRole("CLERK");
   const isCollegeDean = hasRole("COLLEGE_DEAN");
@@ -36,8 +33,10 @@ export const usePermissions = () => {
   const isFaculty = hasRole("FACULTY");
   const isStudent = hasRole("STUDENT");
 
-  const isDean = Boolean(isCollegeDean || deanCollegeIds.length > 0);
-  const isChair = Boolean(isDepartmentChair || chairProgramIds.length > 0);
+  const isDean =
+    isCollegeDean || Boolean(user?.offices?.deanships && user.offices.deanships.length > 0);
+  const isChair =
+    isDepartmentChair || Boolean(user?.offices?.chairships && user.offices.chairships.length > 0);
 
   return {
     user,
@@ -56,7 +55,5 @@ export const usePermissions = () => {
     isStudent,
     isDean,
     isChair,
-    deanCollegeIds,
-    chairProgramIds,
   };
 };

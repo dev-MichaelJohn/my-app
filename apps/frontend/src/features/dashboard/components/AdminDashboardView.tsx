@@ -18,7 +18,12 @@ import {
 } from "lucide-react";
 import { BatchConsolidateDialog } from "@/features/evaluations/components/BatchConsolidateDialog";
 import { useSemesters } from "@/features/semesters/hooks/useSemesters";
-import type { DashboardOverviewStats, LiveEvaluationPulseEvent } from "@my-app/shared";
+import {
+  PERMISSIONS,
+  type DashboardOverviewStats,
+  type LiveEvaluationPulseEvent,
+} from "@my-app/shared";
+import { Can } from "@/components/Can";
 
 interface Props {
   data: DashboardOverviewStats;
@@ -149,34 +154,40 @@ export function AdminDashboardView({ data, pulses }: Props) {
       <div className="p-4 rounded-2xl border border-border bg-muted/30 flex flex-wrap items-center justify-between gap-3">
         <span className="text-xs font-bold text-foreground">Institutional Quick Actions:</span>
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            onClick={() => setBatchDialogOpen(true)}
-            className="text-xs h-8 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Consolidate Reports</span>
-          </Button>
+          <Can permission={PERMISSIONS.EVALUATION_REPORT_BATCH_GENERATE}>
+            <Button
+              size="sm"
+              onClick={() => setBatchDialogOpen(true)}
+              className="text-xs h-8 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Consolidate Reports</span>
+            </Button>
+          </Can>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => navigate("/admin/evaluation-periods")}
-            className="text-xs h-8 gap-1.5 border-border bg-card"
-          >
-            <Calendar className="w-3.5 h-3.5" />
-            <span>Manage Schedules</span>
-          </Button>
+          <Can permission={PERMISSIONS.EVALUATION_PERIOD_MANAGE}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate("/admin/evaluation-periods")}
+              className="text-xs h-8 gap-1.5 border-border bg-card"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Manage Schedules</span>
+            </Button>
+          </Can>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => navigate("/admin/users")}
-            className="text-xs h-8 gap-1.5 border-border bg-card"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Import CSV</span>
-          </Button>
+          <Can permission={PERMISSIONS.BULK_IMPORT_EXECUTE}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate("/admin/users")}
+              className="text-xs h-8 gap-1.5 border-border bg-card"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Import CSV</span>
+            </Button>
+          </Can>
 
           <Button
             size="sm"

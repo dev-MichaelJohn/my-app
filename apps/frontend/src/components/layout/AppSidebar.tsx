@@ -26,7 +26,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   permission?: Permission;
   anyPermissions?: Permission[];
-  allowedRoles?: RoleName[];
+  anyRoles?: RoleName[];
 }
 
 interface NavSection {
@@ -42,7 +42,7 @@ const NAVIGATION_SECTIONS: NavSection[] = [
         title: "Semesters",
         href: "/admin/semesters",
         icon: Calendar,
-        allowedRoles: ["VPAA", "CLERK"],
+        anyRoles: ["VPAA", "CLERK"],
       },
       {
         title: "Colleges",
@@ -89,13 +89,13 @@ const NAVIGATION_SECTIONS: NavSection[] = [
         title: "My Teaching Classes",
         href: "/faculty/classes",
         icon: BookOpenCheck,
-        allowedRoles: ["FACULTY", "COLLEGE_DEAN", "DEPARTMENT_CHAIR"],
+        anyRoles: ["FACULTY", "COLLEGE_DEAN", "DEPARTMENT_CHAIR"],
       },
       {
         title: "Course Offerings",
         href: "/admin/offerings",
         icon: CalendarDays,
-        permission: PERMISSIONS.COURSE_OFFERING_READ,
+        anyRoles: ["VPAA", "CLERK", "COLLEGE_DEAN", "DEPARTMENT_CHAIR"],
       },
       {
         title: "Class Rosters",
@@ -112,13 +112,13 @@ const NAVIGATION_SECTIONS: NavSection[] = [
         title: "Evaluation Instruments",
         href: "/admin/evaluation-forms",
         icon: ClipboardList,
-        anyPermissions: [PERMISSIONS.EVALUATION_FORM_MANAGE, PERMISSIONS.EVALUATION_BUILDER_MANAGE],
+        permission: PERMISSIONS.EVALUATION_FORM_READ,
       },
       {
         title: "Evaluation Schedules",
         href: "/admin/evaluation-periods",
         icon: CalendarDays,
-        allowedRoles: ["VPAA", "CLERK"],
+        anyRoles: ["VPAA", "CLERK"],
       },
       {
         title: "Evaluate Instructors",
@@ -168,7 +168,7 @@ const NAVIGATION_SECTIONS: NavSection[] = [
         title: "User Accounts",
         href: "/admin/users",
         icon: Users,
-        permission: PERMISSIONS.ACCOUNT_READ,
+        anyRoles: ["VPAA", "CLERK"],
       },
       {
         title: "Audit Trail & Rollback",
@@ -221,9 +221,10 @@ export function AppSidebar({ onClose }: { onClose?: () => void }) {
             if (item.href === "/admin/colleges" && isChair && !isDean && !isVpaa && !isClerk) {
               return false;
             }
-            if (item.allowedRoles) return hasAnyRole(item.allowedRoles);
-            if (item.permission) return hasPermission(item.permission);
-            if (item.anyPermissions) return hasAnyPermission(item.anyPermissions);
+
+            if (item.anyRoles && !hasAnyRole(item.anyRoles)) return false;
+            if (item.permission && !hasPermission(item.permission)) return false;
+            if (item.anyPermissions && !hasAnyPermission(item.anyPermissions)) return false;
             return true;
           });
 
