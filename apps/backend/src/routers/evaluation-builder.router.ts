@@ -13,14 +13,8 @@ BuilderRouter.use(authController.verifyJWT);
 BuilderRouter.use(standardApiLimiter);
 
 const canRead = RequirePermission(PERMISSIONS.EVALUATION_FORM_READ);
+const canManage = RequirePermission(PERMISSIONS.EVALUATION_BUILDER_MANAGE);
 
-const canManage = RequirePermission(PERMISSIONS.EVALUATION_FORM_MANAGE);
-
-// =========================================================================
-// 1. SET (STUDENT EVALUATION INSTRUMENT) ROUTES
-// =========================================================================
-
-// Categories
 BuilderRouter.post("/student/forms/:form_id/categories", canManage, controller.addStudentCategory);
 BuilderRouter.put(
   "/student/forms/:form_id/categories/reorder",
@@ -44,7 +38,6 @@ BuilderRouter.get(
   controller.getStudentCategoryHistory,
 );
 
-// Questions
 BuilderRouter.post(
   "/student/categories/:category_id/questions",
   canManage,
@@ -72,11 +65,6 @@ BuilderRouter.get(
   controller.getStudentQuestionHistory,
 );
 
-// =========================================================================
-// 2. SEF (SUPERVISOR EVALUATION INSTRUMENT) ROUTES
-// =========================================================================
-
-// Categories
 BuilderRouter.post(
   "/supervisor/forms/:form_id/categories",
   canManage,
@@ -108,7 +96,6 @@ BuilderRouter.get(
   controller.getSupervisorCategoryHistory,
 );
 
-// Questions
 BuilderRouter.post(
   "/supervisor/categories/:category_id/questions",
   canManage,
@@ -140,7 +127,6 @@ BuilderRouter.get(
   controller.getSupervisorQuestionHistory,
 );
 
-// MOVs / Means Descriptors
 BuilderRouter.post(
   "/supervisor/questions/:question_id/means",
   canManage,

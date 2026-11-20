@@ -12,7 +12,6 @@ const authController = new AuthController();
 ReportRouter.use(authController.verifyJWT);
 ReportRouter.use(standardApiLimiter);
 
-// ── Read Reports (List & Details) ──
 ReportRouter.get(
   "/list",
   RequireAnyPermission(
@@ -37,13 +36,9 @@ ReportRouter.get(
   controller.getInstitutionalFER,
 );
 
-// ── Calculations & Consolidations ──
 ReportRouter.post(
   "/annex-c/calculate",
-  RequireAnyPermission(
-    PERMISSIONS.EVALUATION_REPORT_GENERATE,
-    PERMISSIONS.EVALUATION_REPORT_BATCH_GENERATE,
-  ),
+  RequirePermission(PERMISSIONS.EVALUATION_REPORT_GENERATE),
   controller.recalculateFacultyReport,
 );
 
@@ -53,7 +48,6 @@ ReportRouter.post(
   controller.batchConsolidateReports,
 );
 
-// ── Lifecycle & FEDAF Acknowledgment ──
 ReportRouter.put(
   "/:id/status",
   RequirePermission(PERMISSIONS.EVALUATION_REPORT_MANAGE_STATUS),
