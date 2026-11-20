@@ -25,47 +25,96 @@ interface Props {
 }
 
 const ROLE_DESCRIPTIONS: Record<SystemRole, string> = {
-  SYS_ADMIN: "Full system administration, environment control, and security access.",
-  ADMIN: "Manages institutional setups, curriculums, classes, schedules, and user accounts.",
-  SUPERVISOR: "Academic Dean or Program Chair evaluating faculty performance & reviewing MOVs.",
-  FACULTY: "Instructors teaching courses and receiving student performance evaluations.",
+  VPAA: "Vice President for Academic Affairs — full institutional governance, schedules, instruments, consolidation & audit rollback.",
+  CLERK:
+    "Administrative Clerk — manages academic records, non-VPAA/non-Clerk accounts, and instrument builder questions.",
+  COLLEGE_DEAN:
+    "College Dean — manages programs & department chairs within their college and evaluates chairs (SEF).",
+  DEPARTMENT_CHAIR:
+    "Department Chair — manages faculty, courses, curriculums, classes, offerings & rosters in their program and evaluates faculty (SEF).",
+  FACULTY:
+    "Instructors teaching courses and receiving student and supervisory performance evaluations.",
   STUDENT: "Enrolled student submitting teacher evaluations (SET).",
 };
 
 export function ManageRolesDialog({ open, onOpenChange, user }: Props) {
-  const { hasRole } = usePermissions();
-  const isSysAdmin = hasRole("SYS_ADMIN");
+  const { isVpaa } = usePermissions();
   const manageRolesMutation = useManageRoles();
 
   const [selectedRoles, setSelectedRoles] = useState<SystemRole[]>(() => [...user.roles]);
 
-  // Check active offices held
   const deanships = user.offices?.deanships || [];
   const chairships = user.offices?.chairships || [];
-  const isHoldingOffice = deanships.length > 0 || chairships.length > 0;
+  const isHoldingDeanOffice = deanships.length > 0;
+  const isHoldingChairOffice = chairships.length > 0;
+  const isHoldingOffice = isHoldingDeanOffice || isHoldingChairOffice;
 
   const officeLabels: string[] = [];
-  if (deanships.length > 0)
+  if (isHoldingDeanOffice) {
     officeLabels.push(`Dean of ${deanships.map((d) => d.initialism).join(", ")}`);
-  if (chairships.length > 0)
+  }
+  if (isHoldingChairOffice) {
     officeLabels.push(`Chair of ${chairships.map((c) => c.initialism).join(", ")}`);
+  }
 
   const toggleRole = (role: SystemRole) => {
-    // Office Protection: Cannot remove SUPERVISOR if holding Dean or Chair office
-    if (role === "SUPERVISOR" && isHoldingOffice && selectedRoles.includes("SUPERVISOR")) {
+    if (role === "VPAA") {
+      toast.warning("The VPAA role cannot be granted or modified.");
+      return;
+    }
+
+    if (role === "CLERK" && !isVpaa) {
+      toast.warning("Only VPAA can grant or revoke the CLERK role.");
+      return;
+    }
+
+    if (role === "COLLEGE_DEAN" && isHoldingDeanOffice && selectedRoles.includes("COLLEGE_DEAN")) {
       toast.warning(
-        `Cannot revoke SUPERVISOR role: User is currently an active ${officeLabels.join(" and ")}.`,
+        `Cannot revoke COLLEGE_DEAN role: User is currently an active ${officeLabels.join(" and ")}.`,
       );
       return;
     }
 
+    if (
+      role === "DEPARTMENT_CHAIR" &&
+      isHoldingChairOffice &&
+      selectedRoles.includes("DEPARTMENT_CHAIR")
+    ) {
+      toast.warning(
+        `Cannot revoke DEPARTMENT_CHAIR role: User is currently an active ${officeLabels.join(" and ")}.`,
+      );
+      return;
+    }
+
+    if (
+      role === "COLLEGE_DEAN" &&
+      !selectedRoles.includes("COLLEGE_DEAN") &&
+      selectedRoles.includes("DEPARTMENT_CHAIR")
+    ) {
+      toast.warning("A user cannot hold both COLLEGE_DEAN and DEPARTMENT_CHAIR roles.");
+      return;
+    }
+
+    if (
+      role === "DEPARTMENT_CHAIR" &&
+      !selectedRoles.includes("DEPARTMENT_CHAIR") &&
+      selectedRoles.includes("COLLEGE_DEAN")
+    ) {
+      toast.warning("A user cannot hold both COLLEGE_DEAN and DEPARTMENT_CHAIR roles.");
+      return;
+    }
+
     if (role === "STUDENT") {
-      // Selecting STUDENT deselects all other roles (mutually exclusive)
+      if (isHoldingOffice) {
+        toast.warning(
+          `Cannot assign STUDENT role while user holds office as ${officeLabels.join(" and ")}.`,
+        );
+        return;
+      }
       setSelectedRoles(["STUDENT"]);
       return;
     }
 
-    // Selecting any non-student role removes STUDENT automatically
     setSelectedRoles((prev) => {
       const withoutStudent = prev.filter((r) => r !== "STUDENT");
       if (withoutStudent.includes(role)) {
@@ -93,9 +142,11 @@ export function ManageRolesDialog({ open, onOpenChange, user }: Props) {
     }
   };
 
-  const availableRoles = isSysAdmin
-    ? SystemRoles.enumValues
-    : SystemRoles.enumValues.filter((r) => r !== "ADMIN" && r !== "SYS_ADMIN");
+  const availableRoles = SystemRoles.enumValues.filter(
+    (r) => r !== "VPAA" && (isVpaa || r !== "CLERK"),
+  );
+
+  const lockedRoleName = isHoldingDeanOffice ? "COLLEGE_DEAN" : "DEPARTMENT_CHAIR";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -119,8 +170,8 @@ export function ManageRolesDialog({ open, onOpenChange, user }: Props) {
             <Lock className="w-4 h-4 text-primary shrink-0 mt-0.5" />
             <span>
               <strong>Active Academic Office:</strong> This account is currently appointed as{" "}
-              <strong>{officeLabels.join(" and ")}</strong>. The <code>SUPERVISOR</code> role is
-              locked and cannot be removed until the office is reassigned or vacated.
+              <strong>{officeLabels.join(" and ")}</strong>. The <code>{lockedRoleName}</code> role
+              is locked and cannot be removed until the office is reassigned or vacated.
             </span>
           </div>
         )}
@@ -128,7 +179,9 @@ export function ManageRolesDialog({ open, onOpenChange, user }: Props) {
         <div className="space-y-2.5 py-2">
           {availableRoles.map((role) => {
             const isAssigned = selectedRoles.includes(role);
-            const isLockedSupervisor = role === "SUPERVISOR" && isHoldingOffice;
+            const isLockedOfficeRole =
+              (role === "COLLEGE_DEAN" && isHoldingDeanOffice) ||
+              (role === "DEPARTMENT_CHAIR" && isHoldingChairOffice);
 
             return (
               <button
@@ -140,7 +193,7 @@ export function ManageRolesDialog({ open, onOpenChange, user }: Props) {
                   isAssigned
                     ? "border-primary/50 bg-primary/5 shadow-2xs"
                     : "border-border bg-background hover:bg-muted/40",
-                  isLockedSupervisor && "opacity-90",
+                  isLockedOfficeRole && "opacity-90",
                 )}
               >
                 <div className="space-y-0.5">
@@ -151,7 +204,7 @@ export function ManageRolesDialog({ open, onOpenChange, user }: Props) {
                         Active
                       </Badge>
                     )}
-                    {isLockedSupervisor && (
+                    {isLockedOfficeRole && (
                       <Badge
                         variant="outline"
                         className="border-primary/30 text-primary text-[10px] h-4 px-1.5 gap-1"

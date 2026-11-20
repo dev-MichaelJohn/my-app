@@ -31,6 +31,7 @@ import type { ApiError } from "@/lib/api.lib";
 import { AlertCircle, Check, ChevronsUpDown, UserCheck, UserPlus, UserX } from "lucide-react";
 import { getErrorMessage } from "@/lib/error.lib";
 import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 
 interface CollegeFormDialogProps {
   open: boolean;
@@ -89,6 +90,7 @@ function CollegeFormInner({
       college: {
         name: collegeToEdit?.college.name || "",
         initialism: collegeToEdit?.college.initialism || "",
+        is_service_college: collegeToEdit?.college.is_service_college ?? false,
       },
       dean: collegeToEdit?.dean
         ? {
@@ -248,6 +250,30 @@ function CollegeFormInner({
               </div>
             );
           }}
+        </form.Field>
+
+        <form.Field name="college.is_service_college">
+          {(field) => (
+            <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-muted/30">
+              <div className="space-y-0.5 pr-3">
+                <Label
+                  htmlFor="is-service-college"
+                  className="text-xs font-semibold text-foreground"
+                >
+                  Service College (General Education)
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Under CHED CMO 19 s. 2025 Sec 9.3, GE faculty under a service college are
+                  evaluated by their service college supervisors.
+                </p>
+              </div>
+              <Switch
+                id="is-service-college"
+                checked={Boolean(field.state.value)}
+                onCheckedChange={(checked) => field.handleChange(checked)}
+              />
+            </div>
+          )}
         </form.Field>
 
         <div className="space-y-3 pt-2 border-t border-border">
@@ -604,8 +630,7 @@ function CollegeFormInner({
             ?
             {pendingValues?.dean?.type === "new" && (
               <span className="block mt-2 text-xs text-chart-2">
-                A new user account will be created and appointed as{" "}
-                <strong>SUPERVISOR (Dean)</strong>.
+                A new user account will be created and appointed as <strong>COLLEGE DEAN</strong>.
               </span>
             )}
           </span>
