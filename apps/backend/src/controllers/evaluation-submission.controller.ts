@@ -27,7 +27,7 @@ export class EvaluationSubmissionController {
 
   getStudentEvaluationFormView = runAsync((req) => {
     if (!req.user) return errAsync(new AppError(401, "Authentication required."));
-    return ValidateSchema(this.idSchema, req.params.student_class_id).asyncAndThen((scId) => {
+    return ValidateSchema(this.idSchema, req.params.offering_student_id).asyncAndThen((scId) => {
       return this.submissionService
         .getStudentEvaluationFormView(req.user!.account.id, scId)
         .map((data) => ({

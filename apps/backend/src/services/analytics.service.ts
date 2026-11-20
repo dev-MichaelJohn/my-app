@@ -12,7 +12,7 @@ import {
   CourseCurriculums,
   Courses,
   Classes,
-  StudentClasses,
+  OfferingStudents,
   StudentEvaluations,
   StudentEvaluationSchedules,
   SupervisorEvaluations,
@@ -216,11 +216,15 @@ export class AnalyticsService implements IAnalyticsService {
       }
 
       const roles = actorUser.roles ?? [];
-      const isPrivilegedAdmin = roles.includes("SYS_ADMIN") || roles.includes("ADMIN");
+      const isPrivilegedAdmin = roles.includes("VPAA") || roles.includes("CLERK");
       const deanships = actorUser.offices?.deanships || [];
       const chairships = actorUser.offices?.chairships || [];
-      const isDean = deanships.length > 0 && !isPrivilegedAdmin;
-      const isChair = chairships.length > 0 && !isPrivilegedAdmin && !isDean;
+      const isDean = roles.includes("COLLEGE_DEAN") && deanships.length > 0 && !isPrivilegedAdmin;
+      const isChair =
+        roles.includes("DEPARTMENT_CHAIR") &&
+        chairships.length > 0 &&
+        !isPrivilegedAdmin &&
+        !isDean;
 
       const deanCollegeIds = deanships.map((d) => d.id);
       const chairProgramIds = chairships.map((c) => c.id);
@@ -238,12 +242,12 @@ export class AnalyticsService implements IAnalyticsService {
       }
 
       const [enrolledCount] = await tx
-        .select({ total: count(StudentClasses.id) })
-        .from(StudentClasses)
-        .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
+        .select({ total: count(OfferingStudents.id) })
+        .from(OfferingStudents)
+        .innerJoin(CourseOfferings, eq(OfferingStudents.course_offering_id, CourseOfferings.id))
         .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
         .innerJoin(Programs, eq(Classes.program_id, Programs.id))
-        .where(and(...scopeConditions, isNull(StudentClasses.deleted_at)));
+        .where(and(...scopeConditions, isNull(OfferingStudents.deleted_at)));
 
       const totalEnrolled = enrolledCount?.total ?? 0;
 
@@ -263,7 +267,6 @@ export class AnalyticsService implements IAnalyticsService {
       const completionPercentage =
         totalEnrolled > 0 ? Number(((completedSubmissions / totalEnrolled) * 100).toFixed(1)) : 0;
 
-      // 2. Evaluated Faculty Count
       const [distinctFacultyCount] = await tx
         .select({ total: countDistinct(CourseOfferings.faculty_id) })
         .from(CourseOfferings)
@@ -301,28 +304,41 @@ export class AnalyticsService implements IAnalyticsService {
           .where(isNull(ProgramChairs.deleted_at));
         const allChairIds = new Set(allChairs.map((c) => c.chairId));
 
-        const deptOfferings = await tx
-          .selectDistinct({ accountId: Faculties.account_id })
-          .from(CourseOfferings)
-          .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
-          .innerJoin(
-            CourseCurriculums,
-            eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
-          )
-          .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
-          .where(
-            and(
-              inArray(Courses.program_id, chairProgramIds),
-              eq(CourseOfferings.semester_id, activeSemester.id),
-              isNotNull(CourseOfferings.faculty_id),
-              isNull(CourseOfferings.deleted_at),
-              isNull(Faculties.deleted_at),
+        const [deptOfferings, appointedFaculty] = await Promise.all([
+          tx
+            .selectDistinct({ accountId: Faculties.account_id })
+            .from(CourseOfferings)
+            .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
+            .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+            .innerJoin(
+              CourseCurriculums,
+              eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+            )
+            .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+            .where(
+              and(
+                inArray(Classes.program_id, chairProgramIds),
+                eq(CourseOfferings.semester_id, activeSemester.id),
+                eq(Courses.course_type, "PROFESSIONAL"),
+                isNotNull(CourseOfferings.faculty_id),
+                isNull(CourseOfferings.deleted_at),
+                isNull(Faculties.deleted_at),
+              ),
             ),
-          );
+          tx
+            .selectDistinct({ accountId: Faculties.account_id })
+            .from(Faculties)
+            .where(
+              and(inArray(Faculties.program_id, chairProgramIds), isNull(Faculties.deleted_at)),
+            ),
+        ]);
 
-        const targetIds = deptOfferings
-          .map((d) => d.accountId)
-          .filter((id): id is number => Boolean(id && !allChairIds.has(id)));
+        const targetSet = new Set<number>();
+        appointedFaculty.forEach((f) => {
+          if (!allChairIds.has(f.accountId)) targetSet.add(f.accountId);
+        });
+        deptOfferings.forEach((d) => targetSet.add(d.accountId));
+        const targetIds = Array.from(targetSet);
 
         sefFacultyScopeFilter =
           targetIds.length > 0 ? inArray(SupervisorEvaluations.faculty_id, targetIds) : sql`false`;
@@ -355,13 +371,13 @@ export class AnalyticsService implements IAnalyticsService {
           collegeId: Colleges.id,
           collegeName: Colleges.name,
           collegeCode: Colleges.initialism,
-          totalExpected: sql<number>`COUNT(DISTINCT ${StudentClasses.id})::int`,
+          totalExpected: sql<number>`COUNT(DISTINCT ${OfferingStudents.id})::int`,
           completed: sql<number>`COUNT(DISTINCT ${StudentEvaluationTurnout.id})::int`,
           percentage: sql<number>`
             ROUND(
               COALESCE(
-                (COUNT(DISTINCT ${StudentEvaluationTurnout.id})::numeric / 
-                 NULLIF(COUNT(DISTINCT ${StudentClasses.id}), 0)::numeric) * 100, 
+                (COUNT(DISTINCT ${StudentEvaluationTurnout.id})::numeric /
+                 NULLIF(COUNT(DISTINCT ${OfferingStudents.id}), 0)::numeric) * 100,
                 0
               ), 1
             )::float
@@ -380,10 +396,10 @@ export class AnalyticsService implements IAnalyticsService {
           ),
         )
         .leftJoin(
-          StudentClasses,
+          OfferingStudents,
           and(
-            eq(StudentClasses.course_offering_id, CourseOfferings.id),
-            isNull(StudentClasses.deleted_at),
+            eq(OfferingStudents.course_offering_id, CourseOfferings.id),
+            isNull(OfferingStudents.deleted_at),
           ),
         )
         .leftJoin(
@@ -407,8 +423,11 @@ export class AnalyticsService implements IAnalyticsService {
           section: Classes.section,
         })
         .from(StudentEvaluations)
-        .innerJoin(StudentClasses, eq(StudentEvaluations.student_class_id, StudentClasses.id))
-        .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
+        .innerJoin(
+          OfferingStudents,
+          eq(StudentEvaluations.offering_student_id, OfferingStudents.id),
+        )
+        .innerJoin(CourseOfferings, eq(OfferingStudents.course_offering_id, CourseOfferings.id))
         .innerJoin(
           CourseCurriculums,
           eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
@@ -493,7 +512,6 @@ export class AnalyticsService implements IAnalyticsService {
     });
   }
 
-  // 🚀 Fixed: Maps Faculties.account_id to Faculty Affiliations correctly
   private async getFacultyAffiliations(
     facultyAccountIds: number[],
     semesterIds: number[],
@@ -510,13 +528,12 @@ export class AnalyticsService implements IAnalyticsService {
       })
       .from(CourseOfferings)
       .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
-      .innerJoin(CourseCurriculums, eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id))
-      .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
-      .innerJoin(Programs, eq(Courses.program_id, Programs.id))
+      .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+      .innerJoin(Programs, eq(Classes.program_id, Programs.id))
       .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
       .where(
         and(
-          inArray(Faculties.account_id, facultyAccountIds), // 🚀 Matches through Faculties table
+          inArray(Faculties.account_id, facultyAccountIds),
           inArray(CourseOfferings.semester_id, semesterIds),
           isNull(CourseOfferings.deleted_at),
           isNull(Faculties.deleted_at),
@@ -542,17 +559,18 @@ export class AnalyticsService implements IAnalyticsService {
     tx: PgTransaction,
   ): Promise<ResolvedScope> {
     const roles = actorUser.roles ?? [];
-    const isSysAdmin = roles.includes("SYS_ADMIN");
-    const isAdmin = roles.includes("ADMIN");
-    const isSupervisor = roles.includes("SUPERVISOR");
+    const isVpaa = roles.includes("VPAA");
+    const isClerk = roles.includes("CLERK");
+    const isDean = roles.includes("COLLEGE_DEAN");
+    const isChair = roles.includes("DEPARTMENT_CHAIR");
     const isFaculty = roles.includes("FACULTY");
 
     const deanships = actorUser.offices?.deanships || [];
     const chairships = actorUser.offices?.chairships || [];
-    const isDean = deanships.length > 0;
-    const isChair = chairships.length > 0;
+    const hasDeanOffice = isDean && deanships.length > 0;
+    const hasChairOffice = isChair && chairships.length > 0;
 
-    if (isFaculty && !isSupervisor && !isAdmin && !isSysAdmin) {
+    if (isFaculty && !hasDeanOffice && !hasChairOffice && !isVpaa && !isClerk) {
       return {
         validatedScope: "SELF",
         resolvedEntityId: actorUser.account.id,
@@ -560,7 +578,7 @@ export class AnalyticsService implements IAnalyticsService {
       };
     }
 
-    if (isChair && !isDean && !isSysAdmin && !isAdmin) {
+    if (hasChairOffice && !hasDeanOffice && !isVpaa && !isClerk) {
       if (query.scope === "SELF") {
         return {
           validatedScope: "SELF",
@@ -576,7 +594,7 @@ export class AnalyticsService implements IAnalyticsService {
       };
     }
 
-    if (isDean && !isSysAdmin && !isAdmin) {
+    if (hasDeanOffice && !isVpaa && !isClerk) {
       if (query.scope === "SELF") {
         return {
           validatedScope: "SELF",
@@ -781,7 +799,6 @@ export class AnalyticsService implements IAnalyticsService {
       return {
         overallSet: 0,
         overallSef: null,
-        perceptionGap: null,
         setChangePercentage: 0,
         sefChangePercentage: 0,
         totalEvaluations: 0,
@@ -801,8 +818,6 @@ export class AnalyticsService implements IAnalyticsService {
           ).toFixed(2),
         )
       : null;
-
-    const perceptionGap = overallSef !== null ? Number((overallSef - overallSet).toFixed(2)) : null;
 
     const currentIdx = historicalTrends.findIndex((t) => t.semesterId === activeSemesterId);
     let setChangePercentage = 0;
@@ -830,7 +845,6 @@ export class AnalyticsService implements IAnalyticsService {
     return {
       overallSet,
       overallSef,
-      perceptionGap,
       setChangePercentage,
       sefChangePercentage,
       totalEvaluations,
@@ -880,15 +894,12 @@ export class AnalyticsService implements IAnalyticsService {
       const instEntry = instAgg.setMap[categoryName];
       const instAvg = instEntry && instEntry.count ? instEntry.sum / instEntry.count : setScore;
 
-      const perceptionGap = sefScore !== null ? Number((sefScore - setScore).toFixed(2)) : null;
-
       return {
         categoryName,
         setScore: Number(setScore.toFixed(2)),
         sefScore: sefScore !== null ? Number(sefScore.toFixed(2)) : null,
         institutionBenchmark: Number(instAvg.toFixed(2)),
         deltaFromBenchmark: Number((setScore - instAvg).toFixed(2)),
-        perceptionGap,
       };
     });
   }
@@ -1013,7 +1024,6 @@ export class AnalyticsService implements IAnalyticsService {
         )
       : null;
 
-    const perceptionGap = sefRating !== null ? Number((sefRating - setRating).toFixed(2)) : null;
     const totalEvaluations = reports.reduce((sum, r) => sum + (r.total_students_evaluated || 0), 0);
 
     return {
@@ -1022,7 +1032,6 @@ export class AnalyticsService implements IAnalyticsService {
       entityCode: code,
       setRating,
       sefRating,
-      perceptionGap,
       totalFaculty: new Set(reports.map((r) => r.faculty_id)).size,
       totalEvaluations,
       ratingDistribution: {

@@ -1,19 +1,20 @@
 import {
   Accounts,
   Classes,
+  CollegeDeans,
   Colleges,
   CourseCurriculums,
   CourseOfferings,
   Courses,
   Faculties,
   IndividualFacultyReports,
+  OfferingStudents,
   PersonalDetails,
   ProgramChairs,
   Programs,
   Semesters,
   StudentBallotRatings,
   StudentBallots,
-  StudentClasses,
   StudentEvaluationCategories,
   StudentEvaluationForms,
   StudentEvaluationQuestions,
@@ -149,6 +150,14 @@ export class EvaluationReportService implements IEvaluationReportService {
         return this.hydrateReport(existing, tx, actorUser.account.id);
       }
 
+      const actorRoles = actorUser.roles ?? [];
+      if (!actorRoles.includes("VPAA")) {
+        throw new AppError(
+          404,
+          "Evaluation report has not been consolidated yet. Only VPAA can trigger report consolidation.",
+        );
+      }
+
       await this.validateEvaluationWindowsConcluded(semesterId, tx);
       return this.computeAndUpsertReport(
         semesterId,
@@ -184,7 +193,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       formula: formulaId,
     }).asyncAndThen(({ semester_id, formula }) => {
       return WithTransaction(client, async (tx) => {
-        // 1. Validate semester existence
         const [semester] = await tx
           .select()
           .from(Semesters)
@@ -194,10 +202,8 @@ export class EvaluationReportService implements IEvaluationReportService {
           throw new AppError(404, "Academic semester was not found.");
         }
 
-        // 2. Validate evaluation schedules for this semester are concluded
         await this.validateEvaluationWindowsConcluded(semester_id, tx);
 
-        // 3. Collect unique faculty account IDs to process
         const facultyRows = await tx
           .selectDistinct({ accountId: Faculties.account_id })
           .from(CourseOfferings)
@@ -218,16 +224,13 @@ export class EvaluationReportService implements IEvaluationReportService {
             .filter((id): id is number => typeof id === "number"),
         };
       }).andThen(({ semester, accountIds }) => {
-        // 4. Process each faculty report in isolated transactions to avoid holding long-lived DB locks
         return ResultAsync.fromPromise(
           (async () => {
             let reportsGenerated = 0;
             const errors: Array<{ facultyId: number; error: string }> = [];
 
-            // Process sequentially or in small chunks
             for (const accountId of accountIds) {
               try {
-                // Each faculty member's report is committed in its own transaction
                 await WithTransaction(db, async (perFacultyTx) => {
                   await this.computeAndUpsertReport(semester_id, accountId, formula, perFacultyTx);
                 });
@@ -240,7 +243,6 @@ export class EvaluationReportService implements IEvaluationReportService {
               }
             }
 
-            // 5. Document completion in audit log
             await WithTransaction(db, async (auditTx) => {
               await logAuditEvent({
                 actor: actorUser,
@@ -282,6 +284,134 @@ export class EvaluationReportService implements IEvaluationReportService {
     });
   }
 
+  private async assertSupervisoryFedafControl(
+    report: typeof IndividualFacultyReports.$inferSelect,
+    actorUser: GetUser,
+    tx: PgTransaction,
+  ): Promise<string> {
+    const actorRoles = actorUser.roles ?? [];
+    const isVpaa = actorRoles.includes("VPAA");
+    const isDean = actorRoles.includes("COLLEGE_DEAN");
+    const isChair = actorRoles.includes("DEPARTMENT_CHAIR");
+
+    if (report.faculty_id === actorUser.account.id) {
+      throw new AppError(
+        403,
+        "You cannot finalize, edit, or sign as supervisor on your own evaluation report.",
+      );
+    }
+
+    if (!isVpaa && !isDean && !isChair) {
+      throw new AppError(
+        403,
+        "Clerk and non-supervisory accounts have read-only access to evaluation reports.",
+      );
+    }
+
+    if (isVpaa) {
+      return `${actorUser.details.first_name} ${actorUser.details.last_name} (VPAA)`;
+    }
+
+    const deanCollegeIds = actorUser.offices?.deanships?.map((d) => d.id) ?? [];
+    const chairProgramIds = actorUser.offices?.chairships?.map((c) => c.id) ?? [];
+
+    const [targetChair] = await tx
+      .select({ id: ProgramChairs.id, collegeId: Programs.college_id })
+      .from(ProgramChairs)
+      .innerJoin(Programs, eq(ProgramChairs.program_id, Programs.id))
+      .where(and(eq(ProgramChairs.chair_id, report.faculty_id), isNull(ProgramChairs.deleted_at)));
+
+    if (targetChair) {
+      if (isDean && deanCollegeIds.includes(targetChair.collegeId)) {
+        return `${actorUser.details.first_name} ${actorUser.details.last_name} (College Dean)`;
+      }
+      throw new AppError(
+        403,
+        "Only the College Dean can manage or sign the FEDAF for this Department Chair.",
+      );
+    }
+
+    const [homeAppointment] = await tx
+      .select({
+        programId: Faculties.program_id,
+        collegeId: Programs.college_id,
+        isServiceCollege: Colleges.is_service_college,
+      })
+      .from(Faculties)
+      .innerJoin(Programs, eq(Faculties.program_id, Programs.id))
+      .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
+      .where(and(eq(Faculties.account_id, report.faculty_id), isNull(Faculties.deleted_at)))
+      .orderBy(desc(Faculties.is_home))
+      .limit(1);
+
+    let homeChairAccountId: number | null = null;
+    if (homeAppointment) {
+      const [homeChair] = await tx
+        .select({ chairId: ProgramChairs.chair_id })
+        .from(ProgramChairs)
+        .where(
+          and(
+            eq(ProgramChairs.program_id, homeAppointment.programId),
+            isNull(ProgramChairs.deleted_at),
+          ),
+        );
+      if (homeChair && homeChair.chairId !== report.faculty_id) {
+        homeChairAccountId = homeChair.chairId;
+      }
+    }
+
+    if (homeChairAccountId) {
+      if (isChair && homeAppointment && chairProgramIds.includes(homeAppointment.programId)) {
+        return `${actorUser.details.first_name} ${actorUser.details.last_name} (Department Chair)`;
+      }
+      throw new AppError(
+        403,
+        "The faculty member's Home Department Chair owns and signs their FEDAF development plan.",
+      );
+    }
+
+    if (
+      homeAppointment?.isServiceCollege &&
+      isDean &&
+      deanCollegeIds.includes(homeAppointment.collegeId)
+    ) {
+      return `${actorUser.details.first_name} ${actorUser.details.last_name} (Service College Dean)`;
+    }
+
+    if (isChair && chairProgramIds.length > 0) {
+      const [taughtProInProgram] = await tx
+        .select({ id: CourseOfferings.id })
+        .from(CourseOfferings)
+        .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
+        .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+        .innerJoin(
+          CourseCurriculums,
+          eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+        )
+        .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+        .where(
+          and(
+            eq(Faculties.account_id, report.faculty_id),
+            eq(CourseOfferings.semester_id, report.semester_id),
+            inArray(Classes.program_id, chairProgramIds),
+            eq(Courses.course_type, "PROFESSIONAL"),
+            isNull(CourseOfferings.deleted_at),
+            isNull(Faculties.deleted_at),
+          ),
+        )
+        .limit(1);
+
+      if (taughtProInProgram) {
+        return `${actorUser.details.first_name} ${actorUser.details.last_name} (Department Chair)`;
+      }
+    }
+
+    throw new AppError(
+      403,
+      "Access denied: You are not the designated supervisory signatory for this faculty member.",
+    );
+  }
+
   updateReportStatus(
     reportId: number,
     status: ReportStatus,
@@ -300,25 +430,7 @@ export class EvaluationReportService implements IEvaluationReportService {
           throw new AppError(404, "Evaluation report not found.");
         }
 
-        if (report.faculty_id === actorUser.account.id) {
-          throw new AppError(
-            403,
-            "You cannot finalize or publish your own teaching evaluation report. This must be performed by your academic supervisor.",
-          );
-        }
-
-        const actorRoles = actorUser.roles ?? [];
-        const isPrivileged =
-          actorRoles.includes("SYS_ADMIN") ||
-          actorRoles.includes("ADMIN") ||
-          actorRoles.includes("SUPERVISOR");
-
-        if (!isPrivileged) {
-          throw new AppError(
-            403,
-            "You do not have permission to change evaluation report statuses.",
-          );
-        }
+        await this.assertSupervisoryFedafControl(report, actorUser, tx);
 
         const [updated] = await tx
           .update(IndividualFacultyReports)
@@ -359,25 +471,7 @@ export class EvaluationReportService implements IEvaluationReportService {
 
         if (!report) throw new AppError(404, "Evaluation report not found.");
 
-        if (report.faculty_id === actorUser.account.id) {
-          throw new AppError(
-            403,
-            "You cannot author the supervisory development plan for your own evaluation report. Your academic supervisor must formulate this plan.",
-          );
-        }
-
-        const actorRoles = actorUser.roles ?? [];
-        const isSupervisorOrAdmin =
-          actorRoles.includes("SUPERVISOR") ||
-          actorRoles.includes("ADMIN") ||
-          actorRoles.includes("SYS_ADMIN");
-
-        if (!isSupervisorOrAdmin) {
-          throw new AppError(
-            403,
-            "Only supervisors and academic leaders can update the supervisory development plan.",
-          );
-        }
+        await this.assertSupervisoryFedafControl(report, actorUser, tx);
 
         const existingPlan = (report.fedaf_plan as FedafPlan) || {
           areas_for_improvement: "",
@@ -434,14 +528,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       if (!report) throw new AppError(404, "Evaluation report not found.");
 
       const isOwnReport = report.faculty_id === actorUser.account.id;
-
-      if (isOwnReport && signatureRole === "SUPERVISOR") {
-        throw new AppError(
-          403,
-          "You cannot sign as supervisor on your own evaluation report. Your supervising Program Chair or Dean must sign.",
-        );
-      }
-
       const existingPlan = (report.fedaf_plan as FedafPlan) || {
         areas_for_improvement: "",
         proposed_activities: "",
@@ -455,76 +541,8 @@ export class EvaluationReportService implements IEvaluationReportService {
       let nextStatus = report.status;
 
       if (signatureRole === "SUPERVISOR") {
-        const actorRoles = actorUser.roles ?? [];
-        const isSysAdmin = actorRoles.includes("SYS_ADMIN");
-        const isAdmin = actorRoles.includes("ADMIN");
-        const isSupervisor = actorRoles.includes("SUPERVISOR");
-
-        if (!isSupervisor && !isAdmin && !isSysAdmin) {
-          throw new AppError(403, "Only supervisors and academic leaders can sign as supervisor.");
-        }
-
-        const deanships = actorUser.offices?.deanships || [];
-        const chairships = actorUser.offices?.chairships || [];
-        const deanCollegeIds = deanships.map((d) => d.id);
-        const chairProgramIds = chairships.map((c) => c.id);
-
-        const [targetChair] = await tx
-          .select({ id: ProgramChairs.id, collegeId: Programs.college_id })
-          .from(ProgramChairs)
-          .innerJoin(Programs, eq(ProgramChairs.program_id, Programs.id))
-          .where(
-            and(eq(ProgramChairs.chair_id, report.faculty_id), isNull(ProgramChairs.deleted_at)),
-          );
-
-        if (targetChair) {
-          const isTheirDean =
-            isSysAdmin || isAdmin || deanCollegeIds.includes(targetChair.collegeId);
-          if (!isTheirDean) {
-            throw new AppError(
-              403,
-              "Only the College Dean can sign the FEDAF for this Program Chair.",
-            );
-          }
-          existingPlan.supervisor_name = `${actorUser.details.first_name} ${actorUser.details.last_name} (College Dean)`;
-        } else {
-          // 🚀 Fixed Join: Check teaching through Faculties -> CourseOfferings
-          const isTheirChair =
-            isSysAdmin ||
-            isAdmin ||
-            (chairProgramIds.length > 0 &&
-              (await (async () => {
-                const [match] = await tx
-                  .select({ id: CourseOfferings.id })
-                  .from(CourseOfferings)
-                  .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
-                  .innerJoin(
-                    CourseCurriculums,
-                    eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
-                  )
-                  .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
-                  .where(
-                    and(
-                      eq(Faculties.account_id, report.faculty_id), // Matches via Faculties
-                      eq(CourseOfferings.semester_id, report.semester_id),
-                      inArray(Courses.program_id, chairProgramIds),
-                      isNull(CourseOfferings.deleted_at),
-                      isNull(Faculties.deleted_at),
-                    ),
-                  )
-                  .limit(1);
-                return Boolean(match);
-              })()));
-
-          if (!isTheirChair) {
-            throw new AppError(
-              403,
-              "College Deans cannot sign the FEDAF of regular faculty. The Program Chair must conduct the feedback conference and sign.",
-            );
-          }
-          existingPlan.supervisor_name = `${actorUser.details.first_name} ${actorUser.details.last_name} (Program Chair)`;
-        }
-
+        const signerLabel = await this.assertSupervisoryFedafControl(report, actorUser, tx);
+        existingPlan.supervisor_name = signerLabel;
         existingPlan.supervisor_signed_at = now;
         nextStatus = "PUBLISHED";
       } else {
@@ -592,9 +610,10 @@ export class EvaluationReportService implements IEvaluationReportService {
       } = parsed;
 
       const actorRoles = actorUser.roles ?? [];
-      const isSysAdmin = actorRoles.includes("SYS_ADMIN");
-      const isAdmin = actorRoles.includes("ADMIN");
-      const isSupervisor = actorRoles.includes("SUPERVISOR");
+      const isVpaa = actorRoles.includes("VPAA");
+      const isClerk = actorRoles.includes("CLERK");
+      const isDean = actorRoles.includes("COLLEGE_DEAN");
+      const isChair = actorRoles.includes("DEPARTMENT_CHAIR");
 
       const deanships = actorUser.offices?.deanships || [];
       const chairships = actorUser.offices?.chairships || [];
@@ -604,12 +623,12 @@ export class EvaluationReportService implements IEvaluationReportService {
       return WithTransaction(client, async (tx) => {
         const filters: SQL[] = [sql`${IndividualFacultyReports.total_classes} > 0`];
 
-        if (isSysAdmin || isAdmin) {
+        if (isVpaa || isClerk) {
           if (faculty_id) filters.push(eq(IndividualFacultyReports.faculty_id, faculty_id));
-        } else if (isSupervisor) {
+        } else if (isDean || isChair) {
           const supervisorScopeFilters: SQL[] = [];
 
-          if (deanCollegeIds.length > 0) {
+          if (isDean && deanCollegeIds.length > 0) {
             const chairRecords = await tx
               .select({ chairId: ProgramChairs.chair_id })
               .from(ProgramChairs)
@@ -631,9 +650,23 @@ export class EvaluationReportService implements IEvaluationReportService {
                 inArray(IndividualFacultyReports.faculty_id, chairsUnderDean),
               );
             }
+
+            supervisorScopeFilters.push(
+              sql`EXISTS (
+                SELECT 1 FROM ${Faculties}
+                INNER JOIN ${Programs} ON ${Faculties.program_id} = ${Programs.id}
+                INNER JOIN ${Colleges} ON ${Programs.college_id} = ${Colleges.id}
+                LEFT JOIN ${ProgramChairs} ON ${Programs.id} = ${ProgramChairs.program_id} AND ${ProgramChairs.deleted_at} IS NULL
+                WHERE ${Faculties.account_id} = ${IndividualFacultyReports.faculty_id}
+                  AND ${Programs.college_id} IN ${deanCollegeIds}
+                  AND ${Colleges.is_service_college} = true
+                  AND ${ProgramChairs.id} IS NULL
+                  AND ${Faculties.deleted_at} IS NULL
+              )`,
+            );
           }
 
-          if (chairProgramIds.length > 0) {
+          if (isChair && chairProgramIds.length > 0) {
             const allChairs = await tx
               .select({ chairId: ProgramChairs.chair_id })
               .from(ProgramChairs)
@@ -643,20 +676,31 @@ export class EvaluationReportService implements IEvaluationReportService {
             supervisorScopeFilters.push(
               and(
                 sql`EXISTS (
-                  SELECT 1 FROM ${CourseOfferings}
-                  INNER JOIN ${Faculties} ON ${CourseOfferings.faculty_id} = ${Faculties.id}
-                  INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
-                  INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
+                  SELECT 1 FROM ${Faculties}
                   WHERE ${Faculties.account_id} = ${IndividualFacultyReports.faculty_id}
-                    AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
-                    AND ${Courses.program_id} IN ${chairProgramIds}
-                    AND ${CourseOfferings.deleted_at} IS NULL
+                    AND ${Faculties.program_id} IN ${chairProgramIds}
                     AND ${Faculties.deleted_at} IS NULL
                 )`,
                 allChairIds.length > 0
                   ? sql`${IndividualFacultyReports.faculty_id} NOT IN ${allChairIds}`
                   : undefined,
               )!,
+            );
+
+            supervisorScopeFilters.push(
+              sql`EXISTS (
+                SELECT 1 FROM ${CourseOfferings}
+                INNER JOIN ${Faculties} ON ${CourseOfferings.faculty_id} = ${Faculties.id}
+                INNER JOIN ${Classes} ON ${CourseOfferings.class_id} = ${Classes.id}
+                INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
+                INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
+                WHERE ${Faculties.account_id} = ${IndividualFacultyReports.faculty_id}
+                  AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
+                  AND ${Classes.program_id} IN ${chairProgramIds}
+                  AND ${Courses.course_type} = 'PROFESSIONAL'
+                  AND ${CourseOfferings.deleted_at} IS NULL
+                  AND ${Faculties.deleted_at} IS NULL
+              )`,
             );
           }
 
@@ -701,11 +745,10 @@ export class EvaluationReportService implements IEvaluationReportService {
             sql`EXISTS (
               SELECT 1 FROM ${CourseOfferings}
               INNER JOIN ${Faculties} ON ${CourseOfferings.faculty_id} = ${Faculties.id}
-              INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
-              INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
+              INNER JOIN ${Classes} ON ${CourseOfferings.class_id} = ${Classes.id}
               WHERE ${Faculties.account_id} = ${IndividualFacultyReports.faculty_id}
                 AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
-                AND ${Courses.program_id} = ${program_id}
+                AND ${Classes.program_id} = ${program_id}
                 AND ${CourseOfferings.deleted_at} IS NULL
                 AND ${Faculties.deleted_at} IS NULL
             )`,
@@ -715,9 +758,8 @@ export class EvaluationReportService implements IEvaluationReportService {
             sql`EXISTS (
               SELECT 1 FROM ${CourseOfferings}
               INNER JOIN ${Faculties} ON ${CourseOfferings.faculty_id} = ${Faculties.id}
-              INNER JOIN ${CourseCurriculums} ON ${CourseOfferings.course_curriculum_id} = ${CourseCurriculums.id}
-              INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
-              INNER JOIN ${Programs} ON ${Courses.program_id} = ${Programs.id}
+              INNER JOIN ${Classes} ON ${CourseOfferings.class_id} = ${Classes.id}
+              INNER JOIN ${Programs} ON ${Classes.program_id} = ${Programs.id}
               WHERE ${Faculties.account_id} = ${IndividualFacultyReports.faculty_id}
                 AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
                 AND ${Programs.college_id} = ${college_id}
@@ -787,9 +829,10 @@ export class EvaluationReportService implements IEvaluationReportService {
     return WithTransaction(client, async (tx) => {
       const actorRoles = actorUser.roles ?? [];
       const isPrivileged =
-        actorRoles.includes("SYS_ADMIN") ||
-        actorRoles.includes("ADMIN") ||
-        actorRoles.includes("SUPERVISOR");
+        actorRoles.includes("VPAA") ||
+        actorRoles.includes("CLERK") ||
+        actorRoles.includes("COLLEGE_DEAN") ||
+        actorRoles.includes("DEPARTMENT_CHAIR");
 
       if (!isPrivileged) {
         throw new AppError(403, "Access restricted to academic leaders and administrators.");
@@ -825,10 +868,10 @@ export class EvaluationReportService implements IEvaluationReportService {
           sefCount++;
         }
 
-        if (setVal >= 91) distribution.outstanding++;
-        else if (setVal >= 81) distribution.very_satisfactory++;
-        else if (setVal >= 71) distribution.satisfactory++;
-        else if (setVal >= 61) distribution.fair++;
+        if (setVal >= 4.5) distribution.outstanding++;
+        else if (setVal >= 3.5) distribution.very_satisfactory++;
+        else if (setVal >= 2.5) distribution.satisfactory++;
+        else if (setVal >= 1.5) distribution.fair++;
         else distribution.poor++;
       }
 
@@ -859,7 +902,7 @@ export class EvaluationReportService implements IEvaluationReportService {
 
   private async computeAndUpsertReport(
     semesterId: number,
-    facultyId: number, // Accounts.id
+    facultyId: number,
     formulaId: string,
     tx: PgTransaction,
     actorUserId?: number,
@@ -882,9 +925,10 @@ export class EvaluationReportService implements IEvaluationReportService {
 
     if (!faculty) throw new AppError(404, "Faculty member was not found.");
 
-    const [facultyAppointment] = await tx
+    const facultyAppointments = await tx
       .select({
         facultyRecordId: Faculties.id,
+        isHome: Faculties.is_home,
         programId: Programs.id,
         programName: Programs.name,
         programCode: Programs.initialism,
@@ -896,14 +940,17 @@ export class EvaluationReportService implements IEvaluationReportService {
       .innerJoin(Programs, eq(Faculties.program_id, Programs.id))
       .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
       .where(and(eq(Faculties.account_id, facultyId), isNull(Faculties.deleted_at)))
-      .limit(1);
+      .orderBy(desc(Faculties.is_home));
 
-    if (!facultyAppointment) {
+    const homeAppointment = facultyAppointments[0];
+    if (!homeAppointment) {
       throw new AppError(
         400,
         "Cannot generate report: This instructor is not appointed to an academic program.",
       );
     }
+
+    const allFacultyRecordIds = facultyAppointments.map((f) => f.facultyRecordId);
 
     const [setTemplate] = await tx
       .select({
@@ -917,7 +964,6 @@ export class EvaluationReportService implements IEvaluationReportService {
     const minRating = setTemplate?.min_rating ?? 1;
     const maxRating = setTemplate?.max_rating ?? 5;
 
-    // 🚀 Uses canonical facultyRecordId (Faculties.id)
     const offerings = await tx
       .select({
         offeringId: CourseOfferings.id,
@@ -942,7 +988,7 @@ export class EvaluationReportService implements IEvaluationReportService {
       .where(
         and(
           eq(CourseOfferings.semester_id, semesterId),
-          eq(CourseOfferings.faculty_id, facultyAppointment.facultyRecordId),
+          inArray(CourseOfferings.faculty_id, allFacultyRecordIds),
           isNull(CourseOfferings.deleted_at),
         ),
       );
@@ -968,7 +1014,6 @@ export class EvaluationReportService implements IEvaluationReportService {
     for (let i = 0; i < offerings.length; i++) {
       const off = offerings[i]!;
 
-      // ── 🛡️ Query Anonymous Ballot Box directly by course_offering_id ──
       const ballots = await tx
         .select({
           id: StudentBallots.id,
@@ -978,10 +1023,14 @@ export class EvaluationReportService implements IEvaluationReportService {
           commentSentiment: StudentBallots.comment_sentiment,
         })
         .from(StudentBallots)
+        .innerJoin(
+          StudentEvaluationSchedules,
+          eq(StudentBallots.schedule_id, StudentEvaluationSchedules.id),
+        )
         .where(
           and(
             eq(StudentBallots.course_offering_id, off.offeringId),
-            eq(StudentBallots.schedule_id, semesterId), // schedule for this term
+            eq(StudentEvaluationSchedules.semester_id, semesterId),
           ),
         );
 
@@ -989,15 +1038,14 @@ export class EvaluationReportService implements IEvaluationReportService {
       let averageSetRating = 0;
       let weightedScore = 0;
 
-      // Fallback for pre-migration historical submissions
       if (classEvaluatedStudents === 0) {
         const enrolled = await tx
-          .select({ id: StudentClasses.id })
-          .from(StudentClasses)
+          .select({ id: OfferingStudents.id })
+          .from(OfferingStudents)
           .where(
             and(
-              eq(StudentClasses.course_offering_id, off.offeringId),
-              isNull(StudentClasses.deleted_at),
+              eq(OfferingStudents.course_offering_id, off.offeringId),
+              isNull(OfferingStudents.deleted_at),
             ),
           );
         const enrolledIds = enrolled.map((e) => e.id);
@@ -1014,7 +1062,7 @@ export class EvaluationReportService implements IEvaluationReportService {
             .from(StudentEvaluations)
             .where(
               and(
-                inArray(StudentEvaluations.student_class_id, enrolledIds),
+                inArray(StudentEvaluations.offering_student_id, enrolledIds),
                 isNotNull(StudentEvaluations.submitted_at),
               ),
             );
@@ -1087,14 +1135,15 @@ export class EvaluationReportService implements IEvaluationReportService {
       totalWeightedScore: grandTotalWeightedScore,
     });
 
+    // CMO 19 s. 2025 Sec 9.3: Average all submitted SupervisorEvaluations across evaluating supervisors
     let overallSefRating: number | null = null;
     const supervisorCommentsList: SupervisorFeedbackComment[] = [];
     const allSupervisorEvaluationIds: number[] = [];
 
-    // Query SEF by faculty Accounts.id
     const sefSubmissions = await tx
       .select({
         id: SupervisorEvaluations.id,
+        evaluatorId: SupervisorEvaluations.evaluator_id,
         setRating: SupervisorEvaluations.set_rating,
         comment: SupervisorEvaluations.comment,
         submittedAt: SupervisorEvaluations.submitted_at,
@@ -1117,19 +1166,50 @@ export class EvaluationReportService implements IEvaluationReportService {
       );
 
     if (sefSubmissions.length > 0) {
-      const sef = sefSubmissions[0]!;
-      overallSefRating = sef.setRating !== null ? Number(sef.setRating) : null;
-      allSupervisorEvaluationIds.push(sef.id);
+      const ratedSubmissions = sefSubmissions.filter((s) => s.setRating !== null);
+      if (ratedSubmissions.length > 0) {
+        const sefSum = ratedSubmissions.reduce((acc, s) => acc + Number(s.setRating), 0);
+        overallSefRating = Number((sefSum / ratedSubmissions.length).toFixed(2));
+      }
 
-      if (sef.comment && sef.comment.trim().length > 3) {
-        supervisorCommentsList.push({
-          evaluator_name: `${sef.evaluatorFirst} ${sef.evaluatorLast}`,
-          evaluator_role: "Academic Supervisor",
-          comment: sef.comment.trim(),
-          submitted_at: sef.submittedAt
-            ? new Date(sef.submittedAt).toISOString()
-            : new Date().toISOString(),
-        });
+      const evaluatorIds = Array.from(new Set(sefSubmissions.map((s) => s.evaluatorId)));
+      const [deanRows, chairRows] = await Promise.all([
+        tx
+          .select({ accountId: CollegeDeans.dean_id, code: Colleges.initialism })
+          .from(CollegeDeans)
+          .innerJoin(Colleges, eq(CollegeDeans.college_id, Colleges.id))
+          .where(and(inArray(CollegeDeans.dean_id, evaluatorIds), isNull(CollegeDeans.deleted_at))),
+        tx
+          .select({ accountId: ProgramChairs.chair_id, code: Programs.initialism })
+          .from(ProgramChairs)
+          .innerJoin(Programs, eq(ProgramChairs.program_id, Programs.id))
+          .where(
+            and(inArray(ProgramChairs.chair_id, evaluatorIds), isNull(ProgramChairs.deleted_at)),
+          ),
+      ]);
+
+      const deanMap = new Map(deanRows.map((d) => [d.accountId, d.code]));
+      const chairMap = new Map(chairRows.map((c) => [c.accountId, c.code]));
+
+      for (const sef of sefSubmissions) {
+        allSupervisorEvaluationIds.push(sef.id);
+
+        if (sef.comment && sef.comment.trim().length > 3) {
+          const roleLabel = deanMap.has(sef.evaluatorId)
+            ? `College Dean (${deanMap.get(sef.evaluatorId)})`
+            : chairMap.has(sef.evaluatorId)
+              ? `Department Chair (${chairMap.get(sef.evaluatorId)})`
+              : "Academic Supervisor";
+
+          supervisorCommentsList.push({
+            evaluator_name: `${sef.evaluatorFirst} ${sef.evaluatorLast}`,
+            evaluator_role: roleLabel,
+            comment: sef.comment.trim(),
+            submitted_at: sef.submittedAt
+              ? new Date(sef.submittedAt).toISOString()
+              : new Date().toISOString(),
+          });
+        }
       }
     }
 
@@ -1153,7 +1233,7 @@ export class EvaluationReportService implements IEvaluationReportService {
     );
     const top5StudentComments = this.curateTop5Comments(allCollectedStudentComments);
 
-    const homeDepartmentTitle = `${facultyAppointment.programName}, ${facultyAppointment.collegeName}`;
+    const homeDepartmentTitle = `${homeAppointment.programName}, ${homeAppointment.collegeName}`;
 
     const [existingReport] = await tx
       .select()
@@ -1235,11 +1315,11 @@ export class EvaluationReportService implements IEvaluationReportService {
       homeDepartmentTitle,
       minRating,
       maxRating,
-      facultyAppointment.collegeId,
-      facultyAppointment.collegeCode,
-      facultyAppointment.programId,
-      facultyAppointment.programName,
-      facultyAppointment.programCode,
+      homeAppointment.collegeId,
+      homeAppointment.collegeCode,
+      homeAppointment.programId,
+      homeAppointment.programName,
+      homeAppointment.programCode,
       actorUserId,
     );
   }
@@ -1269,6 +1349,22 @@ export class EvaluationReportService implements IEvaluationReportService {
       supervisor_name: "",
       supervisor_signed_at: null,
       faculty_signed_at: null,
+    };
+
+    const rawSummary = (report.analytics_summary as any) || {
+      highestIndicators: [],
+      lowestIndicators: [],
+      categoryComparison: [],
+    };
+
+    const sanitizedSummary: EvaluationAnalyticsSummary = {
+      highestIndicators: rawSummary.highestIndicators || [],
+      lowestIndicators: rawSummary.lowestIndicators || [],
+      categoryComparison: (rawSummary.categoryComparison || []).map((c: any) => ({
+        categoryName: c.categoryName,
+        setAverage: c.setAverage ?? null,
+        sefAverage: c.sefAverage ?? null,
+      })),
     };
 
     const isOwnReport = actorUserId !== undefined && actorUserId === report.faculty_id;
@@ -1305,11 +1401,7 @@ export class EvaluationReportService implements IEvaluationReportService {
       set_indicator_analytics: (report.set_indicator_analytics as IndicatorAnalytics[]) || [],
       sef_category_analytics: (report.sef_category_analytics as CategoryAnalytics[]) || [],
       sef_indicator_analytics: (report.sef_indicator_analytics as IndicatorAnalytics[]) || [],
-      analytics_summary: (report.analytics_summary as any) || {
-        highestIndicators: [],
-        lowestIndicators: [],
-        categoryComparison: [],
-      },
+      analytics_summary: sanitizedSummary,
       fedaf_plan: rawPlan,
       status: report.status as ReportStatus,
       created_at: report.created_at.toISOString(),
@@ -1348,6 +1440,7 @@ export class EvaluationReportService implements IEvaluationReportService {
       .innerJoin(Programs, eq(Faculties.program_id, Programs.id))
       .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
       .where(and(eq(Faculties.account_id, report.faculty_id), isNull(Faculties.deleted_at)))
+      .orderBy(desc(Faculties.is_home))
       .limit(1);
 
     const [setTemplate] = await tx
@@ -1762,10 +1855,6 @@ export class EvaluationReportService implements IEvaluationReportService {
       categoryName,
       setAverage: data.setAverage,
       sefAverage: data.sefAverage,
-      gap:
-        data.setAverage !== null && data.sefAverage !== null
-          ? Number((data.sefAverage - data.setAverage).toFixed(2))
-          : null,
     }));
 
     return {
@@ -1816,20 +1905,21 @@ export class EvaluationReportService implements IEvaluationReportService {
   }
 
   private async enforceReportReadAccess(
-    facultyId: number, // Accounts.id
+    facultyId: number,
     semesterId: number,
     actorUser: GetUser,
     tx: PgTransaction,
   ): Promise<void> {
     const actorRoles = actorUser.roles ?? [];
     const isSelf = actorUser.account.id === facultyId;
-    const isSysAdmin = actorRoles.includes("SYS_ADMIN");
-    const isAdmin = actorRoles.includes("ADMIN");
-    const isSupervisor = actorRoles.includes("SUPERVISOR");
+    const isVpaa = actorRoles.includes("VPAA");
+    const isClerk = actorRoles.includes("CLERK");
+    const isDean = actorRoles.includes("COLLEGE_DEAN");
+    const isChair = actorRoles.includes("DEPARTMENT_CHAIR");
 
-    if (isSelf || isSysAdmin || isAdmin) return;
+    if (isSelf || isVpaa || isClerk) return;
 
-    if (!isSupervisor) {
+    if (!isDean && !isChair) {
       throw new AppError(
         403,
         "You do not have permission to view other faculty evaluation reports.",
@@ -1843,7 +1933,7 @@ export class EvaluationReportService implements IEvaluationReportService {
 
     let inScope = false;
 
-    if (deanCollegeIds.length > 0) {
+    if (isDean && deanCollegeIds.length > 0) {
       const [chairMatch] = await tx
         .select({ id: ProgramChairs.id })
         .from(ProgramChairs)
@@ -1859,61 +1949,71 @@ export class EvaluationReportService implements IEvaluationReportService {
 
       if (chairMatch) inScope = true;
 
-      // 🚀 Fixed Join: Routes through Faculties table
       if (!inScope) {
-        const [vacantMatch] = await tx
-          .select({ id: CourseOfferings.id })
-          .from(CourseOfferings)
-          .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
-          .innerJoin(
-            CourseCurriculums,
-            eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
-          )
-          .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
-          .innerJoin(Programs, eq(Courses.program_id, Programs.id))
+        const [serviceMatch] = await tx
+          .select({ id: Faculties.id })
+          .from(Faculties)
+          .innerJoin(Programs, eq(Faculties.program_id, Programs.id))
+          .innerJoin(Colleges, eq(Programs.college_id, Colleges.id))
           .leftJoin(
             ProgramChairs,
             and(eq(Programs.id, ProgramChairs.program_id), isNull(ProgramChairs.deleted_at)),
           )
           .where(
             and(
-              eq(Faculties.account_id, facultyId), // Matches via Faculties
-              eq(CourseOfferings.semester_id, semesterId),
+              eq(Faculties.account_id, facultyId),
               inArray(Programs.college_id, deanCollegeIds),
+              eq(Colleges.is_service_college, true),
               isNull(ProgramChairs.id),
+              isNull(Faculties.deleted_at),
+            ),
+          )
+          .limit(1);
+
+        if (serviceMatch) inScope = true;
+      }
+    }
+
+    if (!inScope && isChair && chairProgramIds.length > 0) {
+      const [homeMatch] = await tx
+        .select({ id: Faculties.id })
+        .from(Faculties)
+        .where(
+          and(
+            eq(Faculties.account_id, facultyId),
+            inArray(Faculties.program_id, chairProgramIds),
+            isNull(Faculties.deleted_at),
+          ),
+        )
+        .limit(1);
+
+      if (homeMatch) inScope = true;
+
+      if (!inScope) {
+        const [teachingMatch] = await tx
+          .select({ id: CourseOfferings.id })
+          .from(CourseOfferings)
+          .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
+          .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+          .innerJoin(
+            CourseCurriculums,
+            eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+          )
+          .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+          .where(
+            and(
+              eq(Faculties.account_id, facultyId),
+              eq(CourseOfferings.semester_id, semesterId),
+              inArray(Classes.program_id, chairProgramIds),
+              eq(Courses.course_type, "PROFESSIONAL"),
               isNull(CourseOfferings.deleted_at),
               isNull(Faculties.deleted_at),
             ),
           )
           .limit(1);
 
-        if (vacantMatch) inScope = true;
+        if (teachingMatch) inScope = true;
       }
-    }
-
-    // 🚀 Fixed Join: Routes through Faculties table
-    if (!inScope && chairProgramIds.length > 0) {
-      const [teachingMatch] = await tx
-        .select({ id: CourseOfferings.id })
-        .from(CourseOfferings)
-        .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
-        .innerJoin(
-          CourseCurriculums,
-          eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
-        )
-        .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
-        .where(
-          and(
-            eq(Faculties.account_id, facultyId), // Matches via Faculties
-            eq(CourseOfferings.semester_id, semesterId),
-            inArray(Courses.program_id, chairProgramIds),
-            isNull(CourseOfferings.deleted_at),
-            isNull(Faculties.deleted_at),
-          ),
-        )
-        .limit(1);
-
-      if (teachingMatch) inScope = true;
     }
 
     if (!inScope) {

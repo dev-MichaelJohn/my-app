@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, lte, gte, isNotNull, desc, asc, ne } from "drizzle-orm";
 import { type ResultAsync } from "neverthrow";
-import db from "@/configs/db.config.js";
+import db, { type PgTransaction } from "@/configs/db.config.js";
 import {
   Accounts,
   Classes,
@@ -13,7 +13,7 @@ import {
   ProgramChairs,
   Programs,
   Semesters,
-  StudentClasses,
+  OfferingStudents,
   StudentEvaluationForms,
   StudentEvaluationTurnout,
   StudentEvaluationDrafts,
@@ -49,7 +49,6 @@ import {
 } from "@my-app/shared";
 import { UserService, type IUserService } from "./user.service.js";
 import { getFormulaById } from "@my-app/shared";
-import type { PgTransaction } from "@/configs/db.config.js";
 
 export interface IEvaluationSubmissionService {
   getEvaluableStudentSubjects(
@@ -58,7 +57,7 @@ export interface IEvaluationSubmissionService {
   ): ResultAsync<EvaluableStudentSubject[], AppError>;
   getStudentEvaluationFormView(
     studentAccountId: number,
-    studentClassId: number,
+    offeringStudentId: number,
     client?: DbClient,
   ): ResultAsync<StudentEvaluationFormView, AppError>;
   submitStudentEvaluation(
@@ -111,10 +110,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
     private userService: IUserService = new UserService(),
   ) {}
 
-  // =========================================================================
-  // 1. STUDENT (SET) EVALUATION FLOW (DECOUPLED BALLOT BOX)
-  // =========================================================================
-
   getEvaluableStudentSubjects(
     studentAccountId: number,
     client: DbClient = db,
@@ -138,7 +133,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
       const enrollments = await tx
         .select({
-          studentClassId: StudentClasses.id,
+          offeringStudentId: OfferingStudents.id,
           offeringId: CourseOfferings.id,
           courseName: Courses.name,
           courseCode: Courses.initialism,
@@ -154,7 +149,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           startDate: Semesters.start_date,
           endDate: Semesters.end_date,
           curriculumId: CourseCurriculums.id,
-          facultyRecordId: Faculties.id,
           facultyAccountId: Accounts.id,
           facultyEmail: Accounts.email,
           facultyFirstName: PersonalDetails.first_name,
@@ -163,8 +157,8 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           facultySuffix: PersonalDetails.suffix,
           facultyInstitutionalId: PersonalDetails.institutional_id,
         })
-        .from(StudentClasses)
-        .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
+        .from(OfferingStudents)
+        .innerJoin(CourseOfferings, eq(OfferingStudents.course_offering_id, CourseOfferings.id))
         .innerJoin(
           CourseCurriculums,
           eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
@@ -181,10 +175,10 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
         .where(
           and(
-            eq(StudentClasses.student_account_id, studentAccountId),
+            eq(OfferingStudents.student_account_id, studentAccountId),
             eq(CourseOfferings.semester_id, activeSchedule.semester_id),
             isNotNull(CourseOfferings.faculty_id),
-            isNull(StudentClasses.deleted_at),
+            isNull(OfferingStudents.deleted_at),
             isNull(CourseOfferings.deleted_at),
           ),
         );
@@ -192,9 +186,8 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
       if (enrollments.length === 0) return [];
 
       const offeringIds = enrollments.map((e) => e.offeringId);
-      const studentClassIds = enrollments.map((e) => e.studentClassId);
+      const offeringStudentIds = enrollments.map((e) => e.offeringStudentId);
 
-      // Check Turnout Log (Who voted)
       const turnouts = await tx
         .select()
         .from(StudentEvaluationTurnout)
@@ -207,30 +200,29 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         );
       const turnoutMap = new Map(turnouts.map((t) => [t.course_offering_id, t]));
 
-      // Check Drafts (Who has an in-progress draft)
       const drafts = await tx
         .select()
         .from(StudentEvaluationDrafts)
         .where(
           and(
             eq(StudentEvaluationDrafts.schedule_id, activeSchedule.id),
-            inArray(StudentEvaluationDrafts.student_class_id, studentClassIds),
+            inArray(StudentEvaluationDrafts.offering_student_id, offeringStudentIds),
           ),
         );
-      const draftMap = new Map(drafts.map((d) => [d.student_class_id, d]));
+      const draftMap = new Map(drafts.map((d) => [d.offering_student_id, d]));
 
       return enrollments.map((e): EvaluableStudentSubject => {
         const turnout = turnoutMap.get(e.offeringId);
-        const draft = draftMap.get(e.studentClassId);
+        const draft = draftMap.get(e.offeringStudentId);
         const hasSubmitted = Boolean(turnout);
         const isDraft = Boolean(!hasSubmitted && draft);
 
         return {
-          student_class_id: e.studentClassId,
+          offering_student_id: e.offeringStudentId,
           has_submitted: hasSubmitted,
           is_draft: isDraft,
           submitted_at: turnout?.submitted_at ?? null,
-          computed_rating: null, // Untraceable: ratings are decoupled from student identity
+          computed_rating: null,
           evaluation_id: null,
           offering: {
             id: e.offeringId,
@@ -290,7 +282,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
   getStudentEvaluationFormView(
     studentAccountId: number,
-    studentClassId: number,
+    offeringStudentId: number,
     client: DbClient = db,
   ): ResultAsync<StudentEvaluationFormView, AppError> {
     return WithTransaction(client, async (tx) => {
@@ -321,7 +313,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
       const [enrollment] = await tx
         .select({
-          studentClassId: StudentClasses.id,
+          offeringStudentId: OfferingStudents.id,
           offeringId: CourseOfferings.id,
           courseName: Courses.name,
           courseCode: Courses.initialism,
@@ -345,8 +337,8 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           facultySuffix: PersonalDetails.suffix,
           facultyInstitutionalId: PersonalDetails.institutional_id,
         })
-        .from(StudentClasses)
-        .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
+        .from(OfferingStudents)
+        .innerJoin(CourseOfferings, eq(OfferingStudents.course_offering_id, CourseOfferings.id))
         .innerJoin(
           CourseCurriculums,
           eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
@@ -363,11 +355,11 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
         .where(
           and(
-            eq(StudentClasses.id, studentClassId),
-            eq(StudentClasses.student_account_id, studentAccountId),
+            eq(OfferingStudents.id, offeringStudentId),
+            eq(OfferingStudents.student_account_id, studentAccountId),
             eq(CourseOfferings.semester_id, schedule.semester_id),
             isNotNull(CourseOfferings.faculty_id),
-            isNull(StudentClasses.deleted_at),
+            isNull(OfferingStudents.deleted_at),
           ),
         );
 
@@ -375,7 +367,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         throw new AppError(404, "Student enrollment record not found for this active term.");
       }
 
-      // Check Turnout Log (Has this student cast their final ballot?)
       const [turnout] = await tx
         .select()
         .from(StudentEvaluationTurnout)
@@ -387,14 +378,13 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           ),
         );
 
-      // Check Drafts Table (Loads auto-saved draft if still in progress)
       const [draft] = await tx
         .select()
         .from(StudentEvaluationDrafts)
         .where(
           and(
             eq(StudentEvaluationDrafts.schedule_id, schedule.id),
-            eq(StudentEvaluationDrafts.student_class_id, studentClassId),
+            eq(StudentEvaluationDrafts.offering_student_id, offeringStudentId),
           ),
         );
 
@@ -402,7 +392,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
       return {
         schedule_id: schedule.id,
-        student_class_id: studentClassId,
+        offering_student_id: offeringStudentId,
         form: formResult.value,
         saved_ratings: savedRatings,
         saved_comment: draft?.saved_comment ?? null,
@@ -508,21 +498,20 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           throw new AppError(400, "The evaluation period is closed or not available.");
         }
 
-        // Validate enrollment and semester alignment
         const [enrollment] = await tx
           .select({
-            studentClassId: StudentClasses.id,
+            offeringStudentId: OfferingStudents.id,
             offeringId: CourseOfferings.id,
             semesterId: CourseOfferings.semester_id,
             facultyId: CourseOfferings.faculty_id,
           })
-          .from(StudentClasses)
-          .innerJoin(CourseOfferings, eq(StudentClasses.course_offering_id, CourseOfferings.id))
+          .from(OfferingStudents)
+          .innerJoin(CourseOfferings, eq(OfferingStudents.course_offering_id, CourseOfferings.id))
           .where(
             and(
-              eq(StudentClasses.id, data.student_class_id),
-              eq(StudentClasses.student_account_id, studentAccountId),
-              isNull(StudentClasses.deleted_at),
+              eq(OfferingStudents.id, data.offering_student_id),
+              eq(OfferingStudents.student_account_id, studentAccountId),
+              isNull(OfferingStudents.deleted_at),
               isNull(CourseOfferings.deleted_at),
             ),
           );
@@ -545,7 +534,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           );
         }
 
-        // 🛡️ Prevent duplicate voting: Check Turnout Register
         const [alreadyVoted] = await tx
           .select({ id: StudentEvaluationTurnout.id })
           .from(StudentEvaluationTurnout)
@@ -561,9 +549,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           throw new AppError(409, "You have already cast your ballot for this subject.");
         }
 
-        // ════════════════════════════════════════════════════════════════════
-        // CASE A: DRAFT AUTO-SAVE (Private to Student)
-        // ════════════════════════════════════════════════════════════════════
         if (data.is_draft) {
           const ratingsMap = data.ratings.reduce(
             (acc, curr) => {
@@ -579,7 +564,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
             .where(
               and(
                 eq(StudentEvaluationDrafts.schedule_id, data.schedule_id),
-                eq(StudentEvaluationDrafts.student_class_id, data.student_class_id),
+                eq(StudentEvaluationDrafts.offering_student_id, data.offering_student_id),
               ),
             );
 
@@ -595,7 +580,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           } else {
             await tx.insert(StudentEvaluationDrafts).values({
               schedule_id: data.schedule_id,
-              student_class_id: data.student_class_id,
+              offering_student_id: data.offering_student_id,
               saved_ratings: ratingsMap,
               saved_comment: data.comment ?? null,
             });
@@ -609,9 +594,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           };
         }
 
-        // ════════════════════════════════════════════════════════════════════
-        // CASE B: FINAL BALLOT CAST (Completely Anonymized & Decoupled)
-        // ════════════════════════════════════════════════════════════════════
         const [formRecord] = await tx
           .select({
             min_rating: StudentEvaluationForms.min_rating,
@@ -639,7 +621,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         const commentScore = sentiment ? sentiment.score : null;
         const commentSentiment = sentiment ? sentiment.classification : null;
 
-        // 1. Mark attendance in Voter Turnout log (prevents double voting)
         await tx.insert(StudentEvaluationTurnout).values({
           schedule_id: data.schedule_id,
           student_account_id: studentAccountId,
@@ -647,7 +628,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           submitted_at: now,
         });
 
-        // 2. Drop the ANONYMOUS ballot into the ballot box (ZERO student identifiers)
         const [ballot] = await tx
           .insert(StudentBallots)
           .values({
@@ -661,7 +641,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           })
           .returning({ id: StudentBallots.id });
 
-        // 3. Insert individual ratings linked ONLY to the anonymous ballot ID
         if (data.ratings.length > 0) {
           const ratingInserts = data.ratings.map((r) => ({
             ballot_id: ballot!.id,
@@ -671,17 +650,15 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           await tx.insert(StudentBallotRatings).values(ratingInserts);
         }
 
-        // 4. Destroy the private draft (The Shredder)
         await tx
           .delete(StudentEvaluationDrafts)
           .where(
             and(
               eq(StudentEvaluationDrafts.schedule_id, data.schedule_id),
-              eq(StudentEvaluationDrafts.student_class_id, data.student_class_id),
+              eq(StudentEvaluationDrafts.offering_student_id, data.offering_student_id),
             ),
           );
 
-        // 5. Emit real-time pulse (Naturally anonymous)
         const [offeringMeta] = await tx
           .select({
             courseCode: Courses.initialism,
@@ -730,59 +707,144 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
     });
   }
 
-  // =========================================================================
-  // 2. SUPERVISOR (SEF) FLOW
-  // =========================================================================
-
-  private async verifySupervisoryScope(
+  /**
+   * Resolves all target faculty Account IDs eligible for SEF evaluation by `evaluatorAccountId`
+   * during `semesterId`, implementing:
+   * - College Dean: rates Department Chairs (ProgramChairs) in their college, plus Service-College
+   *   GE faculty if the college is a service college and the faculty's program has no ProgramChair.
+   * - Department Chair (CMO 19 s. 2025 Sec 9.3 & 9.4):
+   *     1. All Faculty appointed to the Chair's own program (excluding active ProgramChairs).
+   *     2. Any Faculty / teaching Administrator (Dean, VPAA, etc.) teaching a PROFESSIONAL
+   *        course offering in the Chair's program during `semesterId`.
+   *     (General Education courses taught by service college faculty are NOT rated by recipient
+   *      program chairs; they remain under their service college supervisor.)
+   */
+  private async resolveSupervisoryTargetAccountIds(
     evaluatorAccountId: number,
-    targetFacultyAccountId: number,
+    semesterId: number,
     tx: PgTransaction,
-  ): Promise<boolean> {
-    const [deanMatch] = await tx
-      .select({ id: ProgramChairs.id })
-      .from(CollegeDeans)
-      .innerJoin(Programs, eq(CollegeDeans.college_id, Programs.college_id))
-      .innerJoin(ProgramChairs, eq(Programs.id, ProgramChairs.program_id))
-      .where(
-        and(
-          eq(CollegeDeans.dean_id, evaluatorAccountId),
-          eq(ProgramChairs.chair_id, targetFacultyAccountId),
-          isNull(CollegeDeans.deleted_at),
-          isNull(Programs.deleted_at),
-          isNull(ProgramChairs.deleted_at),
+  ): Promise<Set<number>> {
+    const [deanships, chairships] = await Promise.all([
+      tx
+        .select({
+          collegeId: CollegeDeans.college_id,
+          isServiceCollege: Colleges.is_service_college,
+        })
+        .from(CollegeDeans)
+        .innerJoin(Colleges, eq(CollegeDeans.college_id, Colleges.id))
+        .where(
+          and(
+            eq(CollegeDeans.dean_id, evaluatorAccountId),
+            isNull(CollegeDeans.deleted_at),
+            isNull(Colleges.deleted_at),
+          ),
         ),
-      )
-      .limit(1);
-
-    if (deanMatch) return true;
-
-    const [chairMatch] = await tx
-      .select({ id: Faculties.id })
-      .from(ProgramChairs)
-      .innerJoin(Faculties, eq(ProgramChairs.program_id, Faculties.program_id))
-      .where(
-        and(
-          eq(ProgramChairs.chair_id, evaluatorAccountId),
-          eq(Faculties.account_id, targetFacultyAccountId),
-          isNull(ProgramChairs.deleted_at),
-          isNull(Faculties.deleted_at),
-        ),
-      )
-      .limit(1);
-
-    if (chairMatch) {
-      const [targetIsChair] = await tx
-        .select({ id: ProgramChairs.id })
+      tx
+        .select({ programId: ProgramChairs.program_id })
         .from(ProgramChairs)
         .where(
-          and(eq(ProgramChairs.chair_id, targetFacultyAccountId), isNull(ProgramChairs.deleted_at)),
-        )
-        .limit(1);
-      if (!targetIsChair) return true;
+          and(eq(ProgramChairs.chair_id, evaluatorAccountId), isNull(ProgramChairs.deleted_at)),
+        ),
+    ]);
+
+    const deanCollegeIds = deanships.map((d) => d.collegeId);
+    const serviceCollegeIds = deanships.filter((d) => d.isServiceCollege).map((d) => d.collegeId);
+    const chairProgramIds = chairships.map((c) => c.programId);
+
+    const eligibleAccountIds = new Set<number>();
+
+    // 1. College Dean -> rates Department Chairs in their college
+    if (deanCollegeIds.length > 0) {
+      const chairAccounts = await tx
+        .select({ chairId: ProgramChairs.chair_id })
+        .from(ProgramChairs)
+        .innerJoin(Programs, eq(ProgramChairs.program_id, Programs.id))
+        .where(
+          and(
+            inArray(Programs.college_id, deanCollegeIds),
+            ne(ProgramChairs.chair_id, evaluatorAccountId),
+            isNull(ProgramChairs.deleted_at),
+            isNull(Programs.deleted_at),
+          ),
+        );
+
+      chairAccounts.forEach((c) => eligibleAccountIds.add(c.chairId));
+
+      // Service College fallback (Section 9.3): GE faculty in a service college unit lacking a Chair
+      if (serviceCollegeIds.length > 0) {
+        const serviceFacultyNoChair = await tx
+          .select({ accountId: Faculties.account_id })
+          .from(Faculties)
+          .innerJoin(Programs, eq(Faculties.program_id, Programs.id))
+          .leftJoin(
+            ProgramChairs,
+            and(eq(Programs.id, ProgramChairs.program_id), isNull(ProgramChairs.deleted_at)),
+          )
+          .where(
+            and(
+              inArray(Programs.college_id, serviceCollegeIds),
+              isNull(ProgramChairs.id),
+              isNull(Faculties.deleted_at),
+              isNull(Programs.deleted_at),
+            ),
+          );
+
+        serviceFacultyNoChair.forEach((f) => eligibleAccountIds.add(f.accountId));
+      }
     }
 
-    return false;
+    // 2. Department Chair -> own program faculty + cross-program PROFESSIONAL courses + teaching admins (9.3 & 9.4)
+    if (chairProgramIds.length > 0) {
+      const allChairs = await tx
+        .select({ chairId: ProgramChairs.chair_id })
+        .from(ProgramChairs)
+        .where(isNull(ProgramChairs.deleted_at));
+      const allChairAccountIds = new Set(allChairs.map((c) => c.chairId));
+
+      // 2a. Home/appointed faculty inside Chair's program (excluding other Chairs; Deans are caught if teaching below)
+      const deptFaculty = await tx
+        .select({ accountId: Faculties.account_id })
+        .from(Faculties)
+        .where(and(inArray(Faculties.program_id, chairProgramIds), isNull(Faculties.deleted_at)));
+
+      deptFaculty.forEach((df) => {
+        if (df.accountId !== evaluatorAccountId && !allChairAccountIds.has(df.accountId)) {
+          eligibleAccountIds.add(df.accountId);
+        }
+      });
+
+      // 2b. CMO 9.3 & 9.4: Anyone (including cross-program faculty & teaching Deans/Admins)
+      //     teaching a PROFESSIONAL course offering in the Chair's program this semester
+      const professionalTeachersInProgram = await tx
+        .selectDistinct({ accountId: Faculties.account_id })
+        .from(CourseOfferings)
+        .innerJoin(Faculties, eq(CourseOfferings.faculty_id, Faculties.id))
+        .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
+        .innerJoin(
+          CourseCurriculums,
+          eq(CourseOfferings.course_curriculum_id, CourseCurriculums.id),
+        )
+        .innerJoin(Courses, eq(CourseCurriculums.course_id, Courses.id))
+        .where(
+          and(
+            eq(CourseOfferings.semester_id, semesterId),
+            inArray(Classes.program_id, chairProgramIds),
+            eq(Courses.course_type, "PROFESSIONAL"),
+            isNotNull(CourseOfferings.faculty_id),
+            isNull(CourseOfferings.deleted_at),
+            isNull(Faculties.deleted_at),
+          ),
+        );
+
+      professionalTeachersInProgram.forEach((row) => {
+        if (row.accountId !== evaluatorAccountId) {
+          eligibleAccountIds.add(row.accountId);
+        }
+      });
+    }
+
+    eligibleAccountIds.delete(evaluatorAccountId);
+    return eligibleAccountIds;
   }
 
   getEvaluableSupervisorFaculty(
@@ -806,65 +868,12 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
       if (!activeSchedule) return [];
 
-      const [deanships, chairships] = await Promise.all([
-        tx
-          .select({ collegeId: CollegeDeans.college_id })
-          .from(CollegeDeans)
-          .where(
-            and(eq(CollegeDeans.dean_id, evaluatorAccountId), isNull(CollegeDeans.deleted_at)),
-          ),
-        tx
-          .select({ programId: ProgramChairs.program_id })
-          .from(ProgramChairs)
-          .where(
-            and(eq(ProgramChairs.chair_id, evaluatorAccountId), isNull(ProgramChairs.deleted_at)),
-          ),
-      ]);
+      const eligibleAccountIds = await this.resolveSupervisoryTargetAccountIds(
+        evaluatorAccountId,
+        activeSchedule.semester_id,
+        tx,
+      );
 
-      const deanCollegeIds = deanships.map((d) => d.collegeId);
-      const chairProgramIds = chairships.map((c) => c.programId);
-
-      if (deanCollegeIds.length === 0 && chairProgramIds.length === 0) return [];
-
-      const eligibleAccountIds = new Set<number>();
-
-      if (chairProgramIds.length > 0) {
-        const allChairs = await tx
-          .select({ chairId: ProgramChairs.chair_id })
-          .from(ProgramChairs)
-          .where(isNull(ProgramChairs.deleted_at));
-        const allChairAccountIds = new Set(allChairs.map((c) => c.chairId));
-
-        const deptFaculty = await tx
-          .select({ accountId: Faculties.account_id })
-          .from(Faculties)
-          .where(and(inArray(Faculties.program_id, chairProgramIds), isNull(Faculties.deleted_at)));
-
-        deptFaculty.forEach((df) => {
-          if (df.accountId !== evaluatorAccountId && !allChairAccountIds.has(df.accountId)) {
-            eligibleAccountIds.add(df.accountId);
-          }
-        });
-      }
-
-      if (deanCollegeIds.length > 0) {
-        const chairAccounts = await tx
-          .select({ chairId: ProgramChairs.chair_id })
-          .from(ProgramChairs)
-          .innerJoin(Programs, eq(ProgramChairs.program_id, Programs.id))
-          .where(
-            and(
-              inArray(Programs.college_id, deanCollegeIds),
-              ne(ProgramChairs.chair_id, evaluatorAccountId),
-              isNull(ProgramChairs.deleted_at),
-              isNull(Programs.deleted_at),
-            ),
-          );
-
-        chairAccounts.forEach((c) => eligibleAccountIds.add(c.chairId));
-      }
-
-      eligibleAccountIds.delete(evaluatorAccountId);
       if (eligibleAccountIds.size === 0) return [];
 
       const targetAccountList = Array.from(eligibleAccountIds);
@@ -893,6 +902,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
             offeringId: CourseOfferings.id,
             courseCode: Courses.initialism,
             courseName: Courses.name,
+            courseType: Courses.course_type,
             yearLevel: Classes.year_level,
             section: Classes.section,
             programCode: Programs.initialism,
@@ -911,6 +921,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
               eq(Faculties.account_id, accountId),
               eq(CourseOfferings.semester_id, activeSchedule.semester_id),
               isNull(CourseOfferings.deleted_at),
+              isNull(Faculties.deleted_at),
             ),
           );
 
@@ -927,6 +938,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
             offering_id: o.offeringId,
             course_code: o.courseCode,
             course_name: o.courseName,
+            course_type: o.courseType,
             year_level: o.yearLevel,
             section: o.section,
             program_code: o.programCode,
@@ -966,6 +978,18 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         throw new AppError(400, "There is no active supervisor evaluation period ongoing.");
       }
 
+      const eligibleIds = await this.resolveSupervisoryTargetAccountIds(
+        evaluatorAccountId,
+        schedule.semester_id,
+        tx,
+      );
+      if (!eligibleIds.has(facultyId)) {
+        throw new AppError(
+          403,
+          "Access denied: This faculty member is not within your authorized supervisory scope.",
+        );
+      }
+
       const formResult = await this.instrumentService.getSupervisorFormById(
         schedule.form_id,
         false,
@@ -982,6 +1006,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           offeringId: CourseOfferings.id,
           courseCode: Courses.initialism,
           courseName: Courses.name,
+          courseType: Courses.course_type,
           yearLevel: Classes.year_level,
           section: Classes.section,
           programCode: Programs.initialism,
@@ -1000,6 +1025,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
             eq(Faculties.account_id, facultyId),
             eq(CourseOfferings.semester_id, schedule.semester_id),
             isNull(CourseOfferings.deleted_at),
+            isNull(Faculties.deleted_at),
           ),
         );
 
@@ -1033,6 +1059,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           offering_id: o.offeringId,
           course_code: o.courseCode,
           course_name: o.courseName,
+          course_type: o.courseType,
           year_level: o.yearLevel,
           section: o.section,
           program_code: o.programCode,
@@ -1065,11 +1092,12 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           throw new AppError(403, "You cannot evaluate yourself.");
         }
 
-        const isSupervisor = await this.userService.hasRole(evaluatorAccountId, "SUPERVISOR", tx);
-        if (isSupervisor.isErr() || !isSupervisor.value) {
+        const isDean = await this.userService.hasRole(evaluatorAccountId, "COLLEGE_DEAN", tx);
+        const isChair = await this.userService.hasRole(evaluatorAccountId, "DEPARTMENT_CHAIR", tx);
+        if ((isDean.isErr() || !isDean.value) && (isChair.isErr() || !isChair.value)) {
           throw new AppError(
             403,
-            "Only designated supervisors can submit supervisory evaluations.",
+            "Only designated College Deans and Department Chairs can submit supervisory evaluations.",
           );
         }
 
@@ -1091,13 +1119,12 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
           throw new AppError(400, "The supervisor evaluation period is closed or not available.");
         }
 
-        // Scope check
-        const isAuthorized = await this.verifySupervisoryScope(
+        const eligibleIds = await this.resolveSupervisoryTargetAccountIds(
           evaluatorAccountId,
-          data.faculty_id,
+          schedule.semester_id,
           tx,
         );
-        if (!isAuthorized) {
+        if (!eligibleIds.has(data.faculty_id)) {
           throw new AppError(
             403,
             "Access denied: This faculty member is not within your authorized supervisory scope.",
@@ -1255,10 +1282,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
     });
   }
 
-  // =========================================================================
-  // 3. FACULTY TEACHING LOAD (Uses Voter Turnout for Response Rate)
-  // =========================================================================
-
   getFacultyTeachingOfferings(
     facultyAccountId: number,
     semesterId?: number,
@@ -1328,6 +1351,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
             eq(Faculties.account_id, facultyAccountId),
             eq(CourseOfferings.semester_id, targetSemesterId),
             isNull(CourseOfferings.deleted_at),
+            isNull(Faculties.deleted_at),
           ),
         );
 
@@ -1338,7 +1362,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
       for (const off of offerings) {
         const enrollments = await tx
           .select({
-            studentClassId: StudentClasses.id,
+            offeringStudentId: OfferingStudents.id,
             accountId: Accounts.id,
             email: Accounts.email,
             institutionalId: PersonalDetails.institutional_id,
@@ -1347,13 +1371,13 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
             middleName: PersonalDetails.middle_name,
             suffix: PersonalDetails.suffix,
           })
-          .from(StudentClasses)
-          .innerJoin(Accounts, eq(StudentClasses.student_account_id, Accounts.id))
+          .from(OfferingStudents)
+          .innerJoin(Accounts, eq(OfferingStudents.student_account_id, Accounts.id))
           .innerJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
           .where(
             and(
-              eq(StudentClasses.course_offering_id, off.id),
-              isNull(StudentClasses.deleted_at),
+              eq(OfferingStudents.course_offering_id, off.id),
+              isNull(OfferingStudents.deleted_at),
               isNull(Accounts.deleted_at),
             ),
           )
@@ -1361,7 +1385,6 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
 
         const studentAccountIds = enrollments.map((e) => e.accountId);
 
-        // Turnout check (Uses Turnout Register; Zero ratings scanned)
         const turnouts =
           studentAccountIds.length > 0
             ? await tx
@@ -1383,7 +1406,7 @@ export class EvaluationSubmissionService implements IEvaluationSubmissionService
         const students: TeachingStudentItem[] = enrollments.map((s) => {
           const submittedAt = turnoutMap.get(s.accountId);
           return {
-            student_class_id: s.studentClassId,
+            offering_student_id: s.offeringStudentId,
             student_account_id: s.accountId,
             institutional_id: s.institutionalId,
             first_name: s.firstName,

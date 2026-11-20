@@ -20,7 +20,7 @@ SubmissionRouter.get(
 );
 
 SubmissionRouter.get(
-  "/student/form/:student_class_id",
+  "/student/form/:offering_student_id",
   RequirePermission(PERMISSIONS.EVALUATION_SUBMIT_SET),
   controller.getStudentEvaluationFormView,
 );

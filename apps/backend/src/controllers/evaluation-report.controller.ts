@@ -28,9 +28,10 @@ export class EvaluationReportController {
     const actorRoles = user.roles ?? [];
     const isPlainFaculty =
       actorRoles.includes("FACULTY") &&
-      !actorRoles.includes("SUPERVISOR") &&
-      !actorRoles.includes("ADMIN") &&
-      !actorRoles.includes("SYS_ADMIN");
+      !actorRoles.includes("COLLEGE_DEAN") &&
+      !actorRoles.includes("DEPARTMENT_CHAIR") &&
+      !actorRoles.includes("CLERK") &&
+      !actorRoles.includes("VPAA");
 
     return ValidateSchema(GenerateReportQuerySchema, req.query)
       .andThen((query) => {
