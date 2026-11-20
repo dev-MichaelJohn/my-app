@@ -15,7 +15,7 @@ import {
   Faculties,
   CourseOfferings,
   ClassStudents,
-  StudentClasses,
+  OfferingStudents,
   Accounts,
   PersonalDetails,
   AccountRoles,
@@ -80,7 +80,8 @@ export class AuditService implements IAuditService {
     offerings: CourseOfferings,
     course_offerings: CourseOfferings,
     class_students: ClassStudents,
-    student_classes: StudentClasses,
+    offering_students: OfferingStudents,
+    student_classes: OfferingStudents,
     semesters: Semesters,
     accounts: Accounts,
     users: Accounts,
@@ -198,9 +199,6 @@ export class AuditService implements IAuditService {
     });
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // ATOMIC DATABASE TRANSACTION ROLLBACK
-  // ══════════════════════════════════════════════════════════════════════════
   rollback(
     auditLogId: number,
     actorUser: GetUser,
@@ -218,7 +216,6 @@ export class AuditService implements IAuditService {
         throw new AppError(400, "This action cannot be rolled back.");
       }
 
-      // Collect transaction cohort: reverse chronological order protects child dependencies
       let logsToRevert: (typeof AuditLogs.$inferSelect)[] = [targetLog];
 
       if (rollbackEntireTx && targetLog.transaction_id) {
@@ -288,7 +285,6 @@ export class AuditService implements IAuditService {
             throw new AppError(400, `Rollback is not supported for action type "${action}".`);
         }
 
-        // Mark original audit log as rolled back
         await tx
           .update(AuditLogs)
           .set({
@@ -297,7 +293,6 @@ export class AuditService implements IAuditService {
           })
           .where(eq(AuditLogs.id, log.id));
 
-        // Insert non-rollbackable audit record documenting the rollback
         await tx.insert(AuditLogs).values({
           actor_id: actorUser.account.id,
           actor_email: actorUser.account.email,
