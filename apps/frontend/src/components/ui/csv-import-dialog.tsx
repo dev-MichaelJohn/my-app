@@ -21,22 +21,25 @@ export type ImportEntityType =
   | "courses"
   | "curriculums"
   | "classes"
-  | "users";
+  | "users"
+  | "faculties"
+  | "class-students"
+  | "offering-students";
 
 const SAMPLE_CSV_DATA: Record<ImportEntityType, string> = {
-  colleges: `name,initialism,dean_institutional_id
-College of Technology and Engineering,COTE,04-0204-20
-College of Arts and Sciences,CAS,01-0101-20`,
+  colleges: `name,initialism,is_service_college,dean_institutional_id
+College of Technology and Engineering,COTE,false,04-0204-20
+College of Arts and Sciences,CAS,true,01-0101-20`,
 
   programs: `name,initialism,college_code,chair_institutional_id
 Bachelor of Science in Information Technology,BSIT,COTE,04-0204-20
 Bachelor of Science in Mechanical Engineering,BSME,COTE,
 Bachelor of Arts in Philosophy,BAP,CAS,`,
 
-  courses: `name,initialism,program_code
-Data Structures and Algorithms,IT 102,BSIT
-Object-Oriented Programming,IT 103,BSIT
-Thermodynamics 1,ME 201,BSME`,
+  courses: `name,initialism,program_code,course_type
+Data Structures and Algorithms,IT 102,BSIT,PROFESSIONAL
+Object-Oriented Programming,IT 103,BSIT,PROFESSIONAL
+Purposive Communication,GEC 101,BAP,GENERAL_EDUCATION`,
 
   curriculums: `program_code,course_code,year_level,semester_term
 BSIT,IT 102,I,2nd
@@ -52,8 +55,18 @@ BSME,I,A`,
   users: `institutional_id,email,first_name,last_name,middle_name,suffix,role
 26-1042-001,juan.delacruz@pit.edu.ph,Juan,Dela Cruz,Santos,,STUDENT
 26-1042-002,maria.clara@pit.edu.ph,Maria,Clara,Reyes,,STUDENT
-04-0204-33,robert.tan@pit.edu.ph,Robert,Tan,Lee,Jr.,FACULTY
-04-0204-45,elena.gomez@pit.edu.ph,Elena,Gomez,Flores,,SUPERVISOR`,
+04-0204-33,robert.tan@pit.edu.ph,Robert,Tan,Lee,Jr.,FACULTY`,
+
+  faculties: `institutional_id,email,first_name,last_name,middle_name,suffix,program_code
+04-0204-33,robert.tan@pit.edu.ph,Robert,Tan,Lee,Jr.,BSIT
+04-0204-45,elena.gomez@pit.edu.ph,Elena,Gomez,Flores,,BSIT`,
+
+  "class-students": `institutional_id,email,first_name,last_name,middle_name,suffix,program_code,year_level,section
+26-1042-001,juan.delacruz@pit.edu.ph,Juan,Dela Cruz,Santos,,BSIT,I,A
+26-1042-002,maria.clara@pit.edu.ph,Maria,Clara,Reyes,,BSIT,I,A`,
+
+  "offering-students": `institutional_id,email,first_name,last_name,middle_name,suffix
+26-1042-003,pedro.penduko@pit.edu.ph,Pedro,Penduko,Ramos,`,
 };
 
 interface CsvImportDialogProps {
@@ -61,6 +74,7 @@ interface CsvImportDialogProps {
   onOpenChange: (open: boolean) => void;
   entity: ImportEntityType;
   entityTitle: string;
+  queryParams?: Record<string, string | number | undefined>;
   onSuccess: () => void;
 }
 
@@ -69,6 +83,7 @@ export function CsvImportDialog({
   onOpenChange,
   entity,
   entityTitle,
+  queryParams,
   onSuccess,
 }: CsvImportDialogProps) {
   return (
@@ -79,6 +94,7 @@ export function CsvImportDialog({
             key={open ? "open" : "closed"}
             entity={entity}
             entityTitle={entityTitle}
+            queryParams={queryParams}
             onSuccess={onSuccess}
             onClose={() => onOpenChange(false)}
           />
@@ -91,11 +107,13 @@ export function CsvImportDialog({
 function CsvImportDialogContent({
   entity,
   entityTitle,
+  queryParams,
   onSuccess,
   onClose,
 }: {
   entity: ImportEntityType;
   entityTitle: string;
+  queryParams?: Record<string, string | number | undefined>;
   onSuccess: () => void;
   onClose: () => void;
 }) {
@@ -114,6 +132,7 @@ function CsvImportDialogContent({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,7 +163,20 @@ function CsvImportDialogContent({
     const formData = new FormData();
     formData.append("file", file);
 
-    const result = await http.post<ImportSummary>(`/bulk-import/${entity}`, formData);
+    const searchParams = new URLSearchParams();
+    if (queryParams) {
+      for (const [key, value] of Object.entries(queryParams)) {
+        if (value !== undefined && value !== "") {
+          searchParams.set(key, String(value));
+        }
+      }
+    }
+    const queryString = searchParams.toString();
+    const endpoint = queryString
+      ? `/bulk-import/${entity}?${queryString}`
+      : `/bulk-import/${entity}`;
+
+    const result = await http.post<ImportSummary>(endpoint, formData);
 
     setIsUploading(false);
 

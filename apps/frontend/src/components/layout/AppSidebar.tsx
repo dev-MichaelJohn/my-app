@@ -1,6 +1,6 @@
 import { NavLink } from "react-router";
 import { usePermissions } from "@/hooks/usePermissions";
-import { PERMISSIONS, type Permission } from "@my-app/shared";
+import { PERMISSIONS, type Permission, type RoleName } from "@my-app/shared";
 import {
   Building2,
   GraduationCap,
@@ -26,6 +26,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   permission?: Permission;
   anyPermissions?: Permission[];
+  allowedRoles?: RoleName[];
 }
 
 interface NavSection {
@@ -41,7 +42,7 @@ const NAVIGATION_SECTIONS: NavSection[] = [
         title: "Semesters",
         href: "/admin/semesters",
         icon: Calendar,
-        permission: PERMISSIONS.SEMESTER_READ,
+        allowedRoles: ["VPAA", "CLERK"],
       },
       {
         title: "Colleges",
@@ -88,7 +89,7 @@ const NAVIGATION_SECTIONS: NavSection[] = [
         title: "My Teaching Classes",
         href: "/faculty/classes",
         icon: BookOpenCheck,
-        anyPermissions: [PERMISSIONS.COURSE_OFFERING_READ, PERMISSIONS.EVALUATION_REPORT_VIEW_SELF],
+        allowedRoles: ["FACULTY", "COLLEGE_DEAN", "DEPARTMENT_CHAIR"],
       },
       {
         title: "Course Offerings",
@@ -111,13 +112,13 @@ const NAVIGATION_SECTIONS: NavSection[] = [
         title: "Evaluation Instruments",
         href: "/admin/evaluation-forms",
         icon: ClipboardList,
-        permission: PERMISSIONS.EVALUATION_FORM_MANAGE,
+        anyPermissions: [PERMISSIONS.EVALUATION_FORM_MANAGE, PERMISSIONS.EVALUATION_BUILDER_MANAGE],
       },
       {
         title: "Evaluation Schedules",
         href: "/admin/evaluation-periods",
         icon: CalendarDays,
-        permission: PERMISSIONS.EVALUATION_PERIOD_MANAGE,
+        allowedRoles: ["VPAA", "CLERK"],
       },
       {
         title: "Evaluate Instructors",
@@ -180,12 +181,11 @@ const NAVIGATION_SECTIONS: NavSection[] = [
 ];
 
 export function AppSidebar({ onClose }: { onClose?: () => void }) {
-  const { hasPermission, hasAnyPermission, isChair, isDean, isSysAdmin, isAdmin } =
+  const { hasPermission, hasAnyPermission, hasAnyRole, isChair, isDean, isVpaa, isClerk } =
     usePermissions();
 
   return (
     <aside className="w-64 h-full flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border select-none">
-      {/* Brand Header */}
       <div className="h-16 flex items-center gap-3 px-6 border-b border-sidebar-border">
         <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground font-bold flex items-center justify-center text-sm shadow-sm">
           PIT
@@ -198,9 +198,7 @@ export function AppSidebar({ onClose }: { onClose?: () => void }) {
         </div>
       </div>
 
-      {/* Navigation List */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-        {/* Main Dashboard Link */}
         <div>
           <NavLink
             to="/dashboard"
@@ -218,14 +216,12 @@ export function AppSidebar({ onClose }: { onClose?: () => void }) {
           </NavLink>
         </div>
 
-        {/* Dynamic Role-Filtered Sections */}
         {NAVIGATION_SECTIONS.map((section) => {
-          // Filter items based on permissions
           const visibleItems = section.items.filter((item) => {
-            if (item.href === "/admin/colleges" && isChair && !isDean && !isSysAdmin && !isAdmin) {
+            if (item.href === "/admin/colleges" && isChair && !isDean && !isVpaa && !isClerk) {
               return false;
             }
-
+            if (item.allowedRoles) return hasAnyRole(item.allowedRoles);
             if (item.permission) return hasPermission(item.permission);
             if (item.anyPermissions) return hasAnyPermission(item.anyPermissions);
             return true;

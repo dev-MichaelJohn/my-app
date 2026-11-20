@@ -7,7 +7,6 @@ import { PERMISSIONS } from "@my-app/shared";
 import FacultyPage from "@/features/faculties/page/FacultyPage";
 import AuditLogPage from "@/features/audit-logs/page/AuditLogPage";
 
-// ── Lazy-Loaded Pages ──
 const LandingPage = lazy(() => import("@/features/landing/page/LandingPage"));
 const LoginPage = lazy(() => import("@/features/auth/page/LoginPage"));
 const ForgotPasswordPage = lazy(() => import("@/features/auth/page/ForgotPasswordPage"));
@@ -22,7 +21,9 @@ const ClassPage = lazy(() => import("@/features/classes/page/ClassPage"));
 const SemesterPage = lazy(() => import("@/features/semesters/page/SemesterPage"));
 const OfferingPage = lazy(() => import("@/features/offerings/page/OfferingPage"));
 const ClassStudentPage = lazy(() => import("@/features/class-students/page/ClassStudentPage"));
-const StudentClassPage = lazy(() => import("@/features/student-classes/page/StudentClassPage"));
+const OfferingStudentPage = lazy(
+  () => import("@/features/offering-students/page/OfferingStudentPage"),
+);
 const EvaluationInstrumentsPage = lazy(
   () => import("@/features/evaluations/page/EvaluationInstrumentsPage"),
 );
@@ -44,7 +45,6 @@ const AnalyticsDashboardPage = lazy(
   () => import("@/features/analytics/page/AnalyticsDashboardPage"),
 );
 
-// ── Type-Safe Suspense Route Component ──
 function LazyRoute({ Component }: { Component: ComponentType }) {
   return (
     <Suspense fallback={<PageLoader text="Loading page..." />}>
@@ -58,7 +58,6 @@ const router = createBrowserRouter([
     path: "/",
     element: <LazyRoute Component={LandingPage} />,
   },
-  // ── Public / Guest Routes ──
   {
     element: <GuestGuard />,
     children: [
@@ -72,8 +71,6 @@ const router = createBrowserRouter([
       },
     ],
   },
-
-  // ── Authenticated Routes ──
   {
     element: <AuthGuard />,
     children: [
@@ -89,9 +86,9 @@ const router = createBrowserRouter([
             element: <LazyRoute Component={AccountSettingsPage} />,
           },
 
-          // ── 1. User Management (SYS_ADMIN & ADMIN only) ──
+          // VPAA & CLERK User Account Registry
           {
-            element: <RoleGuard allowedRoles={["SYS_ADMIN", "ADMIN"]} />,
+            element: <RoleGuard allowedRoles={["VPAA", "CLERK"]} />,
             children: [
               {
                 path: "/admin/users",
@@ -99,8 +96,10 @@ const router = createBrowserRouter([
               },
             ],
           },
+
+          // VPAA-only Audit Trail & Rollback
           {
-            element: <RoleGuard allowedRoles={["SYS_ADMIN", "ADMIN"]} />,
+            element: <RoleGuard allowedRoles={["VPAA"]} />,
             children: [
               {
                 path: "/admin/audit-logs",
@@ -109,9 +108,10 @@ const router = createBrowserRouter([
             ],
           },
 
-          // ── 2. Evaluation Form Design & Schedules (SYS_ADMIN & ADMIN only) ──
+          // Instruments (VPAA manages templates, Clerk reads + builds questions)
+          // Schedules (VPAA manages, Clerk views read-only)
           {
-            element: <RoleGuard allowedRoles={["SYS_ADMIN", "ADMIN"]} />,
+            element: <RoleGuard allowedRoles={["VPAA", "CLERK"]} />,
             children: [
               {
                 path: "/admin/evaluation-forms",
@@ -128,7 +128,6 @@ const router = createBrowserRouter([
             ],
           },
 
-          // ── 3. Institutional Setup (Deans & Chairs have read access) ──
           {
             element: <PermissionGuard permission={PERMISSIONS.SEMESTER_READ} />,
             children: [
@@ -193,9 +192,8 @@ const router = createBrowserRouter([
             ],
           },
 
-          // ── 4. Academic Operations ──
           {
-            element: <RoleGuard allowedRoles={["FACULTY", "SUPERVISOR"]} />,
+            element: <RoleGuard allowedRoles={["FACULTY", "COLLEGE_DEAN", "DEPARTMENT_CHAIR"]} />,
             children: [
               {
                 path: "/faculty/classes",
@@ -222,16 +220,15 @@ const router = createBrowserRouter([
             ],
           },
           {
-            element: <PermissionGuard permission={PERMISSIONS.STUDENT_CLASS_READ} />,
+            element: <PermissionGuard permission={PERMISSIONS.OFFERING_STUDENT_READ} />,
             children: [
               {
-                path: "/admin/student-classes",
-                element: <LazyRoute Component={StudentClassPage} />,
+                path: "/admin/offering-students",
+                element: <LazyRoute Component={OfferingStudentPage} />,
               },
             ],
           },
 
-          // ── 5. Student Evaluation Hub (Students & SysAdmin only) ──
           {
             element: <RoleGuard allowedRoles={["STUDENT"]} />,
             children: [
@@ -242,9 +239,8 @@ const router = createBrowserRouter([
             ],
           },
 
-          // ── 6. Supervisor Evaluation Hub (Deans, Chairs & SysAdmin only) ──
           {
-            element: <RoleGuard allowedRoles={["SUPERVISOR"]} />,
+            element: <RoleGuard allowedRoles={["COLLEGE_DEAN", "DEPARTMENT_CHAIR"]} />,
             children: [
               {
                 path: "/evaluations/supervisor",

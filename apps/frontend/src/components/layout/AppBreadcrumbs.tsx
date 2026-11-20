@@ -140,7 +140,7 @@ export function AppBreadcrumbs() {
     } else {
       segments.push({ label: "Class Rosters", isCurrent: true });
     }
-  } else if (pathname.includes("/admin/student-classes")) {
+  } else if (pathname.includes("/admin/offering-students")) {
     segments.push({ label: "Course Offerings", href: "/admin/offerings" });
 
     if (offeringId) {
@@ -150,11 +150,11 @@ export function AppBreadcrumbs() {
 
       segments.push({
         label: renderLabel(offeringLabel, isLoadingOffering),
-        href: `/admin/student-classes?course_offering_id=${offeringId}`,
+        href: `/admin/offering-students?course_offering_id=${offeringId}`,
       });
-      segments.push({ label: "Enrolled Students", isCurrent: true });
+      segments.push({ label: "Offering Students", isCurrent: true });
     } else {
-      segments.push({ label: "Student List", isCurrent: true });
+      segments.push({ label: "Offering Students", isCurrent: true });
     }
   } else if (pathname.includes("/admin/faculties")) {
     segments.push({ label: "Programs", href: "/admin/programs" });

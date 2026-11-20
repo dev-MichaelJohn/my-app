@@ -26,16 +26,18 @@ export const usePermissions = () => {
   const hasAnyRole = (targetRoles: RoleName[]): boolean =>
     targetRoles.some((r) => roles.includes(r));
 
-  // Academic office checks
-  const isDean = Boolean(user?.offices?.deanships && user.offices.deanships.length > 0);
-  const isChair = Boolean(user?.offices?.chairships && user.offices.chairships.length > 0);
+  const deanCollegeIds = user?.offices?.deanships?.map((d) => d.id) ?? [];
+  const chairProgramIds = user?.offices?.chairships?.map((c) => c.id) ?? [];
 
-  // Role quick flags
-  const isSysAdmin = hasRole("SYS_ADMIN");
-  const isAdmin = hasRole("ADMIN");
-  const isSupervisor = hasRole("SUPERVISOR");
+  const isVpaa = hasRole("VPAA");
+  const isClerk = hasRole("CLERK");
+  const isCollegeDean = hasRole("COLLEGE_DEAN");
+  const isDepartmentChair = hasRole("DEPARTMENT_CHAIR");
   const isFaculty = hasRole("FACULTY");
   const isStudent = hasRole("STUDENT");
+
+  const isDean = Boolean(isCollegeDean || deanCollegeIds.length > 0);
+  const isChair = Boolean(isDepartmentChair || chairProgramIds.length > 0);
 
   return {
     user,
@@ -46,12 +48,15 @@ export const usePermissions = () => {
     hasAllPermissions,
     hasRole,
     hasAnyRole,
-    isSysAdmin,
-    isAdmin,
-    isSupervisor,
+    isVpaa,
+    isClerk,
+    isCollegeDean,
+    isDepartmentChair,
     isFaculty,
     isStudent,
     isDean,
     isChair,
+    deanCollegeIds,
+    chairProgramIds,
   };
 };

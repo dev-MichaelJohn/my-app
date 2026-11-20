@@ -158,22 +158,31 @@ export class OfferingStudentService implements IOfferingStudentService {
           'deleted_at', ${Semesters.deleted_at}
         ),
         'faculty', CASE
-          WHEN ${FacultyAccounts.id} IS NULL THEN NULL
-          ELSE JSON_BUILD_OBJECT(
-            'account', JSON_BUILD_OBJECT(
-              'id', ${FacultyAccounts.id},
-              'personal_details_id', ${FacultyAccounts.personal_details_id},
-              'email', ${FacultyAccounts.email},
-              'is_verified', ${FacultyAccounts.is_verified}
-            ),
-            'details', JSON_BUILD_OBJECT(
-              'id', ${FacultyDetails.id},
-              'institutional_id', ${FacultyDetails.institutional_id},
-              'first_name', ${FacultyDetails.first_name},
-              'last_name', ${FacultyDetails.last_name},
-              'middle_name', ${FacultyDetails.middle_name},
-              'suffix', ${FacultyDetails.suffix}
+          WHEN ${CourseOfferings.faculty_id} IS NULL THEN NULL
+          ELSE (
+            SELECT JSON_BUILD_OBJECT(
+              'account', JSON_BUILD_OBJECT(
+                'id', fa.id,
+                'personal_details_id', fa.personal_details_id,
+                'email', fa.email,
+                'is_verified', fa.is_verified
+              ),
+              'details', JSON_BUILD_OBJECT(
+                'id', fd.id,
+                'institutional_id', fd.institutional_id,
+                'first_name', fd.first_name,
+                'last_name', fd.last_name,
+                'middle_name', fd.middle_name,
+                'suffix', fd.suffix
+              )
             )
+            FROM ${Faculties} f
+            INNER JOIN ${Accounts} fa ON f.account_id = fa.id
+            INNER JOIN ${PersonalDetails} fd ON fa.personal_details_id = fd.id
+            WHERE f.id = ${CourseOfferings.faculty_id}
+              AND f.deleted_at IS NULL
+              AND fa.deleted_at IS NULL
+            LIMIT 1
           )
         END
       )
@@ -237,15 +246,6 @@ export class OfferingStudentService implements IOfferingStudentService {
         .innerJoin(Classes, eq(CourseOfferings.class_id, Classes.id))
         .innerJoin(Programs, eq(Classes.program_id, Programs.id))
         .innerJoin(Semesters, eq(CourseOfferings.semester_id, Semesters.id))
-        .leftJoin(
-          Faculties,
-          and(eq(CourseOfferings.faculty_id, Faculties.id), isNull(Faculties.deleted_at)),
-        )
-        .leftJoin(
-          FacultyAccounts,
-          and(eq(Faculties.account_id, FacultyAccounts.id), isNull(FacultyAccounts.deleted_at)),
-        )
-        .leftJoin(FacultyDetails, eq(FacultyAccounts.personal_details_id, FacultyDetails.id))
         .where(
           and(
             eq(OfferingStudents.id, id),
@@ -262,9 +262,6 @@ export class OfferingStudentService implements IOfferingStudentService {
           Classes.id,
           Programs.id,
           Semesters.id,
-          Faculties.id,
-          FacultyAccounts.id,
-          FacultyDetails.id,
         );
 
       if (!record) throw new AppError(404, "Offering student enrollment record not found.");
@@ -330,7 +327,14 @@ export class OfferingStudentService implements IOfferingStudentService {
             ),
           );
         } else if (roles.includes("FACULTY")) {
-          filters.push(eq(Faculties.account_id, actorUser.account.id));
+          filters.push(
+            sql`EXISTS (
+              SELECT 1 FROM ${Faculties} f
+              WHERE f.id = ${CourseOfferings.faculty_id}
+                AND f.account_id = ${actorUser.account.id}
+                AND f.deleted_at IS NULL
+            )`,
+          );
         }
       }
 
