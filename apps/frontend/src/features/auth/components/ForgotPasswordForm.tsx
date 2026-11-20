@@ -49,7 +49,29 @@ export function ForgotPasswordForm() {
     return () => clearInterval(interval);
   }, [resendAt]);
 
-  // Form 1: Request Reset
+  const resetForm = useForm({
+    defaultValues: {
+      email: "",
+      code: "",
+      new_password: "",
+    } as ResetPasswordWithOtp,
+    validators: { onChange: ResetPasswordWithOtpSchema },
+    onSubmit: async ({ value }) => {
+      setGeneralError(null);
+      try {
+        await resetMutation.mutateAsync({
+          email: resolvedEmail || value.email,
+          code: value.code,
+          new_password: value.new_password,
+        });
+        toast.success("Password reset successfully! You can now log in.");
+        navigate("/login");
+      } catch (err) {
+        setGeneralError((err as ApiError).message || "Failed to reset password.");
+      }
+    },
+  });
+
   const requestForm = useForm({
     defaultValues: { institutional_id: "" } as ForgotPasswordRequest,
     validators: { onChange: ForgotPasswordRequestSchema },
@@ -59,6 +81,7 @@ export function ForgotPasswordForm() {
         const res = await requestMutation.mutateAsync(value);
         if (res.email) {
           setResolvedEmail(res.email);
+          resetForm.setFieldValue("email", res.email);
           setResendAt(res.resendAt);
           setStep("verify");
         } else {
@@ -68,30 +91,6 @@ export function ForgotPasswordForm() {
         }
       } catch (err) {
         setGeneralError((err as ApiError).message || "Failed to process request.");
-      }
-    },
-  });
-
-  // Form 2: Verify & Set New Password
-  const resetForm = useForm({
-    defaultValues: {
-      email: resolvedEmail,
-      code: "",
-      new_password: "",
-    } as ResetPasswordWithOtp,
-    validators: { onChange: ResetPasswordWithOtpSchema },
-    onSubmit: async ({ value }) => {
-      setGeneralError(null);
-      try {
-        await resetMutation.mutateAsync({
-          email: resolvedEmail,
-          code: value.code,
-          new_password: value.new_password,
-        });
-        toast.success("Password reset successfully! You can now log in.");
-        navigate("/login");
-      } catch (err) {
-        setGeneralError((err as ApiError).message || "Failed to reset password.");
       }
     },
   });

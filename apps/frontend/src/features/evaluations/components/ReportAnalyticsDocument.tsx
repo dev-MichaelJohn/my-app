@@ -136,7 +136,7 @@ export function ReportAnalyticsDocument({ report }: Props) {
             <TableBody>
               {analytics_summary.categoryComparison.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-4 text-xs text-muted-foreground">
+                  <TableCell colSpan={3} className="text-center py-4 text-xs text-muted-foreground">
                     No comparative category data available.
                   </TableCell>
                 </TableRow>

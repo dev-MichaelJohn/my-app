@@ -65,6 +65,7 @@ import {
   isNotNull,
   isNull,
   ne,
+  notInArray,
   or,
   type SQL,
   sql,
@@ -658,7 +659,7 @@ export class EvaluationReportService implements IEvaluationReportService {
                 INNER JOIN ${Colleges} ON ${Programs.college_id} = ${Colleges.id}
                 LEFT JOIN ${ProgramChairs} ON ${Programs.id} = ${ProgramChairs.program_id} AND ${ProgramChairs.deleted_at} IS NULL
                 WHERE ${Faculties.account_id} = ${IndividualFacultyReports.faculty_id}
-                  AND ${Programs.college_id} IN ${deanCollegeIds}
+                  AND ${inArray(Programs.college_id, deanCollegeIds)}
                   AND ${Colleges.is_service_college} = true
                   AND ${ProgramChairs.id} IS NULL
                   AND ${Faculties.deleted_at} IS NULL
@@ -678,11 +679,11 @@ export class EvaluationReportService implements IEvaluationReportService {
                 sql`EXISTS (
                   SELECT 1 FROM ${Faculties}
                   WHERE ${Faculties.account_id} = ${IndividualFacultyReports.faculty_id}
-                    AND ${Faculties.program_id} IN ${chairProgramIds}
+                    AND ${inArray(Faculties.program_id, chairProgramIds)}
                     AND ${Faculties.deleted_at} IS NULL
                 )`,
                 allChairIds.length > 0
-                  ? sql`${IndividualFacultyReports.faculty_id} NOT IN ${allChairIds}`
+                  ? notInArray(IndividualFacultyReports.faculty_id, allChairIds)
                   : undefined,
               )!,
             );
@@ -696,7 +697,7 @@ export class EvaluationReportService implements IEvaluationReportService {
                 INNER JOIN ${Courses} ON ${CourseCurriculums.course_id} = ${Courses.id}
                 WHERE ${Faculties.account_id} = ${IndividualFacultyReports.faculty_id}
                   AND ${CourseOfferings.semester_id} = ${IndividualFacultyReports.semester_id}
-                  AND ${Classes.program_id} IN ${chairProgramIds}
+                  AND ${inArray(Classes.program_id, chairProgramIds)}
                   AND ${Courses.course_type} = 'PROFESSIONAL'
                   AND ${CourseOfferings.deleted_at} IS NULL
                   AND ${Faculties.deleted_at} IS NULL

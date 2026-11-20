@@ -9,7 +9,7 @@ export default function LoginPage() {
 
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
 
-  const [credentials, _setCredentials] = useState<LoginAccount>({
+  const [credentials, setCredentials] = useState<LoginAccount>({
     institutional_id: "",
     password: "",
   });
@@ -28,7 +28,8 @@ export default function LoginPage() {
         {step === "credentials" ? (
           <LoginForm
             initialValues={credentials}
-            onSuccess={(data) => {
+            onSuccess={(data, submittedCredentials) => {
+              setCredentials(submittedCredentials);
               setAuthData({
                 email: data.email,
                 resendAt: data.resendAt,

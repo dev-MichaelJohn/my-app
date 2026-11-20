@@ -103,7 +103,7 @@ export function StudentDashboardView({ user, data }: Props) {
 
                 return (
                   <div
-                    key={sub.student_class_id}
+                    key={sub.offering_student_id}
                     className="p-3.5 rounded-2xl border border-border bg-card flex items-center justify-between gap-4 shadow-2xs"
                   >
                     <div className="min-w-0">

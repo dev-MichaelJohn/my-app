@@ -1,7 +1,7 @@
 import { http, type ApiError } from "@/lib/api.lib";
 import type {
+  CreateClassStudentPayload,
   GetClassStudent,
-  IClassStudentInsert,
   IClassStudentUpdate,
   PaginatedData,
 } from "@my-app/shared";
@@ -16,7 +16,7 @@ export class ClassStudentAPI {
     return http.get<GetClassStudent>(`/class-students/${id}`);
   }
 
-  createClassStudent(info: IClassStudentInsert): ResultAsync<GetClassStudent, ApiError> {
+  createClassStudent(info: CreateClassStudentPayload): ResultAsync<GetClassStudent, ApiError> {
     return http.post<GetClassStudent>("/class-students", info);
   }
 

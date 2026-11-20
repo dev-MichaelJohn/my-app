@@ -79,7 +79,6 @@ export function ReportLifecycleBar({
       </div>
 
       <div className="flex items-center gap-2">
-        {/* 🔒 Lifecycle controls hidden when viewing own report */}
         {!isOwnReport && (
           <Can permission={PERMISSIONS.EVALUATION_REPORT_MANAGE_STATUS}>
             {report.status === "DRAFT" && (
@@ -119,17 +118,6 @@ export function ReportLifecycleBar({
             )}
           </Can>
         )}
-
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onRecalculate}
-          disabled={isRecalculating}
-          className="h-8 text-xs gap-1 hover:bg-background"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isRecalculating ? "animate-spin" : ""}`} />
-          <span>Recalculate</span>
-        </Button>
 
         <Can permission={PERMISSIONS.EVALUATION_REPORT_BATCH_GENERATE}>
           <Button

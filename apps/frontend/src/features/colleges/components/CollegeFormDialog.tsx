@@ -255,30 +255,6 @@ function CollegeFormInner({
         <form.Field name="college.is_service_college">
           {(field) => (
             <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-muted/30">
-              <div className="space-y-0.5 pr-4">
-                <Label
-                  htmlFor="service-college-switch"
-                  className="text-xs font-semibold text-foreground cursor-pointer"
-                >
-                  Service College (General Education)
-                </Label>
-                <p className="text-[11px] text-muted-foreground">
-                  Enable if this college houses General Education faculty evaluated by
-                  service-college supervisors (CMO 19 Sec 9.3).
-                </p>
-              </div>
-              <Switch
-                id="service-college-switch"
-                checked={Boolean(field.state.value)}
-                onCheckedChange={(checked) => field.handleChange(checked)}
-              />
-            </div>
-          )}
-        </form.Field>
-
-        <form.Field name="college.is_service_college">
-          {(field) => (
-            <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-muted/30">
               <div className="space-y-0.5 pr-3">
                 <Label
                   htmlFor="is-service-college"

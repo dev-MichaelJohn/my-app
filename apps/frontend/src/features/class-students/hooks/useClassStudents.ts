@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import type { IClassStudentInsert, IClassStudentUpdate } from "@my-app/shared";
+import type { CreateClassStudentPayload, IClassStudentUpdate } from "@my-app/shared";
 import { ClassStudentAPI } from "../api/class-student.api";
 import { toQuery } from "@/lib/query.lib";
 
@@ -35,7 +35,7 @@ export const useCreateClassStudent = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (newStudent: IClassStudentInsert) =>
+    mutationFn: (newStudent: CreateClassStudentPayload) =>
       toQuery(classStudentAPI.createClassStudent(newStudent)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CLASS_STUDENT_KEYS.all });
