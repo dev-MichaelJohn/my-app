@@ -18,7 +18,7 @@ import {
   StudentEvaluationQuestions,
   SupervisorEvaluationQuestions,
 } from "./evaluation-instrument.schema.js";
-import { CourseOfferings, StudentClasses } from "./institution.schema.js";
+import { CourseOfferings, OfferingStudents } from "./institution.schema.js";
 import { Accounts } from "./auth.schema.js";
 
 export const SentimentClassificationEnum = pgEnum("sentiment_classification", [
@@ -61,9 +61,9 @@ export const StudentEvaluationDrafts = pgTable(
     schedule_id: integer("schedule_id")
       .notNull()
       .references(() => StudentEvaluationSchedules.id),
-    student_class_id: integer("student_class_id")
+    offering_student_id: integer("offering_student_id")
       .notNull()
-      .references(() => StudentClasses.id),
+      .references(() => OfferingStudents.id),
     saved_ratings: jsonb("saved_ratings").notNull().default({}),
     saved_comment: text("saved_comment"),
     updated_at: timestamp("updated_at")
@@ -71,7 +71,7 @@ export const StudentEvaluationDrafts = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [uniqueIndex("uidx_student_draft").on(t.schedule_id, t.student_class_id)],
+  (t) => [uniqueIndex("uidx_offering_student_draft").on(t.schedule_id, t.offering_student_id)],
 );
 
 export const StudentBallots = pgTable(
@@ -119,9 +119,9 @@ export const StudentEvaluations = pgTable(
     schedule_id: integer("schedule_id")
       .notNull()
       .references(() => StudentEvaluationSchedules.id),
-    student_class_id: integer("student_class_id")
+    offering_student_id: integer("offering_student_id")
       .notNull()
-      .references(() => StudentClasses.id),
+      .references(() => OfferingStudents.id),
     comment: text("comment"),
     comment_score: decimal("comment_score", { precision: 5, scale: 2 }),
     comment_sentiment: SentimentClassificationEnum("comment_sentiment"),
@@ -130,8 +130,8 @@ export const StudentEvaluations = pgTable(
   },
   (t) => [
     index("idx_student_eval_schedule_id").on(t.schedule_id),
-    index("idx_student_eval_student_class_id").on(t.student_class_id),
-    uniqueIndex("uidx_unique_student_submission").on(t.schedule_id, t.student_class_id),
+    index("idx_student_eval_offering_student_id").on(t.offering_student_id),
+    uniqueIndex("uidx_unique_student_submission").on(t.schedule_id, t.offering_student_id),
   ],
 );
 
@@ -153,7 +153,6 @@ export const StudentEvaluationRatings = pgTable(
   ],
 );
 
-// ── 6. Supervisor Evaluations (SEF remains unchanged as it is not an anonymous secret ballot) ──
 export const SupervisorEvaluations = pgTable(
   "supervisor_evaluations",
   {

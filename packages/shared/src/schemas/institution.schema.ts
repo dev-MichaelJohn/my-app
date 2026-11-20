@@ -1,5 +1,6 @@
 import { SQL, sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   index,
@@ -20,6 +21,7 @@ export const Colleges = pgTable(
     id: serial("id").primaryKey(),
     name: varchar("name", { length: 128 }).notNull(),
     initialism: varchar("initialism", { length: 16 }).notNull(),
+    is_service_college: boolean("is_service_college").notNull().default(false),
     created_at: timestamp("created_at").notNull().defaultNow(),
     updated_at: timestamp("updated_at")
       .notNull()
@@ -92,6 +94,8 @@ export const Classes = pgTable(
 );
 
 export const SemeterTermEnum = pgEnum("semester_term", ["1st", "2nd", "Summer"]);
+export const CourseTypeEnum = pgEnum("course_type", ["PROFESSIONAL", "GENERAL_EDUCATION"]);
+
 export const Courses = pgTable(
   "courses",
   {
@@ -101,6 +105,7 @@ export const Courses = pgTable(
       .references(() => Programs.id),
     name: varchar("name", { length: 128 }).notNull(),
     initialism: varchar("initialism", { length: 16 }).notNull(),
+    course_type: CourseTypeEnum("course_type").notNull().default("PROFESSIONAL"),
     created_at: timestamp("created_at").notNull().defaultNow(),
     updated_at: timestamp("updated_at")
       .notNull()
@@ -238,6 +243,7 @@ export const Faculties = pgTable(
     program_id: integer("program_id")
       .notNull()
       .references(() => Programs.id),
+    is_home: boolean("is_home").notNull().default(true),
     created_at: timestamp("created_at").notNull().defaultNow(),
     updated_at: timestamp("updated_at")
       .notNull()
@@ -246,8 +252,8 @@ export const Faculties = pgTable(
     deleted_at: timestamp("deleted_at"),
   },
   (t) => [
-    uniqueIndex("uidx_active_faculty_account")
-      .on(t.account_id)
+    uniqueIndex("uidx_active_faculty_program")
+      .on(t.account_id, t.program_id)
       .where(sql`deleted_at IS NULL`),
     index("idx_faculties_program_id").on(t.program_id),
     index("idx_faculties_account_id").on(t.account_id),
@@ -317,8 +323,8 @@ export const ClassStudents = pgTable(
   ],
 );
 
-export const StudentClasses = pgTable(
-  "student_classes",
+export const OfferingStudents = pgTable(
+  "offering_students",
   {
     id: serial("id").primaryKey(),
     student_account_id: integer("student_account_id")
@@ -335,10 +341,10 @@ export const StudentClasses = pgTable(
     deleted_at: timestamp("deleted_at"),
   },
   (t) => [
-    uniqueIndex("uidx_active_student_course_offering")
+    uniqueIndex("uidx_active_offering_student")
       .on(t.student_account_id, t.course_offering_id)
       .where(sql`deleted_at IS NULL`),
-    index("idx_student_classes_student_account_id").on(t.student_account_id),
-    index("idx_student_classes_course_offering_id").on(t.course_offering_id),
+    index("idx_offering_students_student_account_id").on(t.student_account_id),
+    index("idx_offering_students_course_offering_id").on(t.course_offering_id),
   ],
 );
