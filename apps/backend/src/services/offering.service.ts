@@ -26,7 +26,6 @@ import { ClassService, type IClassService } from "./class.service.js";
 import { CurriculumService, type ICurriculumService } from "./curriculum.service.js";
 import { UserService, type IUserService } from "./user.service.js";
 import {
-  aliasedTable,
   and,
   asc,
   count,
@@ -48,8 +47,6 @@ import { createPaginatedData } from "@/libs/response.lib.js";
 import { SemesterService, type ISemesterService } from "./semester.service.js";
 import { logAuditEvent } from "@/libs/audit.lib.js";
 import type { Request } from "express";
-
-const FacultyHomePrograms = aliasedTable(Programs, "faculty_home_programs");
 
 export interface IOfferingService {
   getOfferingById(
@@ -153,10 +150,15 @@ export class OfferingService implements IOfferingService {
       WHEN ${Faculties.id} IS NULL THEN NULL
       ELSE JSON_BUILD_OBJECT(
         'faculty_id', ${Faculties.id},
-        'home_program', JSON_BUILD_OBJECT(
-          'id', ${FacultyHomePrograms.id},
-          'name', ${FacultyHomePrograms.name},
-          'initialism', ${FacultyHomePrograms.initialism}
+        'home_program', (
+          SELECT JSON_BUILD_OBJECT(
+            'id', fhp.id,
+            'name', fhp.name,
+            'initialism', fhp.initialism
+          )
+          FROM ${Programs} fhp
+          WHERE fhp.id = ${Faculties.program_id}
+          LIMIT 1
         ),
         'account', JSON_BUILD_OBJECT(
           'id', ${Accounts.id},
@@ -234,7 +236,6 @@ export class OfferingService implements IOfferingService {
           Faculties,
           and(eq(CourseOfferings.faculty_id, Faculties.id), isNull(Faculties.deleted_at)),
         )
-        .leftJoin(FacultyHomePrograms, eq(Faculties.program_id, FacultyHomePrograms.id))
         .leftJoin(Accounts, and(eq(Faculties.account_id, Accounts.id), isNull(Accounts.deleted_at)))
         .leftJoin(PersonalDetails, eq(Accounts.personal_details_id, PersonalDetails.id))
         .where(
@@ -251,7 +252,6 @@ export class OfferingService implements IOfferingService {
           Programs.id,
           Semesters.id,
           Faculties.id,
-          FacultyHomePrograms.id,
           Accounts.id,
           PersonalDetails.id,
         );
@@ -370,7 +370,6 @@ export class OfferingService implements IOfferingService {
             Faculties,
             and(eq(CourseOfferings.faculty_id, Faculties.id), isNull(Faculties.deleted_at)),
           )
-          .leftJoin(FacultyHomePrograms, eq(Faculties.program_id, FacultyHomePrograms.id))
           .leftJoin(
             Accounts,
             and(eq(Faculties.account_id, Accounts.id), isNull(Accounts.deleted_at)),
@@ -385,7 +384,6 @@ export class OfferingService implements IOfferingService {
             Programs.id,
             Semesters.id,
             Faculties.id,
-            FacultyHomePrograms.id,
             Accounts.id,
             PersonalDetails.id,
           )
